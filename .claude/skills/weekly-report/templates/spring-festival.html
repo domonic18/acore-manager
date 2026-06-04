@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>团队周报 - 新春特辑</title>
+    <style>
+        :root {
+            --spring-primary: #D32F2F;
+            --spring-secondary: #FFD700;
+            --spring-gold: #FFD700;
+            --spring-red: #D32F2F;
+            --spring-red-light: #FF5252;
+            --spring-red-dark: #B71C1C;
+            --spring-orange: #FF6F00;
+            --card-bg: rgba(255, 255, 255, 0.96);
+            --text-color: #2D3436;
+            --text-light: #636E72;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(180deg, #FFF8E1 0%, #FFECB3 50%, #FFE0B2 100%);
+            color: var(--text-color);
+            line-height: 1.8;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* 传统祥云纹理背景 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M50 20c-16.569 0-30 13.431-30 30s13.431 30 30 30 30-13.431 30-30-13.431-30-30-30zm0 50c-11.046 0-20-8.954-20-20s8.954-20 20-20 20 8.954 20 20-8.954 20-20 20z' fill='%23D32F2F' fill-opacity='0.03'/%3E%3Ccircle cx='50' cy='50' r='8' fill='%23FFD700' fill-opacity='0.05'/%3E%3C/svg%3E");
+            background-size: 120px 120px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 顶部装饰条 - 红金渐变 */
+        .decoration-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            z-index: 1000;
+            background: linear-gradient(90deg, #D32F2F, #FFD700, #FF6F00, #FFD700, #D32F2F);
+        }
+
+        /* 底部装饰条 */
+        .decoration-bar-bottom {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            z-index: 1000;
+            background: linear-gradient(90deg, #D32F2F, #FFD700, #FF6F00, #FFD700, #D32F2F);
+        }
+
+        /* 角落装饰 - 红灯笼 */
+        .corner-decoration {
+            position: fixed;
+            z-index: 0;
+            font-size: 48px;
+            opacity: 0.12;
+            pointer-events: none;
+        }
+
+        .corner-tl { top: 20px; left: 10px; }
+        .corner-tr { top: 20px; right: 10px; transform: scaleX(-1); }
+        .corner-bl { bottom: 20px; left: 10px; transform: scaleY(-1); }
+        .corner-br { bottom: 20px; right: 10px; transform: scale(-1, -1); }
+
+        @keyframes lanternSwing {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+
+        .corner-decoration.lantern {
+            animation: lanternSwing 3s ease-in-out infinite;
+        }
+
+        /* 浮动装饰元素 */
+        .floating-decor {
+            position: fixed;
+            font-size: 22px;
+            opacity: 0.18;
+            z-index: 0;
+            animation: float 5s ease-in-out infinite;
+        }
+
+        .floating-decor:nth-child(5) { top: 8%; left: 3%; animation-delay: 0s; }
+        .floating-decor:nth-child(6) { top: 18%; right: 5%; animation-delay: 0.5s; }
+        .floating-decor:nth-child(7) { top: 35%; left: 2%; animation-delay: 1s; }
+        .floating-decor:nth-child(8) { top: 50%; right: 4%; animation-delay: 1.5s; }
+        .floating-decor:nth-child(9) { top: 65%; left: 5%; animation-delay: 2s; }
+        .floating-decor:nth-child(10) { top: 80%; right: 3%; animation-delay: 2.5s; }
+        .floating-decor:nth-child(11) { top: 12%; left: 8%; animation-delay: 0.3s; }
+        .floating-decor:nth-child(12) { top: 45%; right: 6%; animation-delay: 1.8s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(10deg); }
+        }
+
+        #report-content {
+            width: 750px;
+            margin: 0 auto;
+            padding: 20px;
+            padding-bottom: 80px;
+            position: relative;
+            z-index: 1;
+            box-sizing: border-box;
+        }
+
+        /* 头部 - 新春豪华版 */
+        .header {
+            background: linear-gradient(135deg, var(--spring-red) 0%, #C62828 50%, var(--spring-red-dark) 100%);
+            color: white;
+            padding: 32px 20px;
+            text-align: center;
+            border-radius: 20px;
+            margin-bottom: 18px;
+            box-shadow: 0 12px 40px rgba(211, 47, 47, 0.35), 0 0 0 4px rgba(255, 215, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 头部背景纹理 */
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23FFD700' fill-opacity='0.08'%3E%3Cpath d='M40 20c-11.046 0-20 8.954-20 20s8.954 20 20 20 20-8.954 20-20-8.954-20-20-20zm0 35c-8.284 0-15-6.716-15-15s6.716-15 15-15 15 6.716 15 15-6.716 15-15 15z'/%3E%3Ccircle cx='40' cy='40' r='5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.6;
+        }
+
+        /* 头部光芒效果 */
+        .header::after {
+            content: '';
+            position: absolute;
+            top: -30%;
+            left: -30%;
+            width: 160%;
+            height: 160%;
+            background: radial-gradient(circle, rgba(255,215,0,0.2) 0%, transparent 60%);
+            animation: shine 6s linear infinite;
+        }
+
+        @keyframes shine {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(15%, 15%); }
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 马年吉祥物 - 金色光环 */
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 14px;
+            background: linear-gradient(135deg, #FFD700, #FFB300, #FFD700);
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.2);
+            font-size: 48px;
+            animation: horseBounce 2s ease-in-out infinite;
+            position: relative;
+            border: 4px solid #FFF8E1;
+        }
+
+        .header-badge::after {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            right: -8px;
+            bottom: -8px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.5; }
+        }
+
+        @keyframes horseBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+            letter-spacing: 2px;
+        }
+
+        .header-subtitle {
+            font-size: 15px;
+            margin-bottom: 14px;
+            opacity: 0.95;
+            font-weight: 500;
+        }
+
+        .header-date {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .header-date span {
+            background: rgba(255, 255, 255, 0.25);
+            padding: 5px 14px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        /* 新春横幅 - 豪华版 */
+        .greeting-banner {
+            background: linear-gradient(135deg, #FFD700 0%, #FFB300 50%, #FFA000 100%);
+            color: #B71C1C;
+            padding: 16px 24px;
+            border-radius: 14px;
+            margin-bottom: 18px;
+            text-align: center;
+            box-shadow: 0 6px 24px rgba(255, 160, 0, 0.35), inset 0 2px 0 rgba(255,255,255,0.3);
+            animation: fadeInUp 0.6s ease-out;
+            position: relative;
+            border: 2px solid #FFF8E1;
+        }
+
+        /* 横幅装饰 */
+        .greeting-banner::before,
+        .greeting-banner::after {
+            content: '🏮';
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 28px;
+            animation: lanternSwing 2.5s ease-in-out infinite;
+        }
+
+        .greeting-banner::before { left: 12px; }
+        .greeting-banner::after { right: 12px; }
+
+        @keyframes lanternSwing {
+            0%, 100% { transform: translateY(-50%) rotate(-5deg); }
+            50% { transform: translateY(-50%) rotate(5deg); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .greeting-banner h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 5px;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+        }
+
+        .greeting-banner p {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* 激励语区域 */
+        .motivation-banner {
+            background: linear-gradient(135deg, #FFFDE7 0%, #FFF9C4 100%);
+            padding: 14px 18px;
+            border-radius: 14px;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 4px 16px rgba(255, 160, 0, 0.15);
+            animation: fadeInUp 0.6s ease-out 0.15s both;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .motivation-icon {
+            font-size: 32px;
+            flex-shrink: 0;
+        }
+
+        .motivation-text h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #E65100;
+            margin-bottom: 2px;
+        }
+
+        .motivation-text p {
+            font-size: 13px;
+            color: var(--text-color);
+            line-height: 1.5;
+        }
+
+        /* 概览卡片 */
+        .overview {
+            background: var(--card-bg);
+            padding: 18px;
+            border-radius: 18px;
+            margin-bottom: 18px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+            border: 3px solid rgba(211, 47, 47, 0.12);
+            position: relative;
+        }
+
+        /* 概览左上角装饰 */
+        .overview::before {
+            content: '🏮';
+            position: absolute;
+            top: -12px;
+            left: 20px;
+            font-size: 24px;
+            background: #FFFDE7;
+            padding: 0 8px;
+        }
+
+        .overview-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 2px dashed rgba(211, 47, 47, 0.1);
+        }
+
+        .overview-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--spring-red), var(--spring-orange));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(211, 47, 47, 0.25);
+        }
+
+        .overview h2 {
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .overview-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 14px 10px;
+            background: linear-gradient(135deg, #FFFDE7 0%, #FFECB3 100%);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 215, 0, 0.25);
+        }
+
+        .stat-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px rgba(255, 160, 0, 0.2);
+        }
+
+        .stat-number {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--spring-red), var(--spring-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        .overview-focus {
+            background: linear-gradient(135deg, #FFFDE7 0%, #FFF9C4 100%);
+            padding: 14px 18px;
+            border-radius: 12px;
+            border-left: 5px solid #FFD700;
+        }
+
+        .overview-focus p {
+            font-size: 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .overview-focus strong {
+            color: var(--spring-red);
+            white-space: nowrap;
+        }
+
+        /* 成员卡片 */
+        .member {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 18px;
+            margin-bottom: 16px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
+            border: 2px solid rgba(211, 47, 47, 0.08);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .member:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(211, 47, 47, 0.12);
+            border-color: rgba(211, 47, 47, 0.2);
+        }
+
+        .member-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.25);
+        }
+
+        .member-avatar {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--spring-red), var(--spring-orange));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 14px rgba(211, 47, 47, 0.25);
+            position: relative;
+            border: 4px solid #FFD700;
+        }
+
+        .member-avatar-badge {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            font-size: 16px;
+            background: linear-gradient(135deg, #FFD700, #FFB300);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            border: 2px solid white;
+        }
+
+        .member-info h3 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .member-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .member-tag {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #FFFDE7 0%, #FFECB3 100%);
+            color: #E65100;
+            font-weight: 500;
+        }
+
+        .member-tag.highlight {
+            background: linear-gradient(135deg, #FFD700 0%, #FFB300 100%);
+            color: #B71C1C;
+            font-weight: 600;
+        }
+
+        .section {
+            margin-top: 16px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .section-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+        }
+
+        .section-icon.completed {
+            background: linear-gradient(135deg, #C8E6C9 0%, #A5D6A7 100%);
+        }
+
+        .section-icon.planned {
+            background: linear-gradient(135deg, #BBDEFB 0%, #90CAF9 100%);
+        }
+
+        .section-icon.risk {
+            background: linear-gradient(135deg, #FFCC80 0%, #FFB74D 100%);
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .section ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .section li {
+            padding: 12px 14px;
+            padding-left: 40px;
+            position: relative;
+            font-size: 14px;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #FFFDE7 0%, #FFF9C4 100%);
+            margin-bottom: 10px;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+            border-left: 4px solid #FFD700;
+        }
+
+        .section li:hover {
+            background: linear-gradient(135deg, #FFF9C4 0%, #FFECB3 100%);
+            transform: translateX(3px);
+        }
+
+        .section li::before {
+            content: '';
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .section li.completed::before {
+            background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+        }
+
+        .section li.planned::before {
+            background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+        }
+
+        .section li.risk::before {
+            background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);
+            box-shadow: 0 2px 8px rgba(255, 152, 0, 0.4);
+        }
+
+        .task-highlight {
+            font-weight: 600;
+            color: var(--spring-red);
+        }
+
+        .task-data {
+            background: linear-gradient(135deg, #FFD700 0%, #FFB300 100%);
+            padding: 3px 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #B71C1C;
+        }
+
+        /* 页脚区域 */
+        .footer-encouragement {
+            text-align: center;
+            padding: 20px 16px;
+            margin-top: 16px;
+            position: relative;
+        }
+
+        /* 新年祝福区域 */
+        .new-year-blessing {
+            background: linear-gradient(135deg, #D32F2F 0%, #B71C1C 100%);
+            border-radius: 16px;
+            padding: 24px 20px;
+            box-shadow: 0 6px 24px rgba(211, 47, 47, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .new-year-blessing::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='20' cy='20' r='2' fill='%23FFD700' fill-opacity='0.08'/%3E%3C/svg%3E");
+            opacity: 0.4;
+        }
+
+        .blessing-intro {
+            color: #FFD700;
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 14px;
+            position: relative;
+            z-index: 1;
+            line-height: 1.8;
+        }
+
+        /* AI团队印章样式 */
+        .team-highlight {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(145deg, #C62828 0%, #B71C1C 50%, #8B0000 100%);
+            color: #FFD700;
+            padding: 5px 14px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 15px;
+            margin: 0 4px;
+            border: 2px solid #FFD700;
+            box-shadow:
+                0 4px 8px rgba(0, 0, 0, 0.3),
+                inset 0 1px 1px rgba(255,255,255,0.2),
+                inset 0 -1px 1px rgba(0,0,0,0.2);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+            letter-spacing: 2px;
+            font-family: 'PingFang SC', 'Microsoft YaHei', serif;
+            position: relative;
+            vertical-align: middle;
+        }
+
+        /* 印章四角装饰 */
+        .team-highlight::before,
+        .team-highlight::after {
+            content: '';
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            border: 1px solid #FFD700;
+        }
+
+        .team-highlight::before {
+            top: 2px;
+            left: 2px;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .team-highlight::after {
+            bottom: 2px;
+            right: 2px;
+            border-left: none;
+            border-top: none;
+        }
+
+        .blessing-wish {
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            line-height: 1.7;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .encouragement-text {
+            font-size: 15px;
+            color: var(--text-light);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .encouragement-icon {
+            font-size: 18px;
+            animation: heartbeat 1.5s ease-in-out infinite;
+        }
+
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        /* 烟花特效 - Canvas动画 */
+        #firework-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* 保存按钮 */
+        .save-button-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .save-button {
+            background: linear-gradient(135deg, #D32F2F, #FF6F00);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 28px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 6px 24px rgba(211, 47, 47, 0.35);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: inherit;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .save-button:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 10px 30px rgba(211, 47, 47, 0.45);
+        }
+
+        .save-button:active {
+            transform: translateY(-1px) scale(0.98);
+        }
+
+        .save-button.disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        .save-button.loading .spinner {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 对联样式 - 传统卷轴效果 */
+        .main-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 16px;
+            width: 894px;
+            margin: 0 auto;
+            padding: 0;
+            position: relative;
+        }
+
+        .couplet-side {
+            width: 56px;
+            min-height: 320px;
+            background: linear-gradient(90deg, #B71C1C 0%, #D32F2F 20%, #C62828 50%, #D32F2F 80%, #B71C1C 100%);
+            border-radius: 4px;
+            padding: 35px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow:
+                0 4px 20px rgba(0, 0, 0, 0.25),
+                inset 2px 0 4px rgba(255, 215, 0, 0.3),
+                inset -2px 0 4px rgba(255, 215, 0, 0.3);
+            position: relative;
+            overflow: visible;
+            flex-shrink: 0;
+            margin-top: 30px;
+            border: 2px solid #FFD700;
+        }
+
+        /* 对联顶部卷轴装饰 */
+        .couplet-side::before {
+            content: '';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 48px;
+            height: 24px;
+            background: linear-gradient(180deg, #FFD700 0%, #FFA000 100%);
+            border-radius: 12px 12px 4px 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: 2px solid #B71C1C;
+        }
+
+        /* 对联底部卷轴装饰 */
+        .couplet-side::after {
+            content: '';
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 48px;
+            height: 24px;
+            background: linear-gradient(180deg, #FFA000 0%, #FFD700 100%);
+            border-radius: 4px 4px 12px 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: 2px solid #B71C1C;
+        }
+
+        /* 对联纹理背景 */
+        .couplet-texture {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 5c-8.284 0-15 6.716-15 15s6.716 15 15 15 15-6.716 15-15-6.716-15-15-15zm0 25c-5.523 0-10-4.477-10-10s4.477-10 10-10 10 4.477 10 10-4.477 10-10 10z' fill='%23FFD700' fill-opacity='0.08'/%3E%3C/svg%3E");
+            opacity: 0.5;
+            border-radius: 2px;
+        }
+
+        .couplet-side p {
+            color: #FFD700;
+            font-size: 16px;
+            font-weight: 700;
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            letter-spacing: 8px;
+            line-height: 1.8;
+            position: relative;
+            z-index: 1;
+            text-shadow:
+                2px 2px 4px rgba(0,0,0,0.4),
+                0 0 20px rgba(255, 215, 0, 0.3);
+            white-space: nowrap;
+            font-family: 'PingFang SC', 'Microsoft YaHei', 'SimSun', serif;
+        }
+
+        /* 右侧对联 - 金底红字 */
+        .couplet-side.right {
+            background: linear-gradient(90deg, #FFA000 0%, #FFD700 20%, #FFB300 50%, #FFD700 80%, #FFA000 100%);
+            border: 2px solid #B71C1C;
+        }
+
+        .couplet-side.right::before,
+        .couplet-side.right::after {
+            background: linear-gradient(180deg, #B71C1C 0%, #D32F2F 50%, #B71C1C 100%);
+            border: 2px solid #FFD700;
+        }
+
+        .couplet-side.right p {
+            color: #B71C1C;
+            text-shadow:
+                1px 1px 2px rgba(255,255,255,0.5),
+                0 0 15px rgba(183, 28, 28, 0.2);
+        }
+
+        /* 横批 - 传统牌匾效果 */
+        .couplet-top {
+            text-align: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .couplet-top::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 20%;
+            right: 20%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #FFD700, transparent);
+            z-index: 0;
+        }
+
+        .couplet-title {
+            display: inline-block;
+            position: relative;
+            z-index: 1;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA000 50%, #FFD700 100%);
+            color: #B71C1C;
+            padding: 12px 40px;
+            border-radius: 6px;
+            font-size: 22px;
+            font-weight: 800;
+            box-shadow:
+                0 4px 20px rgba(255, 160, 0, 0.4),
+                inset 0 2px 4px rgba(255,255,255,0.4),
+                inset 0 -2px 4px rgba(183, 28, 28, 0.2);
+            text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+            border: 3px solid #B71C1C;
+            letter-spacing: 4px;
+            font-family: 'PingFang SC', 'Microsoft YaHei', 'SimSun', serif;
+        }
+
+        /* 悬挂效果 */
+        .couplet-side {
+            animation: gentleSway 4s ease-in-out infinite;
+        }
+
+        .couplet-side.right {
+            animation-delay: 0.5s;
+        }
+
+        @keyframes gentleSway {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(0.5deg); }
+            75% { transform: rotate(-0.5deg); }
+        }
+
+        @media (max-width: 480px) {
+            .main-container {
+                gap: 10px;
+                padding: 0 5px;
+            }
+
+            .couplet-side {
+                width: 40px;
+                min-height: 220px;
+                padding: 25px 6px;
+                margin-top: 20px;
+            }
+
+            .couplet-side::before,
+            .couplet-side::after {
+                width: 34px;
+                height: 18px;
+            }
+
+            .couplet-side p {
+                font-size: 13px;
+                letter-spacing: 5px;
+            }
+
+            .couplet-title {
+                font-size: 16px;
+                padding: 10px 24px;
+                letter-spacing: 2px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .save-button-container {
+                bottom: 14px;
+                right: 14px;
+            }
+
+            .save-button {
+                padding: 12px 22px;
+                font-size: 14px;
+            }
+
+            .overview-stats {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
+
+            .stat-number {
+                font-size: 22px;
+            }
+
+            .greeting-banner::before,
+            .greeting-banner::after {
+                display: none;
+            }
+
+            .header-badge {
+                width: 75px;
+                height: 75px;
+                font-size: 38px;
+            }
+
+            .corner-decoration {
+                font-size: 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 角落装饰 - 灯笼 -->
+    <div class="corner-decoration lantern corner-tl">🏮</div>
+    <div class="corner-decoration lantern corner-tr">🏮</div>
+    <div class="corner-decoration lantern corner-bl">🏮</div>
+    <div class="corner-decoration lantern corner-br">🏮</div>
+
+    <!-- 浮动装饰 -->
+    <div class="floating-decor">🧧</div>
+    <div class="floating-decor">🎊</div>
+    <div class="floating-decor">🏮</div>
+    <div class="floating-decor">🎉</div>
+    <div class="floating-decor">✨</div>
+    <div class="floating-decor">💫</div>
+    <div class="floating-decor">🧨</div>
+    <div class="floating-decor">🏮</div>
+
+    <!-- 顶部装饰条 -->
+    <div class="decoration-bar"></div>
+
+    <!-- 烟花 Canvas -->
+    <canvas id="firework-canvas"></canvas>
+
+    <!-- 横批 -->
+    <div class="couplet-top">
+        <div class="couplet-title">🐴 马年大吉 🧧</div>
+    </div>
+
+    <!-- 主容器：对联 + 周报内容 -->
+    <div class="main-container">
+        <!-- 左侧对联 -->
+        <div class="couplet-side">
+            <div class="couplet-texture"></div>
+            <p>龙马精神展宏图</p>
+        </div>
+
+        <!-- 周报内容 -->
+        <div id="report-content">
+            <div class="header">
+                <div class="header-content">
+                    <div class="header-badge">🐴</div>
+                    <h1 id="teamName">XX团队第X周工作周报</h1>
+                    <p class="header-subtitle">🐎 马到成功 · 新春大吉 · 恭喜发财 🧧</p>
+                    <div class="header-date">
+                        <span>📅 2024年X月X日 - X月X日</span>
+                        <span>📊 第X周</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overview">
+            <div class="overview-header">
+                <div class="overview-icon">📊</div>
+                <h2>本周工作概览</h2>
+            </div>
+            <div class="overview-stats">
+                <div class="stat-item">
+                    <div class="stat-number" id="totalTasks">X</div>
+                    <div class="stat-label">完成任务</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalModules">X</div>
+                    <div class="stat-label">项目模块</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalMembers">X</div>
+                    <div class="stat-label">团队成员</div>
+                </div>
+            </div>
+            <div class="overview-focus">
+                <p><strong>🎯 重点关注：</strong><span id="focusItems">XXX、XXX、XXX 等核心项目进展顺利</span></p>
+            </div>
+        </div>
+
+        <!-- 成员周报 -->
+        <div class="member">
+            <div class="member-header">
+                <div class="member-avatar">
+                    张
+                    <span class="member-avatar-badge">🔥</span>
+                </div>
+                <div class="member-info">
+                    <h3>张三</h3>
+                    <div class="member-tags">
+                        <span class="member-tag highlight">💪 高效达人</span>
+                    </div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon completed">✅</div>
+                    <div class="section-title">本周完成</div>
+                </div>
+                <ul>
+                    <li class="completed"><span class="task-highlight">完成</span>用户登录功能全栈开发（前端页面 + 后端API）</li>
+                    <li class="completed"><span class="task-highlight">修复</span><span class="task-data">3个</span>线上bug（对话消失、插件错误等）</li>
+                    <li class="completed"><span class="task-highlight">优化</span>数据库查询性能，提升响应速度<span class="task-data">40%</span></li>
+                </ul>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon planned">📅</div>
+                    <div class="section-title">下周计划</div>
+                </div>
+                <ul>
+                    <li class="planned">开始支付模块开发，预计<span class="task-data">2周</span>完成</li>
+                    <li class="planned">周三参加技术评审会，分享重构经验</li>
+                </ul>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon risk">⚠️</div>
+                    <div class="section-title">风险/问题</div>
+                </div>
+                <ul>
+                    <li class="risk">⚡ 依赖的第三方接口尚未就绪，需尽快跟进</li>
+                </ul>
+            </div>
+        </div>
+
+            <!-- 页脚拜年祝福 -->
+            <div class="footer-encouragement">
+                <div class="new-year-blessing">
+                    <p class="blessing-intro">🐴 值此马年新春来临之际，<span class="team-highlight">AI团队</span>给各位拜个早年！</p>
+                    <p class="blessing-wish" id="footerEncouragement">祝大家龙马精神、身体健康、财源广进、万事如意！🎊</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧对联 -->
+        <div class="couplet-side right">
+            <div class="couplet-texture"></div>
+            <p>万事如意迎新春</p>
+        </div>
+    </div>
+
+    <!-- 底部装饰条 -->
+    <div class="decoration-bar-bottom"></div>
+
+    <!-- 保存按钮 -->
+    <div class="save-button-container">
+        <button class="save-button" onclick="saveAsImage()" id="saveButton">
+            <span class="spinner"></span>
+            <span class="button-text">📸 生成本周周报</span>
+        </button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script>
+        // 新春祝福语库 - 增强版（更有传统特色的拜年词）
+        const springBlessings = {
+            header: [
+                { icon: '🐴', text: '马年到！给您拜早年！' },
+                { icon: '🎊', text: '龙马精神！万事如意！' },
+                { icon: '🧧', text: '新春大吉！恭喜发财！' },
+                { icon: '🐎', text: '马到成功！前程似锦！' },
+                { icon: '✨', text: '龙腾盛世！瑞气盈门！' },
+                { icon: '🎉', text: '玉马骧腾！锦绣春光！' },
+                { icon: '🧨', text: '金蛇狂舞！喜迎新春！' },
+                { icon: '🏮', text: '张灯结彩！欢乐祥和！' }
+            ],
+            banner: [
+                { title: '🐴 马年到！鸿运当头！', desc: '龙马精神展宏图，万事如意迎新春' },
+                { title: '🎊 新春吉祥！好事连连！', desc: '金马献瑞送吉祥，财源滚滚福气来' },
+                { title: '🧧 恭喜发财！大吉大利！', desc: '马蹄哒哒踏春来，步步高升乐开怀' },
+                { title: '🐎 万马奔腾！气吞山河！', desc: '一马当先开门红，万事如意过大年' },
+                { title: '✨ 龙马精神！再创辉煌！', desc: '金马迎春春常在，平安吉祥福满堂' },
+                { title: '🎉 新春快乐！阖家欢乐！', desc: '马到成功万事兴，欢天喜地迎新年' },
+                { title: '🏮 张灯结彩！喜气洋洋！', desc: '红灯高照迎新春，欢天喜地过大年' },
+                { title: '🧨 鞭炮齐鸣！辞旧迎新！', desc: '烟花绽放除夕夜，新春佳节乐团圆' }
+            ],
+            footer: [
+                '祝大家龙马精神、身体健康、财源广进、万事如意！',
+                '祝各位马到成功、事业腾飞、恭喜发财、阖家幸福！',
+                '祝各位骏马奔腾、春风得意、步步高升、天天开心！',
+                '祝大家金马献瑞、锦绣前程、身体健康、赚得盆满钵满！',
+                '祝各位龙腾虎跃、事业兴旺、财源滚滚、新春大吉！',
+                '祝大家马蹄生风、梦想成真、身体棒棒、钱包鼓鼓！',
+                '祝各位一马当先、前程似锦、身心健康、福气满满！',
+                '祝各位春风得意、马到功成、财源广进、幸福安康！'
+            ],
+            decorations: ['🧧', '🎊', '🏮', '🎉', '✨', '💫', '🐴', '🐎', '🧨', '🏮', '🧧', '🎊']
+        };
+
+        // 烟花颜色配置 - 中国红金色系
+        const fireworkColors = [
+            '#FF4444', '#FF6B6B', '#FFD700', '#FFA500',
+            '#FF69B4', '#FF1493', '#FFD700', '#FF4500',
+            '#DC143C', '#FF0000', '#FFB6C1', '#FFC0CB'
+        ];
+
+        // 真正的烟花动画
+        class Firework {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.particles = [];
+                this.resize();
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            createParticle(x, y, color) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 4 + 2;
+                const particle = {
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    color: color,
+                    alpha: 1,
+                    decay: Math.random() * 0.015 + 0.01,
+                    size: Math.random() * 3 + 2,
+                    tail: []
+                };
+                return particle;
+            }
+
+            explode(x, y) {
+                const color = fireworkColors[Math.floor(Math.random() * fireworkColors.length)];
+                const particleCount = 80 + Math.floor(Math.random() * 40);
+                for (let i = 0; i < particleCount; i++) {
+                    this.particles.push(this.createParticle(x, y, color));
+                }
+            }
+
+            update() {
+                // 更新粒子
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+
+                    // 记录尾迹
+                    p.tail.unshift({ x: p.x, y: p.y, alpha: p.alpha });
+                    if (p.tail.length > 8) p.tail.pop();
+
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.05; // 重力
+                    p.alpha -= p.decay;
+
+                    if (p.alpha <= 0) {
+                        this.particles.splice(i, 1);
+                    }
+                }
+            }
+
+            draw() {
+                // 绘制粒子
+                this.particles.forEach(p => {
+                    // 绘制尾迹
+                    p.tail.forEach((t, i) => {
+                        const tailAlpha = t.alpha * (1 - i / p.tail.length) * 0.5;
+                        this.ctx.beginPath();
+                        this.ctx.arc(t.x, t.y, p.size * (1 - i / p.tail.length), 0, Math.PI * 2);
+                        this.ctx.fillStyle = p.color.replace(')', `, ${tailAlpha})`).replace('rgb', 'rgba');
+                        this.ctx.fill();
+                    });
+
+                    // 绘制粒子主体
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.globalAlpha = p.alpha;
+                    this.ctx.fill();
+                    this.ctx.globalAlpha = 1;
+                });
+            }
+
+            animate() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.update();
+                this.draw();
+            }
+
+            launch() {
+                const x = Math.random() * (this.canvas.width * 0.6) + this.canvas.width * 0.2;
+                const y = this.canvas.height * 0.3 + Math.random() * this.canvas.height * 0.3;
+                this.explode(x, y);
+            }
+        }
+
+        // 启动烟花动画
+        let firework = null;
+        let fireworkInterval = null;
+
+        const memberBadges = [
+            { emoji: '🔥', name: '高效达人', keywords: ['高效', '快速', '提前', '超额', '加速', '效率'] },
+            { emoji: '⚡', name: '闪电侠', keywords: ['迅速', '飞快', '秒级', '快速响应', '即刻', '马上'] },
+            { emoji: '🚀', name: '速度担当', keywords: ['快速迭代', '快速交付', '快速上线', '紧急', '加急'] },
+            { emoji: '💎', name: '品质保证', keywords: ['质量', '测试', '覆盖率', '无bug', '稳定', '可靠', '优质'] },
+            { emoji: '🎯', name: '精准打击', keywords: ['精确', '准确', '零误差', '一次通过', '完美'] },
+            { emoji: '🛡️', name: '坚实后盾', keywords: ['安全', '加固', '防护', '稳定', '可靠', '容错'] },
+            { emoji: '🦾', name: '代码狂人', keywords: ['重构', '优化', '架构', '底层', '源码'] },
+            { emoji: '🔧', name: '工科匠人', keywords: ['工具', '封装', '组件', '库', '脚手架', '基础设施'] },
+            { emoji: '💻', name: '技术先锋', keywords: ['新技术', '新框架', '尝鲜', '创新', '探索'] },
+            { emoji: '🌈', name: '协作天使', keywords: ['协作', '配合', '联调', '对接', '沟通', '团队'] },
+            { emoji: '🤝', name: '桥梁纽带', keywords: ['接口', '对接', '协调', '推动', '促成'] },
+            { emoji: '📚', name: '知识传递者', keywords: ['文档', '分享', '培训', '指导', '评审'] },
+            { emoji: '💡', name: '点子王', keywords: ['创新', '创意', '想法', '方案', '建议', '改进'] },
+            { emoji: '🎨', name: '艺术家', keywords: ['ui', 'ux', '设计', '美观', '体验', '交互'] },
+            { emoji: '✨', name: '追光者', keywords: ['前沿', '趋势', '调研', '探索', '预研'] },
+            { emoji: '🏆', name: '冠军选手', keywords: ['第一', '首个', '首发', '突破', '里程碑', '首创'] },
+            { emoji: '🎖️', name: '荣誉收割机', keywords: ['认可', '好评', '点赞', '感谢', '表彰'] },
+            { emoji: '👑', name: '领域专家', keywords: ['专家', '权威', '主导', '负责', '核心'] },
+            { emoji: '💪', name: '拼命三郎', keywords: ['攻坚', '难点', '困难', '挑战', '攻克', '突破'] },
+            { emoji: '⛰️', name: '翻山越岭', keywords: ['复杂', '困难', '艰巨', '硬骨头', '深度'] },
+            { emoji: '🌋', name: '问题终结者', keywords: ['解决', '排查', '定位', '修复', '处理'] },
+            { emoji: '🐝', name: '勤劳小蜜蜂', keywords: ['勤奋', '努力', '加班', '投入', '专注'] },
+            { emoji: '🌙', name: '深夜守护者', keywords: ['深夜', '凌晨', '值班', '应急', '响应'] },
+            { emoji: '📈', name: '稳步前进', keywords: ['持续', '稳定', '规律', '坚持', '不懈'] }
+        ];
+
+        function randomItem(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function applyTheme() {
+            const decorElements = document.querySelectorAll('.floating-decor');
+            decorElements.forEach((el, idx) => {
+                el.textContent = springBlessings.decorations[idx % springBlessings.decorations.length];
+                el.style.animationDelay = `${idx * 0.35}s`;
+            });
+        }
+
+        function applyMotivation() {
+            // 设置页脚拜年祝福
+            document.getElementById('footerEncouragement').textContent = randomItem(springBlessings.footer);
+        }
+
+        function createFirework() {
+            const canvas = document.getElementById('firework-canvas');
+            firework = new Firework(canvas);
+
+            // 启动烟花发射
+            let launchCount = 0;
+            const maxLaunches = 12;
+
+            fireworkInterval = setInterval(() => {
+                if (launchCount < maxLaunches) {
+                    firework.launch();
+                    launchCount++;
+                } else if (firework.particles.length === 0) {
+                    clearInterval(fireworkInterval);
+                }
+            }, 400);
+
+            // 动画循环
+            function animate() {
+                if (firework) {
+                    firework.animate();
+                }
+                if (fireworkInterval || firework.particles.length > 0) {
+                    requestAnimationFrame(animate);
+                }
+            }
+            animate();
+
+            // 窗口大小改变时重新调整
+            window.addEventListener('resize', () => {
+                if (firework) firework.resize();
+            });
+        }
+
+        function saveAsImage() {
+            const button = document.getElementById('saveButton');
+            const buttonText = button.querySelector('.button-text');
+            const content = document.querySelector('.main-container');
+
+            button.classList.add('loading');
+            button.classList.add('disabled');
+            buttonText.textContent = '⏳ 生成中...';
+
+            html2canvas(content, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#FFF8E1',
+                logging: false,
+                width: 894,
+                windowWidth: 894,
+                scrollX: 0,
+                scrollY: 0,
+                x: 0,
+                y: 0,
+            }).then(canvas => {
+                canvas.toBlob(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+
+                    const now = new Date();
+                    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+                    const weekNum = Math.ceil(((now - new Date(now.getFullYear(), 0, 1)) / 86400000 + 1) / 7);
+                    a.download = `周报_新春特辑_第${weekNum}周_${dateStr}.png`;
+
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+
+                    button.classList.remove('loading');
+                    button.classList.remove('disabled');
+                    buttonText.textContent = '✅ 已保存';
+
+                    setTimeout(() => {
+                        buttonText.textContent = '📸 生成本周周报';
+                    }, 3000);
+                }, 'image/png', 0.95);
+            }).catch(error => {
+                console.error('保存失败:', error);
+                button.classList.remove('loading');
+                button.classList.remove('disabled');
+                buttonText.textContent = '❌ 保存失败';
+                setTimeout(() => {
+                    buttonText.textContent = '📸 生成本周周报';
+                }, 3000);
+                alert('保存失败，请重试或使用浏览器截图功能');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            applyTheme();
+            applyMotivation();
+            setTimeout(createFirework, 600);
+        });
+    </script>
+</body>
+</html>

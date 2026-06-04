@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>团队周报</title>
+    <style>
+        :root {
+            /* 春季清新 */
+            --spring-primary: #FF6B6B;
+            --spring-secondary: #FFE66D;
+            --spring-bg: linear-gradient(135deg, #FF6B6B15 0%, #FFE66D25 50%, #4ECDC425 100%);
+            
+            /* 夏季清爽 */
+            --summer-primary: #00B4D8;
+            --summer-secondary: #48CAE4;
+            --summer-bg: linear-gradient(135deg, #00B4D815 0%, #48CAE425 50%, #90E0EF25 100%);
+            
+            /* 秋季温暖 */
+            --autumn-primary: #E76F51;
+            --autumn-secondary: #F4A261;
+            --autumn-bg: linear-gradient(135deg, #E76F5115 0%, #F4A26125 50%, #E9C46A25 100%);
+            
+            /* 冬季静谧 */
+            --winter-primary: #457B9D;
+            --winter-secondary: #A8DADC;
+            --winter-bg: linear-gradient(135deg, #457B9D15 0%, #A8DADC25 50%, #BDE0FE25 100%);
+            
+            /* 活力橙色 */
+            --energy-primary: #FF9F1C;
+            --energy-secondary: #FFBF69;
+            --energy-bg: linear-gradient(135deg, #FF9F1C15 0%, #FFBF6925 50%, #FFE66D25 100%);
+            
+            /* 紫罗兰神秘 */
+            --magic-primary: #9B5DE5;
+            --magic-secondary: #F15BB5;
+            --magic-bg: linear-gradient(135deg, #9B5DE515 0%, #F15BB525 50%, #00BBF925 100%);
+            
+            /* 薄荷清新 */
+            --mint-primary: #06D6A0;
+            --mint-secondary: #4CC9F0;
+            --mint-bg: linear-gradient(135deg, #06D6A015 0%, #4CC9F025 50%, #80ED9925 100%);
+            
+            /* 可爱粉 */
+            --cute-primary: #FF85A1;
+            --cute-secondary: #FB6F92;
+            --cute-bg: linear-gradient(135deg, #FF85A115 0%, #FB6F9225 50%, #FCC2D725 100%);
+            
+            --card-bg: rgba(255, 255, 255, 0.96);
+            --text-color: #2D3436;
+            --text-light: #636E72;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+            background: var(--summer-bg);
+            color: var(--text-color);
+            line-height: 1.8;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* 顶部装饰条 */
+        .decoration-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            z-index: 1000;
+        }
+
+        /* 浮动装饰元素 */
+        .floating-decor {
+            position: fixed;
+            font-size: 18px;
+            opacity: 0.12;
+            z-index: 0;
+            animation: float 5s ease-in-out infinite;
+        }
+
+        .floating-decor:nth-child(1) { top: 12%; left: 3%; animation-delay: 0s; }
+        .floating-decor:nth-child(2) { top: 25%; right: 5%; animation-delay: 1s; }
+        .floating-decor:nth-child(3) { top: 45%; left: 2%; animation-delay: 2s; }
+        .floating-decor:nth-child(4) { top: 60%; right: 3%; animation-delay: 3s; }
+        .floating-decor:nth-child(5) { top: 75%; left: 8%; animation-delay: 4s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(8deg); }
+        }
+
+        #report-content {
+            max-width: 750px;
+            margin: 0 auto;
+            padding: 16px;
+            padding-bottom: 80px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 32px 20px;
+            text-align: center;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -100%;
+            left: -100%;
+            width: 300%;
+            height: 300%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 50%);
+            animation: shine 10s linear infinite;
+        }
+
+        @keyframes shine {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(33%, 33%); }
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .header-icon {
+            font-size: 36px;
+            margin-bottom: 8px;
+            animation: bounce 2s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-date {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            font-size: 12px;
+            opacity: 0.95;
+            margin-bottom: 8px;
+        }
+
+        .header-weather {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+        }
+
+        /* 激励语区域 */
+        .motivation-banner {
+            background: linear-gradient(135deg, #FFF9E6 0%, #FFF3CD 100%);
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 3px 12px rgba(244, 162, 97, 0.15);
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .motivation-icon {
+            font-size: 28px;
+            flex-shrink: 0;
+        }
+
+        .motivation-text h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #E76F51;
+            margin-bottom: 2px;
+        }
+
+        .motivation-text p {
+            font-size: 12px;
+            color: var(--text-color);
+            line-height: 1.4;
+        }
+
+        .overview {
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(0, 0, 0, 0.03);
+        }
+
+        .overview-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px dashed rgba(0, 0, 0, 0.05);
+        }
+
+        .overview-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .overview h2 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .overview-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 12px 8px;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.02) 0%, rgba(0, 0, 0, 0.04) 100%);
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-light);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .overview-focus {
+            background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%);
+            padding: 12px 16px;
+            border-radius: 10px;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .overview-focus p {
+            font-size: 13px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .overview-focus strong {
+            color: var(--primary-color);
+            white-space: nowrap;
+        }
+
+        .member {
+            background: var(--card-bg);
+            padding: 18px;
+            border-radius: 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .member:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .member-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.04);
+        }
+
+        .member-avatar {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .member-avatar-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            font-size: 12px;
+        }
+
+        .member-info h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .member-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .member-tag {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.07) 100%);
+            color: var(--text-light);
+        }
+
+        .member-tag.highlight {
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+            color: #D97706;
+        }
+
+        .section {
+            margin-top: 14px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .section-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .section-icon.completed {
+            background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+        }
+
+        .section-icon.planned {
+            background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+        }
+
+        .section-icon.risk {
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .section ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .section li {
+            padding: 10px 12px;
+            padding-left: 38px;
+            position: relative;
+            font-size: 13px;
+            line-height: 1.6;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.01) 0%, rgba(0, 0, 0, 0.03) 100%);
+            margin-bottom: 8px;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .section li:hover {
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.05) 100%);
+            transform: translateX(2px);
+        }
+
+        .section li::before {
+            content: '';
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .section li.completed::before {
+            background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+            box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+        }
+
+        .section li.planned::before {
+            background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+            box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+        }
+
+        .section li.risk::before {
+            background: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
+            box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+        }
+
+        .task-highlight {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .task-data {
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #D97706;
+        }
+
+        /* 页脚激励语 */
+        .footer-encouragement {
+            text-align: center;
+            padding: 16px;
+            margin-top: 12px;
+            position: relative;
+        }
+
+        .footer-encouragement::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 15%;
+            right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.08), transparent);
+        }
+
+        .encouragement-text {
+            font-size: 14px;
+            color: var(--text-light);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .encouragement-icon {
+            font-size: 16px;
+            animation: heartbeat 1.5s ease-in-out infinite;
+        }
+
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        /* ========== 保存按钮样式 ========== */
+        .save-button-container {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            z-index: 1000;
+        }
+
+        .save-button {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: inherit;
+        }
+
+        .save-button:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .save-button:active {
+            transform: translateY(-1px) scale(0.98);
+        }
+
+        .save-button.disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        .save-button.loading .spinner {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes seasonFlow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+
+        @media (max-width: 480px) {
+            .save-button-container {
+                bottom: 12px;
+                right: 12px;
+            }
+
+            .save-button {
+                padding: 10px 20px;
+                font-size: 13px;
+            }
+
+            .overview-stats {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 6px;
+            }
+
+            .stat-number {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 浮动装饰 -->
+    <div class="floating-decor">✨</div>
+    <div class="floating-decor">🌟</div>
+    <div class="floating-decor">💫</div>
+    <div class="floating-decor">⭐</div>
+    <div class="floating-decor">🌈</div>
+
+    <!-- 顶部装饰条 -->
+    <div class="decoration-bar" id="decorationBar"></div>
+
+    <!-- 周报内容容器 -->
+    <div id="report-content">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-icon" id="headerIcon">🌟</div>
+                <h1 id="teamName">XX团队第X周工作周报</h1>
+                <div class="header-date">
+                    <span>📅 2024年X月X日 - X月X日</span>
+                    <span>📊 第X周</span>
+                </div>
+                <div class="header-weather">
+                    <span id="weatherIcon">☀️</span>
+                    <span id="weatherText">晴朗好心情</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 激励语横幅 -->
+        <div class="motivation-banner" id="motivationBanner">
+            <div class="motivation-icon">💪</div>
+            <div class="motivation-text">
+                <h3 id="motivationTitle">本周继续加油！</h3>
+                <p id="motivationDesc">每一份努力都在积累，团队因你而更强大</p>
+            </div>
+        </div>
+
+        <div class="overview">
+            <div class="overview-header">
+                <div class="overview-icon">📊</div>
+                <h2>本周工作概览</h2>
+            </div>
+            <div class="overview-stats">
+                <div class="stat-item">
+                    <div class="stat-number" id="totalTasks">X</div>
+                    <div class="stat-label">完成任务</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalModules">X</div>
+                    <div class="stat-label">项目模块</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalMembers">X</div>
+                    <div class="stat-label">团队成员</div>
+                </div>
+            </div>
+            <div class="overview-focus">
+                <p><strong>🎯 重点关注：</strong><span id="focusItems">XXX、XXX、XXX 等核心项目进展顺利</span></p>
+            </div>
+        </div>
+
+        <!-- 成员周报区域 -->
+        <div class="member">
+            <div class="member-header">
+                <div class="member-avatar">
+                    张
+                    <span class="member-avatar-badge">🔥</span>
+                </div>
+                <div class="member-info">
+                    <h3>张三</h3>
+                    <div class="member-tags">
+                        <span class="member-tag highlight">💪 高效达人</span>
+                    </div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon completed">✅</div>
+                    <div class="section-title">本周完成</div>
+                </div>
+                <ul>
+                    <li class="completed"><span class="task-highlight">完成</span>用户登录功能全栈开发（前端页面 + 后端API）</li>
+                    <li class="completed"><span class="task-highlight">修复</span><span class="task-data">3个</span>线上bug（对话消失、插件错误等）</li>
+                    <li class="completed"><span class="task-highlight">优化</span>数据库查询性能，提升响应速度<span class="task-data">40%</span></li>
+                </ul>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon planned">📅</div>
+                    <div class="section-title">下周计划</div>
+                </div>
+                <ul>
+                    <li class="planned">开始支付模块开发，预计<span class="task-data">2周</span>完成</li>
+                    <li class="planned">周三参加技术评审会，分享重构经验</li>
+                </ul>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon risk">⚠️</div>
+                    <div class="section-title">风险/问题</div>
+                </div>
+                <ul>
+                    <li class="risk">⚡ 依赖的第三方接口尚未就绪，需尽快跟进</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 页脚激励语 -->
+        <div class="footer-encouragement">
+            <p class="encouragement-text">
+                <span class="encouragement-icon">🌙</span>
+                <span id="footerEncouragement">每一步都是成长，继续前行！</span>
+                <span class="encouragement-icon">🌟</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- 保存按钮 -->
+    <div class="save-button-container">
+        <button class="save-button" onclick="saveAsImage()" id="saveButton">
+            <span class="spinner"></span>
+            <span class="button-text">📸 生成本周周报</span>
+        </button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script>
+        // ========== 主题配置 ==========
+        const themes = {
+            spring: { 
+                primary: '#FF6B6B', secondary: '#FFE66D',
+                bg: 'linear-gradient(135deg, #FF6B6B12 0%, #FFE66D20 50%, #4ECDC420 100%)',
+                icons: ['🌸', '🌷', '🌼', '🌿', '🌱', '🦋']
+            },
+            summer: { 
+                primary: '#00B4D8', secondary: '#48CAE4',
+                bg: 'linear-gradient(135deg, #00B4D812 0%, #48CAE420 50%, #90E0EF20 100%)',
+                icons: ['☀️', '🌴', '🌊', '🏖️', '🦀', '🌺']
+            },
+            autumn: { 
+                primary: '#E76F51', secondary: '#F4A261',
+                bg: 'linear-gradient(135deg, #E76F5112 0%, #F4A26120 50%, #E9C46A20 100%)',
+                icons: ['🍂', '🌾', '🎃', '🌰', '🍁', '🌙']
+            },
+            winter: { 
+                primary: '#457B9D', secondary: '#A8DADC',
+                bg: 'linear-gradient(135deg, #457B9D12 0%, #A8DADC20 50%, #BDE0FE20 100%)',
+                icons: ['❄️', '☃️', '🧣', '🌨️', '🏔️', '🌫️']
+            },
+            energy: { 
+                primary: '#FF9F1C', secondary: '#FFBF69',
+                bg: 'linear-gradient(135deg, #FF9F1C12 0%, #FFBF6920 50%, #FFE66D20 100%)',
+                icons: ['⚡', '🔥', '💥', '🌟', '🚀', '💪']
+            },
+            magic: { 
+                primary: '#9B5DE5', secondary: '#F15BB5',
+                bg: 'linear-gradient(135deg, #9B5DE512 0%, #F15BB520 50%, #00BBF920 100%)',
+                icons: ['✨', '🌈', '💎', '🔮', '🌟', '🦄']
+            },
+            mint: { 
+                primary: '#06D6A0', secondary: '#4CC9F0',
+                bg: 'linear-gradient(135deg, #06D6A012 0%, #4CC9F020 50%, #80ED9920 100%)',
+                icons: ['🌿', '🍃', '💧', '🌱', '🌊', '🏞️']
+            },
+            cute: { 
+                primary: '#FF85A1', secondary: '#FB6F92',
+                bg: 'linear-gradient(135deg, #FF85A112 0%, #FB6F9220 50%, #FCC2D720 100%)',
+                icons: ['🌸', '💕', '🎀', '🧸', '🌷', '🦄']
+            }
+        };
+
+        // 激励语库
+        const motivationQuotes = {
+            header: [
+                { icon: '🌟', text: '新的一周，新的开始！' },
+                { icon: '💪', text: '加油，团队因你而精彩！' },
+                { icon: '🚀', text: '让我们一起冲鸭！' },
+                { icon: '✨', text: '闪闪发光的你们！' },
+                { icon: '🌈', text: '彩虹般的团队力量！' },
+                { icon: '🔥', text: '燃烧吧，小宇宙！' },
+                { icon: '💎', text: '每一次努力都值得被看见！' },
+                { icon: '🌸', text: '春天般温暖的团队！' }
+            ],
+            banner: [
+                { title: '💪 本周继续加油！', desc: '每一份努力都在积累，团队因你而更强大' },
+                { title: '🌟 优秀是一种习惯', desc: '你们的专注和付出，正在创造非凡的成果' },
+                { title: '🚀 冲就完事了！', desc: '勇往直前，没有什么能阻挡我们' },
+                { title: '✨ 闪闪发光的你们', desc: '每一个成就都值得被记录和赞美' },
+                { title: '💎 努力的你最美', desc: '坚持就是最大的天赋，专注就是最好的能力' },
+                { title: '🔥 燃烧小宇宙', desc: '用热情点燃代码，用行动创造价值' },
+                { title: '🌈 协作的力量', desc: '团队配合默契，效率翻倍增长' },
+                { title: '🎯 专注带来突破', desc: '每一行代码都是成长的印记' }
+            ],
+            footer: [
+                '每一步都是成长，继续前行！',
+                '今天的汗水，是明天的骄傲！',
+                '坚持就是胜利，专注创造奇迹！',
+                '相信过程，结果不会辜负你！',
+                '努力的你，值得被看见！',
+                '代码改变世界，你改变代码！',
+                '保持热爱，奔赴山海！',
+                '今天的辛苦，都是明天的勋章！'
+            ]
+        };
+
+        // 成员激励标签（完整徽章库，供AI选择时参考）
+        const memberBadges = [
+            // 效率型
+            { emoji: '🔥', name: '高效达人', keywords: ['高效', '快速', '提前', '超额', '超时', '加速', '效率'] },
+            { emoji: '⚡', name: '闪电侠', keywords: ['迅速', '飞快', '秒级', '快速响应', '即刻', '马上'] },
+            { emoji: '🚀', name: '速度担当', keywords: ['快速迭代', '快速交付', '快速上线', '紧急', '加急'] },
+            
+            // 质量型
+            { emoji: '💎', name: '品质保证', keywords: ['质量', '测试', '覆盖率', '无bug', '稳定', '可靠', '优质'] },
+            { emoji: '🎯', name: '精准打击', keywords: ['精确', '准确', '零误差', '一次通过', '完美'] },
+            { emoji: '🛡️', name: '坚实后盾', keywords: ['安全', '加固', '防护', '稳定', '可靠', '容错'] },
+            
+            // 技术型
+            { emoji: '🦾', name: '代码狂人', keywords: ['重构', '优化', '架构', '底层', '源码', '底层实现'] },
+            { emoji: '🔧', name: '工科匠人', keywords: ['工具', '封装', '组件', '库', '脚手架', '基础设施'] },
+            { emoji: '💻', name: '技术先锋', keywords: ['新技术', '新框架', '尝鲜', '创新', '探索'] },
+            
+            // 协作型
+            { emoji: '🌈', name: '协作天使', keywords: ['协作', '配合', '联调', '对接', '沟通', '团队'] },
+            { emoji: '🤝', name: '桥梁纽带', keywords: ['接口', '对接', '协调', '推动', '促成'] },
+            { emoji: '📚', name: '知识传递者', keywords: ['文档', '分享', '培训', '指导', '评审'] },
+            
+            // 创造型
+            { emoji: '💡', name: '点子王', keywords: ['创新', '创意', '想法', '方案', '建议', '改进'] },
+            { emoji: '🎨', name: '艺术家', keywords: ['ui', 'ux', '设计', '美观', '体验', '交互'] },
+            { emoji: '✨', name: '追光者', keywords: ['前沿', '趋势', '调研', '探索', '预研'] },
+            
+            // 成就型
+            { emoji: '🏆', name: '冠军选手', keywords: ['第一', '首个', '首发', '突破', '里程碑', '首创'] },
+            { emoji: '🎖️', name: '荣誉收割机', keywords: ['认可', '好评', '点赞', '感谢', '表彰'] },
+            { emoji: '👑', name: '领域专家', keywords: ['专家', '权威', '主导', '负责', '核心'] },
+            
+            // 攻坚型
+            { emoji: '💪', name: '拼命三郎', keywords: ['攻坚', '难点', '困难', '挑战', '攻克', '突破'] },
+            { emoji: '⛰️', name: '翻山越岭', keywords: ['复杂', '困难', '艰巨', '硬骨头', '深度'] },
+            { emoji: '🌋', name: '问题终结者', keywords: ['解决', '排查', '定位', '修复', '处理'] },
+            
+            // 勤奋型
+            { emoji: '🐝', name: '勤劳小蜜蜂', keywords: ['勤奋', '努力', '加班', '投入', '专注'] },
+            { emoji: '🌙', name: '深夜守护者', keywords: ['深夜', '凌晨', '值班', '应急', '响应'] },
+            { emoji: '📈', name: '稳步前进', keywords: ['持续', '稳定', '规律', '坚持', '不懈'] }
+        ];
+
+        // ========== 随机选择函数 ==========
+        function randomItem(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function randomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        // ========== 主题应用 ==========
+        function applyTheme() {
+            // 根据日期哈希选择主题，确保同一周主题一致
+            const weekHash = getWeekHash();
+            const themeKeys = Object.keys(themes);
+            const themeIndex = weekHash % themeKeys.length;
+            const theme = themes[themeKeys[themeIndex]];
+            
+            document.documentElement.style.setProperty('--primary-color', theme.primary);
+            document.documentElement.style.setProperty('--secondary-color', theme.secondary);
+            document.body.style.background = theme.bg;
+            
+            // 设置装饰条颜色
+            const bar = document.getElementById('decorationBar');
+            bar.style.background = `linear-gradient(90deg, ${theme.primary}, ${theme.secondary}, ${theme.primary})`;
+            bar.style.backgroundSize = '200% 100%';
+            bar.style.animation = 'seasonFlow 8s linear infinite';
+            
+            // 更新浮动装饰图标
+            const decorElements = document.querySelectorAll('.floating-decor');
+            decorElements.forEach(el => {
+                el.textContent = randomItem(theme.icons);
+                el.style.animationDelay = `${randomInt(0, 5)}s`;
+            });
+
+            // 更新顶部图标
+            document.getElementById('headerIcon').textContent = randomItem(theme.icons);
+        }
+
+        // ========== 激励语应用 ==========
+        function applyMotivation() {
+            // 头部激励
+            const headerMotivation = randomItem(motivationQuotes.header);
+            document.getElementById('weatherIcon').textContent = headerMotivation.icon;
+            document.getElementById('weatherText').textContent = headerMotivation.text;
+            
+            // 横幅激励
+            const bannerMotivation = randomItem(motivationQuotes.banner);
+            document.getElementById('motivationTitle').textContent = bannerMotivation.title;
+            document.getElementById('motivationDesc').textContent = bannerMotivation.desc;
+            
+            // 页脚激励
+            document.getElementById('footerEncouragement').textContent = randomItem(motivationQuotes.footer);
+        }
+
+        // ========== 周哈希（确保同一周主题一致） ==========
+        function getWeekHash() {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), 0, 1);
+            const diff = now - start;
+            const oneWeek = 604800000;
+            return Math.floor(diff / oneWeek);
+        }
+
+        // ========== 保存为图片 ==========
+        function saveAsImage() {
+            const button = document.getElementById('saveButton');
+            const buttonText = button.querySelector('.button-text');
+            const content = document.getElementById('report-content');
+
+            button.classList.add('loading');
+            button.classList.add('disabled');
+            buttonText.textContent = '⏳ 生成中...';
+
+            html2canvas(content, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#F8F9FA',
+                logging: false,
+                width: 750,
+                windowWidth: 750,
+                scrollX: 0,
+                scrollY: 0,
+                x: 0,
+                y: 0,
+            }).then(canvas => {
+                canvas.toBlob(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    const now = new Date();
+                    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+                    const weekNum = Math.ceil(((now - new Date(now.getFullYear(), 0, 1)) / 86400000 + 1) / 7);
+                    a.download = `周报_第${weekNum}周_${dateStr}.png`;
+
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+
+                    button.classList.remove('loading');
+                    button.classList.remove('disabled');
+                    buttonText.textContent = '✅ 已保存';
+
+                    setTimeout(() => {
+                        buttonText.textContent = '📸 生成本周周报';
+                    }, 3000);
+
+                }, 'image/png', 0.95);
+
+            }).catch(error => {
+                console.error('保存失败:', error);
+                button.classList.remove('loading');
+                button.classList.remove('disabled');
+                buttonText.textContent = '❌ 保存失败';
+
+                setTimeout(() => {
+                    buttonText.textContent = '📸 生成本周周报';
+                }, 3000);
+
+                alert('保存失败，请重试或使用浏览器截图功能');
+            });
+        }
+
+        // ========== 页面加载时初始化 ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            applyTheme();
+            applyMotivation();
+        });
+    </script>
+</body>
+</html>

@@ -16,6 +16,14 @@ export function useAccountDetail(id: number) {
   });
 }
 
+export function useAccountCharacters(id: number) {
+  return useQuery({
+    queryKey: ['accounts', 'characters', id],
+    queryFn: () => accountApi.characters(id),
+    enabled: id > 0,
+  });
+}
+
 export function useUnbanAccount() {
   const queryClient = useQueryClient();
 

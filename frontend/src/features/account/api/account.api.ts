@@ -9,6 +9,7 @@ export interface AccountListItem {
   lastLogin: Date | null;
   lastIp: string;
   locked: number;
+  characterCount: number;
 }
 
 export interface BanRecord {
@@ -17,6 +18,17 @@ export interface BanRecord {
   bannedBy: string;
   banReason: string;
   active: number;
+}
+
+export interface AccountCharacter {
+  guid: number;
+  name: string;
+  level: number;
+  race: number;
+  class: number;
+  gender: number;
+  online: number;
+  zone: number;
 }
 
 export interface AccountDetail extends AccountListItem {
@@ -41,6 +53,9 @@ export const accountApi = {
 
   detail: (id: number) =>
     apiClient.get<AccountDetail>(`/api/accounts/${id}`),
+
+  characters: (id: number) =>
+    apiClient.get<AccountCharacter[]>(`/api/accounts/${id}/characters`),
 
   unban: (id: number) =>
     apiClient.post<{ success: boolean }>(`/api/accounts/${id}/unban`),

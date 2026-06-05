@@ -64,6 +64,7 @@ export default function CharacterListPage() {
           <thead>
             <tr className="border-b border-border bg-card">
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">名称</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">所属账号</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">等级</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">种族</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">职业</th>
@@ -73,11 +74,11 @@ export default function CharacterListPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">加载中...</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">加载中...</td>
               </tr>
             ) : data?.items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">暂无数据</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">暂无数据</td>
               </tr>
             ) : (
               data?.items.map((char) => {
@@ -97,6 +98,21 @@ export default function CharacterListPage() {
                         </span>
                       ) : (
                         char.name
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isDeleted ? (
+                        <span className="text-muted-foreground">-</span>
+                      ) : (
+                        <button
+                          className="text-primary hover:underline text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/accounts/${char.accountId}`);
+                          }}
+                        >
+                          {char.accountUsername}
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-3">{char.level}</td>

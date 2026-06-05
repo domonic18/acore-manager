@@ -57,6 +57,25 @@ router.get(
   },
 );
 
+router.get(
+  '/:id/characters',
+  authMiddleware,
+  requireGmLevel(1),
+  [param('id').isInt().toInt()],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid account ID' });
+      return;
+    }
+
+    const accountId = parseInt(req.params.id);
+    const characters = await accountService.getAccountCharacters(accountId);
+
+    res.json({ success: true, count: characters.length, data: characters });
+  },
+);
+
 router.post(
   '/:id/unban',
   authMiddleware,

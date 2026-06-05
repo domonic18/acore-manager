@@ -47,6 +47,7 @@ export default function AccountListPage() {
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">用户名</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">邮箱</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">GM等级</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">角色数</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">状态</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">最后登录</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">最后IP</th>
@@ -56,13 +57,13 @@ export default function AccountListPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                     加载中...
                   </td>
                 </tr>
               ) : data?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                     暂无数据
                   </td>
                 </tr>
@@ -88,6 +89,13 @@ export default function AccountListPage() {
                       }`}>
                         {account.gmlevel || '玩家'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {account.characterCount > 0 ? (
+                        <span className="text-primary font-medium">{account.characterCount}</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {account.online ? (

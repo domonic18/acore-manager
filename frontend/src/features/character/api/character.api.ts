@@ -4,6 +4,7 @@ export interface CharacterListItem {
   guid: number;
   name: string;
   accountId: number;
+  accountUsername: string;
   race: number;
   class: number;
   gender: number;

@@ -1,10 +1,8 @@
 # Stage 1: Frontend build
 FROM node:20-alpine AS frontend-builder
-ARG VITE_ICON_BASE_URL
-ARG VITE_AOWOW_BASE_URL
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 COPY frontend/ ./
 RUN npm run build
 
@@ -12,7 +10,7 @@ RUN npm run build
 FROM node:20-alpine AS backend-builder
 WORKDIR /app/backend
 COPY backend/package*.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 COPY backend/ ./
 RUN npm run build
 
@@ -20,7 +18,7 @@ RUN npm run build
 FROM node:20-alpine AS production
 WORKDIR /app
 COPY backend/package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --legacy-peer-deps --omit=dev && npm cache clean --force
 COPY --from=backend-builder /app/backend/dist ./dist
 COPY --from=frontend-builder /app/frontend/dist ./dist/public
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001

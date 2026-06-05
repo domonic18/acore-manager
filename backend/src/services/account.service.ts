@@ -1,5 +1,4 @@
 import { authDataSource } from '../config/database';
-import { accountRepository } from '../repositories/account.repository';
 import { cacheService } from './cache.service';
 import { logger } from '../middleware/request-logger';
 

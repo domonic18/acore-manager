@@ -26,8 +26,8 @@ export default function LoginPage() {
       }
 
       login(result.data.token, result.data.user);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登录失败');
     } finally {
       setLoading(false);
     }

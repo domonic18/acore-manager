@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { AppLayout } from '@/shared/components/AppLayout';
 import { useBroadcast, useSendItems, useFindPlayer } from '@/features/gm-tool/hooks/useGmTool';
 
-export function GmToolPage() {
+export default function GmToolPage() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [itemId, setItemId] = useState('');
@@ -38,7 +37,7 @@ export function GmToolPage() {
   };
 
   return (
-    <AppLayout>
+    
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">GM 工具</h1>
 
@@ -111,7 +110,7 @@ export function GmToolPage() {
           </ToolCard>
         </div>
       </div>
-    </AppLayout>
+    
   );
 }
 

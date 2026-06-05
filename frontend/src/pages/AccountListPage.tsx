@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/shared/components/AppLayout';
 import { useAccountList } from '@/features/account/hooks/useAccount';
 
-export function AccountListPage() {
+export default function AccountListPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -18,7 +17,7 @@ export function AccountListPage() {
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
 
   return (
-    <AppLayout>
+    
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">账号管理</h1>
@@ -150,6 +149,6 @@ export function AccountListPage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    
   );
 }

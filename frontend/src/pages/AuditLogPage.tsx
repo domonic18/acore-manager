@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { AppLayout } from '@/shared/components/AppLayout';
 import { useAuditLogList } from '@/features/audit-log/hooks/useAuditLog';
 
-export function AuditLogPage() {
+export default function AuditLogPage() {
   const [page, setPage] = useState(1);
   const [operation, setOperation] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -19,7 +18,7 @@ export function AuditLogPage() {
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
 
   return (
-    <AppLayout>
+    
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">日志审计</h1>
 
@@ -115,6 +114,6 @@ export function AuditLogPage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    
   );
 }

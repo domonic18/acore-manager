@@ -1,5 +1,4 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/shared/components/AppLayout';
 import { useCharacterDetail } from '@/features/character/hooks/useCharacter';
 
 const raceMap: Record<number, string> = {
@@ -13,7 +12,7 @@ const classMap: Record<number, string> = {
   6: '死亡骑士', 7: '萨满', 8: '法师', 9: '术士', 11: '德鲁伊',
 };
 
-export function CharacterDetailPage() {
+export default function CharacterDetailPage() {
   const { guid } = useParams<{ guid: string }>();
   const navigate = useNavigate();
   const characterGuid = parseInt(guid || '0');
@@ -21,17 +20,17 @@ export function CharacterDetailPage() {
 
   if (isLoading) {
     return (
-      <AppLayout>
+      
         <div className="text-center py-12 text-muted-foreground">加载中...</div>
-      </AppLayout>
+      
     );
   }
 
   if (!character) {
     return (
-      <AppLayout>
+      
         <div className="text-center py-12 text-muted-foreground">角色不存在</div>
-      </AppLayout>
+      
     );
   }
 
@@ -40,7 +39,7 @@ export function CharacterDetailPage() {
   const copper = character.money % 100;
 
   return (
-    <AppLayout>
+    
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <button
@@ -82,7 +81,7 @@ export function CharacterDetailPage() {
           </InfoCard>
         </div>
       </div>
-    </AppLayout>
+    
   );
 }
 

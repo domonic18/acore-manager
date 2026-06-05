@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { AppLayout } from '@/shared/components/AppLayout';
 import { useTransactionList } from '@/features/transaction/hooks/useTransaction';
 
-export function TransactionPage() {
+export default function TransactionPage() {
   const [page, setPage] = useState(1);
   const [characterName, setCharacterName] = useState('');
   const [type, setType] = useState('');
@@ -21,7 +20,7 @@ export function TransactionPage() {
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
 
   return (
-    <AppLayout>
+    
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">交易记录</h1>
 
@@ -135,6 +134,6 @@ export function TransactionPage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    
   );
 }

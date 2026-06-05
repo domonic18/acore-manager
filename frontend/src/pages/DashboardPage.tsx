@@ -1,11 +1,10 @@
-import { AppLayout } from '@/shared/components/AppLayout';
 import { useDashboardStats } from '@/features/dashboard/hooks/useDashboard';
 
-export function DashboardPage() {
+export default function DashboardPage() {
   const { data: stats, isLoading } = useDashboardStats();
 
   return (
-    <AppLayout>
+    
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
 
@@ -27,7 +26,7 @@ export function DashboardPage() {
           />
         </div>
       </div>
-    </AppLayout>
+    
   );
 }
 

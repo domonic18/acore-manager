@@ -1,8 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/shared/components/AppLayout';
 import { useAccountDetail, useUnbanAccount } from '@/features/account/hooks/useAccount';
 
-export function AccountDetailPage() {
+export default function AccountDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const accountId = parseInt(id || '0');
@@ -16,24 +15,24 @@ export function AccountDetailPage() {
 
   if (isLoading) {
     return (
-      <AppLayout>
+      
         <div className="text-center py-12 text-muted-foreground">加载中...</div>
-      </AppLayout>
+      
     );
   }
 
   if (!account) {
     return (
-      <AppLayout>
+      
         <div className="text-center py-12 text-muted-foreground">账号不存在</div>
-      </AppLayout>
+      
     );
   }
 
   const activeBans = account.bans?.filter((b) => b.active) || [];
 
   return (
-    <AppLayout>
+    
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <button
@@ -129,7 +128,7 @@ export function AccountDetailPage() {
           </InfoCard>
         )}
       </div>
-    </AppLayout>
+    
   );
 }
 

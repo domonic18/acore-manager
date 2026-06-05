@@ -96,7 +96,7 @@ export class TransactionService {
       `SELECT
         sender_name as senderName,
         receiver_name as receiverName,
-        amount,
+        money as amount,
         date,
         type
       FROM log_money

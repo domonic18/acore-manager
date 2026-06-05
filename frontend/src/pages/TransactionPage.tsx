@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTransactionList } from '@/features/transaction/hooks/useTransaction';
+import { formatGold } from '@/shared/utils/gold.util';
 
 export default function TransactionPage() {
   const [page, setPage] = useState(1);
@@ -96,11 +97,7 @@ export default function TransactionPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono">
-                      {tx.amount >= 0 ? (
-                        <span className="text-green-400">+{tx.amount}</span>
-                      ) : (
-                        <span className="text-red-400">{tx.amount}</span>
-                      )}
+                      <span className="text-amber-400">{formatGold(tx.amount)}</span>
                     </td>
                   </tr>
                 ))

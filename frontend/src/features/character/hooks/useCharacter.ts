@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { characterApi } from '../api/character.api';
 
-export function useCharacterList(params: { page?: number; pageSize?: number; search?: string }) {
+export function useCharacterList(params: { page?: number; pageSize?: number; search?: string; includeDeleted?: boolean }) {
   return useQuery({
     queryKey: ['characters', 'list', params],
     queryFn: () => characterApi.list(params),

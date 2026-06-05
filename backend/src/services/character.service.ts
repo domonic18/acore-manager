@@ -38,21 +38,27 @@ export class CharacterService {
     page: number = 1,
     pageSize: number = 20,
     search?: string,
+    includeDeleted: boolean = false,
   ): Promise<CharacterListResult> {
-    const cacheKey = `characters:list:${page}:${pageSize}:${search || ''}`;
+    const cacheKey = `characters:list:${page}:${pageSize}:${search || ''}:${includeDeleted}`;
     const cached = await cacheService.get<CharacterListResult>(cacheKey);
     if (cached) {
       return cached;
     }
 
     const offset = (page - 1) * pageSize;
-    let whereClause = '';
-    let params: any[] = [];
+    const conditions: string[] = [];
+    const params: any[] = [];
 
-    if (search) {
-      whereClause = 'WHERE name LIKE ?';
-      params = [`%${search}%`];
+    if (!includeDeleted) {
+      conditions.push("name != ''");
     }
+    if (search) {
+      conditions.push('name LIKE ?');
+      params.push(`%${search}%`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countResult = await charactersDataSource.query(
       `SELECT COUNT(*) as total FROM characters ${whereClause}`,

@@ -5,7 +5,7 @@ export class AccountAccess {
   @PrimaryColumn({ name: 'id' })
   accountId!: number;
 
-  @PrimaryColumn({ name: 'gmlevel' })
+  @Column({ name: 'gmlevel' })
   gmlevel!: number;
 
   @PrimaryColumn({ name: 'RealmID' })

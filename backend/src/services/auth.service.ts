@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { accountRepository } from '../repositories/account.repository';
-import { verifySha1Password } from '../shared/utils/password.util';
+import { verifySRP6Password } from '../shared/utils/password.util';
 import { logger } from '../middleware/request-logger';
 
 export interface LoginResult {
@@ -20,10 +20,11 @@ export class AuthService {
       return null;
     }
 
-    const isValid = verifySha1Password(
+    const isValid = verifySRP6Password(
       username,
       password,
-      account.shaPassHash,
+      account.salt,
+      account.verifier,
     );
 
     if (!isValid) {
@@ -41,7 +42,7 @@ export class AuthService {
     const token = jwt.sign(
       { id: account.id, username: account.username, gmlevel },
       env.JWT_SECRET,
-      { expiresIn: env.JWT_EXPIRES_IN },
+      { expiresIn: env.JWT_EXPIRES_IN as any },
     );
 
     logger.info({ userId: account.id, username }, 'User logged in');

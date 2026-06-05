@@ -8,20 +8,17 @@ export class Account {
   @Column()
   username!: string;
 
-  @Column({ name: 'sha_pass_hash' })
-  shaPassHash!: string;
+  @Column({ name: 'salt', type: 'binary', length: 32 })
+  salt!: Buffer;
 
-  @Column({ name: 'session_key', nullable: true })
-  sessionKey?: string;
+  @Column({ name: 'verifier', type: 'binary', length: 32 })
+  verifier!: Buffer;
 
-  @Column({ name: 'v', nullable: true })
-  v?: string;
+  @Column({ name: 'session_key', nullable: true, type: 'binary', length: 40 })
+  sessionKey?: Buffer;
 
-  @Column({ name: 's', nullable: true })
-  s?: string;
-
-  @Column({ name: 'token_key', nullable: true })
-  tokenKey?: string;
+  @Column({ name: 'totp_secret', nullable: true, type: 'varbinary', length: 128 })
+  totpSecret?: Buffer;
 
   @Column({ name: 'email', nullable: true })
   email?: string;

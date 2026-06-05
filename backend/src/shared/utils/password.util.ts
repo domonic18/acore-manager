@@ -1,59 +1,8 @@
 import * as crypto from 'crypto';
 
-/**
- * 验证 SHA1 密码（旧版兼容）
- */
-export function verifySha1Password(
-  username: string,
-  password: string,
-  shaPassHash: string,
-): boolean {
-  const hash = crypto
-    .createHash('sha1')
-    .update(`${username.toUpperCase()}:${password.toUpperCase()}`)
-    .digest('hex')
-    .toUpperCase();
-  return hash === shaPassHash.toUpperCase();
-}
-
-/**
- * 验证 SRP6 密码（新版推荐）
- */
-export function verifySRP6Password(
-  username: string,
-  password: string,
-  salt: Buffer,
-  verifier: Buffer,
-): boolean {
-  // SRP6 验证逻辑简化实现
-  // 实际实现需与 AzerothCore 服务端一致
-  const N = Buffer.from(
-    '894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3CB9D',
-    'hex',
-  );
-
-  const h = crypto.createHash('sha1');
-  h.update(`${username.toUpperCase()}:${password.toUpperCase()}`);
-  const x = BigInt('0x' + h.digest('hex'));
-
-  const saltBig = BigInt('0x' + salt.toString('hex'));
-  const NBig = BigInt('0x' + N.toString('hex'));
-
-  const xCombined = BigInt(
-    '0x' +
-      crypto
-        .createHash('sha1')
-        .update(salt.toString('hex') + x.toString(16).padStart(64, '0'), 'hex')
-        .digest('hex'),
-  );
-
-  const computedVerifier = Buffer.from(
-    modPow(7n, xCombined, NBig).toString(16).padStart(64, '0'),
-    'hex',
-  );
-
-  return computedVerifier.equals(verifier);
-}
+// AzerothCore / TrinityCore SRP6 constants
+const SRP6_N = BigInt('0x894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7');
+const SRP6_G = BigInt(7);
 
 function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
   let result = 1n;
@@ -66,4 +15,52 @@ function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
     base = (base * base) % mod;
   }
   return result;
+}
+
+function toBigIntLE(buf: Buffer): bigint {
+  let hex = '';
+  for (let i = buf.length - 1; i >= 0; i--) {
+    hex += buf[i].toString(16).padStart(2, '0');
+  }
+  return BigInt('0x' + hex);
+}
+
+function toBufferLE(num: bigint, len: number): Buffer {
+  let hex = num.toString(16);
+  if (hex.length % 2) hex = '0' + hex;
+  const buf = Buffer.from(hex, 'hex');
+  const padded = Buffer.alloc(len);
+  for (let i = 0; i < buf.length; i++) {
+    padded[i] = buf[buf.length - 1 - i];
+  }
+  return padded;
+}
+
+/**
+ * 计算 SRP6 verifier（AzerothCore/TrinityCore 兼容）
+ */
+export function calculateSRP6Verifier(
+  username: string,
+  password: string,
+  salt: Buffer,
+): Buffer {
+  const identity = `${username}:${password}`.toUpperCase();
+  const h1 = crypto.createHash('sha1').update(identity).digest();
+  const h2 = crypto.createHash('sha1').update(Buffer.concat([salt, h1])).digest();
+  const x = toBigIntLE(h2);
+  const v = modPow(SRP6_G, x, SRP6_N);
+  return toBufferLE(v, 32);
+}
+
+/**
+ * 验证 SRP6 密码（AzerothCore/TrinityCore 兼容）
+ */
+export function verifySRP6Password(
+  username: string,
+  password: string,
+  salt: Buffer,
+  verifier: Buffer,
+): boolean {
+  const computed = calculateSRP6Verifier(username, password, salt);
+  return computed.equals(verifier);
 }

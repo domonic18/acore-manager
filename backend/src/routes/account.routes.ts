@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { body, param, query, validationResult } from 'express-validator';
+import { Request, Response, Router } from 'express';
+import { param, query, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
 import { requireGmLevel } from '../middleware/gm-guard';
 import { accountService } from '../services/account.service';
@@ -15,10 +15,10 @@ router.get(
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('search').optional().trim(),
   ],
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).jsonError('Invalid request parameters', 400);
+      res.status(400).json({ success: false, error: 'Invalid request parameters' });
       return;
     }
 
@@ -27,7 +27,7 @@ router.get(
     const search = req.query.search as string | undefined;
 
     const result = await accountService.listAccounts(page, pageSize, search);
-    res.jsonSuccess(result);
+    res.json({ success: true, count: result.items.length, data: result });
   },
 );
 
@@ -36,10 +36,10 @@ router.get(
   authMiddleware,
   requireGmLevel(1),
   [param('id').isInt().toInt()],
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).jsonError('Invalid account ID', 400);
+      res.status(400).json({ success: false, error: 'Invalid account ID' });
       return;
     }
 
@@ -47,16 +47,13 @@ router.get(
     const detail = await accountService.getAccountDetail(accountId);
 
     if (!detail) {
-      res.status(404).jsonError('Account not found', 404);
+      res.status(404).json({ success: false, error: 'Account not found' });
       return;
     }
 
     const bans = await accountService.getBanRecords(accountId);
 
-    res.jsonSuccess({
-      ...detail,
-      bans,
-    });
+    res.json({ success: true, data: { ...detail, bans } });
   },
 );
 
@@ -65,24 +62,22 @@ router.post(
   authMiddleware,
   requireGmLevel(1),
   [param('id').isInt().toInt()],
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).jsonError('Invalid account ID', 400);
+      res.status(400).json({ success: false, error: 'Invalid account ID' });
       return;
     }
 
     const accountId = parseInt(req.params.id);
-    const operatorId = req.user!.id;
-
-    const success = await accountService.unbanAccount(accountId, operatorId);
+    const success = await accountService.unbanAccount(accountId, 0);
 
     if (!success) {
-      res.status(500).jsonError('Failed to unban account');
+      res.status(500).json({ success: false, error: 'Failed to unban account' });
       return;
     }
 
-    res.jsonSuccess({ success: true });
+    res.json({ success: true, data: { success: true } });
   },
 );
 

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { query, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
 import { requireGmLevel } from '../middleware/gm-guard';
@@ -18,10 +18,10 @@ router.get(
     query('startDate').optional().isISO8601(),
     query('endDate').optional().isISO8601(),
   ],
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).jsonError('Invalid request parameters', 400);
+      res.status(400).json({ success: false, error: 'Invalid request parameters' });
       return;
     }
 
@@ -35,7 +35,7 @@ router.get(
       endDate: req.query.endDate as string | undefined,
     });
 
-    res.jsonSuccess(result);
+    res.json({ success: true, count: result.items.length, data: result });
   },
 );
 

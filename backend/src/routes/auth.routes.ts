@@ -1,7 +1,7 @@
-import { Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authService } from '../services/auth.service';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -11,10 +11,10 @@ router.post(
     body('username').notEmpty().withMessage('Username is required'),
     body('password').notEmpty().withMessage('Password is required'),
   ],
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).jsonError('Invalid request', 400);
+      res.status(400).json({ success: false, error: 'Invalid request' });
       return;
     }
 
@@ -22,16 +22,16 @@ router.post(
     const result = await authService.login(username, password);
 
     if (!result) {
-      res.status(401).jsonError('Invalid username or password', 401);
+      res.status(401).json({ success: false, error: 'Invalid username or password' });
       return;
     }
 
-    res.jsonSuccess(result);
+    res.json({ success: true, data: result });
   },
 );
 
-router.get('/me', authMiddleware, (req, res) => {
-  res.jsonSuccess(req.user);
+router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
+  res.json({ success: true, data: req.user });
 });
 
 export default router;

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
 import { requireGmLevel } from '../middleware/gm-guard';
@@ -11,15 +11,15 @@ router.post(
   authMiddleware,
   requireGmLevel(2),
   [body('message').notEmpty().trim()],
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).jsonError('Invalid request', 400);
+      res.status(400).json({ success: false, error: 'Invalid request' });
       return;
     }
 
     await gmToolService.broadcast(req.body.message);
-    res.jsonSuccess({ success: true });
+    res.json({ success: true, data: { success: true } });
   },
 );
 
@@ -32,15 +32,15 @@ router.post(
     body('itemId').isInt({ min: 1 }).toInt(),
     body('count').optional().isInt({ min: 1 }).toInt(),
   ],
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).jsonError('Invalid request', 400);
+      res.status(400).json({ success: false, error: 'Invalid request' });
       return;
     }
 
     await gmToolService.sendItems(req.body.playerName, req.body.itemId, req.body.count || 1);
-    res.jsonSuccess({ success: true });
+    res.json({ success: true, data: { success: true } });
   },
 );
 
@@ -48,15 +48,15 @@ router.get(
   '/find-player',
   authMiddleware,
   requireGmLevel(1),
-  async (req, res) => {
+  async (req: Request, res: Response) => {
     const name = req.query.name as string;
     if (!name) {
-      res.status(400).jsonError('Player name is required', 400);
+      res.status(400).json({ success: false, error: 'Player name is required' });
       return;
     }
 
     const result = await gmToolService.findPlayer(name);
-    res.jsonSuccess({ result });
+    res.json({ success: true, data: { result } });
   },
 );
 

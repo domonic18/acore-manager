@@ -19,8 +19,15 @@ export function createApp(): Application {
   const app = express();
 
   app.use(helmet());
+  const allowedOrigins = env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : [];
   app.use(cors({
-    origin: env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : '*',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        callback(null, origin || '*');
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   }));
 

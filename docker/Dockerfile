@@ -1,5 +1,7 @@
 # Stage 1: Frontend build
 FROM node:20-alpine AS frontend-builder
+ARG VITE_ICON_BASE_URL
+ARG VITE_AOWOW_BASE_URL
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci

@@ -3,24 +3,65 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
+interface MysqlConn {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+}
+
+function parseMysqlUrl(url?: string): MysqlConn {
+  if (!url) throw new Error('Missing required environment variable: DB_URL');
+  const m = url.match(/^mysql:\/\/([^:]+):([^@]+)@([^:]+)(?::(\d+))?\/?$/i);
+  if (!m) throw new Error(`Invalid DB_URL format: ${url}`);
+  return {
+    user: decodeURIComponent(m[1]),
+    pass: decodeURIComponent(m[2]),
+    host: m[3],
+    port: m[4] ? parseInt(m[4], 10) : 3306,
+  };
+}
+
+interface RedisConn {
+  host: string;
+  port: number;
+  password: string;
+  db: number;
+}
+
+function parseRedisUrl(url?: string): RedisConn {
+  if (!url) throw new Error('Missing required environment variable: REDIS_URL');
+  const m = url.match(/^redis:\/\/(?::([^@]*)@)?([^:/]+)(?::(\d+))?(?:\/(\d+))?\/?$/i);
+  if (!m) throw new Error(`Invalid REDIS_URL format: ${url}`);
+  return {
+    host: m[2],
+    port: m[3] ? parseInt(m[3], 10) : 6379,
+    password: m[1] ? decodeURIComponent(m[1]) : '',
+    db: m[4] ? parseInt(m[4], 10) : 0,
+  };
+}
+
+const dbUrl = parseMysqlUrl(process.env.DB_URL);
+const redisUrl = parseRedisUrl(process.env.REDIS_URL);
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT || '9000', 10),
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
 
-  DB_URL: process.env.DB_URL,
-  DB_HOST: process.env.DB_HOST || '127.0.0.1',
-  DB_PORT: parseInt(process.env.DB_PORT || '3306', 10),
-  DB_USER: process.env.DB_USER || 'acore',
-  DB_PASS: process.env.DB_PASS || 'acore',
+  DB_HOST: dbUrl.host,
+  DB_PORT: dbUrl.port,
+  DB_USER: dbUrl.user,
+  DB_PASS: dbUrl.pass,
   DB_AUTH: process.env.DB_AUTH || 'acore_auth',
   DB_CHARACTERS: process.env.DB_CHARACTERS || 'acore_characters',
   DB_WORLD: process.env.DB_WORLD || 'acore_world',
 
   REDIS_URL: process.env.REDIS_URL,
-  REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
-  REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
-  REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+  REDIS_HOST: redisUrl.host,
+  REDIS_PORT: redisUrl.port,
+  REDIS_PASSWORD: redisUrl.password,
+  REDIS_DB: redisUrl.db,
   REDIS_EXPIRE_TIME: parseInt(process.env.REDIS_EXPIRE_TIME || '300', 10),
 
   JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',

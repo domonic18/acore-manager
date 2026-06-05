@@ -7,6 +7,7 @@ import { requestLogger } from './middleware/request-logger';
 import { responseFormatter } from './middleware/response-formatter';
 import { errorHandler } from './middleware/error-handler';
 import authRoutes from './routes/auth.routes';
+import accountRoutes from './routes/account.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import healthRoutes from './routes/health.routes';
 
@@ -26,6 +27,7 @@ export function createApp(): Application {
   app.use(responseFormatter);
 
   app.use('/api/auth', authRoutes);
+  app.use('/api/accounts', accountRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/health', healthRoutes);
 

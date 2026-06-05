@@ -6,6 +6,8 @@ import { env } from './config/env';
 import { requestLogger } from './middleware/request-logger';
 import { responseFormatter } from './middleware/response-formatter';
 import { errorHandler } from './middleware/error-handler';
+import authRoutes from './routes/auth.routes';
+import dashboardRoutes from './routes/dashboard.routes';
 import healthRoutes from './routes/health.routes';
 
 export function createApp(): Application {
@@ -23,6 +25,8 @@ export function createApp(): Application {
   app.use(requestLogger);
   app.use(responseFormatter);
 
+  app.use('/api/auth', authRoutes);
+  app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/health', healthRoutes);
 
   const publicPath = path.join(__dirname, 'public');

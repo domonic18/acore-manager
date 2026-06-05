@@ -1,0 +1,43 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd backend && npm ci
+          cd ../frontend && npm ci
+
+      - name: Build backend
+        run: cd backend && npm run build
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ccr.ccs.tencentyun.com
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: Docker Build and Push
+        run: |
+          IMAGE_TAG=ccr.ccs.tencentyun.com/${{ secrets.TCR_NAMESPACE }}/acore-manager:${{ github.sha }}
+          docker build -t $IMAGE_TAG -f docker/Dockerfile .
+          docker push $IMAGE_TAG
+          docker tag $IMAGE_TAG ccr.ccs.tencentyun.com/${{ secrets.TCR_NAMESPACE }}/acore-manager:latest
+          docker push ccr.ccs.tencentyun.com/${{ secrets.TCR_NAMESPACE }}/acore-manager:latest

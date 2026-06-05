@@ -8,6 +8,10 @@ import { responseFormatter } from './middleware/response-formatter';
 import { errorHandler } from './middleware/error-handler';
 import authRoutes from './routes/auth.routes';
 import accountRoutes from './routes/account.routes';
+import characterRoutes from './routes/character.routes';
+import transactionRoutes from './routes/transaction.routes';
+import gmToolRoutes from './routes/gm-tool.routes';
+import auditLogRoutes from './routes/audit-log.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import healthRoutes from './routes/health.routes';
 
@@ -28,6 +32,10 @@ export function createApp(): Application {
 
   app.use('/api/auth', authRoutes);
   app.use('/api/accounts', accountRoutes);
+  app.use('/api/characters', characterRoutes);
+  app.use('/api/transactions', transactionRoutes);
+  app.use('/api/gm', gmToolRoutes);
+  app.use('/api/audit', auditLogRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/health', healthRoutes);
 

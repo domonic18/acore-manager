@@ -7,6 +7,11 @@ const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const AccountListPage = lazy(() => import('@/pages/AccountListPage'));
 const AccountDetailPage = lazy(() => import('@/pages/AccountDetailPage'));
+const CharacterListPage = lazy(() => import('@/pages/CharacterListPage'));
+const CharacterDetailPage = lazy(() => import('@/pages/CharacterDetailPage'));
+const TransactionPage = lazy(() => import('@/pages/TransactionPage'));
+const GmToolPage = lazy(() => import('@/pages/GmToolPage'));
+const AuditLogPage = lazy(() => import('@/pages/AuditLogPage'));
 
 function withSuspense(Component: React.ComponentType) {
   return (
@@ -42,6 +47,11 @@ export const router = createBrowserRouter([
           { path: '', element: withSuspense(DashboardPage) },
           { path: 'accounts', element: withSuspense(AccountListPage) },
           { path: 'accounts/:id', element: withSuspense(AccountDetailPage) },
+          { path: 'characters', element: withSuspense(CharacterListPage) },
+          { path: 'characters/:guid', element: withSuspense(CharacterDetailPage) },
+          { path: 'transactions', element: withSuspense(TransactionPage) },
+          { path: 'gm-tools', element: withSuspense(GmToolPage) },
+          { path: 'audit-logs', element: withSuspense(AuditLogPage) },
         ],
       },
     ],

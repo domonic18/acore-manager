@@ -1,0 +1,124 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AppLayout } from '@/shared/components/AppLayout';
+import { useCharacterList } from '@/features/character/hooks/useCharacter';
+
+const raceMap: Record<number, string> = {
+  1: '人类', 2: '兽人', 3: '矮人', 4: '暗夜精灵', 5: '亡灵',
+  6: '牛头人', 7: '侏儒', 8: '巨魔', 9: '地精', 10: '血精灵',
+  11: '德莱尼', 22: '狼人',
+};
+
+const classMap: Record<number, string> = {
+  1: '战士', 2: '圣骑士', 3: '猎人', 4: '潜行者', 5: '牧师',
+  6: '死亡骑士', 7: '萨满', 8: '法师', 9: '术士', 11: '德鲁伊',
+};
+
+export function CharacterListPage() {
+  const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const { data, isLoading } = useCharacterList({ page, pageSize: 20, search });
+
+  const handleSearch = () => {
+    setSearch(searchInput);
+    setPage(1);
+  };
+
+  const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
+
+  return (
+    <AppLayout>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">角色管理</h1>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder="搜索角色名"
+              className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
+            >
+              搜索
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-card">
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">名称</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">等级</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">种族</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">职业</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">加载中...</td>
+                </tr>
+              ) : data?.items.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">暂无数据</td>
+                </tr>
+              ) : (
+                data?.items.map((char) => (
+                  <tr
+                    key={char.guid}
+                    className="border-b border-border hover:bg-accent/50 cursor-pointer"
+                    onClick={() => navigate(`/characters/${char.guid}`)}
+                  >
+                    <td className="px-4 py-3 font-medium">{char.name}</td>
+                    <td className="px-4 py-3">{char.level}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{raceMap[char.race] || '未知'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{classMap[char.class] || '未知'}</td>
+                    <td className="px-4 py-3">
+                      {char.online ? (
+                        <span className="text-green-400">在线</span>
+                      ) : (
+                        <span className="text-muted-foreground">离线</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">共 {data?.total} 条记录</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
+              >
+                上一页
+              </button>
+              <span className="px-3 py-1.5 text-sm text-muted-foreground">第 {page} / {totalPages} 页</span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
+}

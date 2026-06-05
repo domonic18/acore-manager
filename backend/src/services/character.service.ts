@@ -5,6 +5,7 @@ export interface CharacterListItem {
   guid: number;
   name: string;
   accountId: number;
+  accountUsername: string;
   race: number;
   class: number;
   gender: number;
@@ -68,18 +69,20 @@ export class CharacterService {
 
     const items = await charactersDataSource.query(
       `SELECT
-        guid,
-        name,
-        account as accountId,
-        race,
-        class,
-        gender,
-        level,
-        online,
-        zone
-      FROM characters
+        c.guid,
+        c.name,
+        c.account as accountId,
+        a.username as accountUsername,
+        c.race,
+        c.class,
+        c.gender,
+        c.level,
+        c.online,
+        c.zone
+      FROM characters c
+      LEFT JOIN acore_auth.account a ON c.account = a.id
       ${whereClause}
-      ORDER BY level DESC, name ASC
+      ORDER BY c.level DESC, c.name ASC
       LIMIT ? OFFSET ?`,
       [...params, pageSize, offset],
     );
@@ -89,6 +92,7 @@ export class CharacterService {
         guid: item.guid,
         name: item.name,
         accountId: item.accountId,
+        accountUsername: item.accountUsername || '-',
         race: item.race,
         class: item.class,
         gender: item.gender,
@@ -108,27 +112,29 @@ export class CharacterService {
   async getCharacterDetail(guid: number): Promise<CharacterDetail | null> {
     const result = await charactersDataSource.query(
       `SELECT
-        guid,
-        name,
-        account as accountId,
-        race,
-        class,
-        gender,
-        level,
-        xp,
-        money,
-        online,
-        zone,
-        map,
-        position_x as positionX,
-        position_y as positionY,
-        position_z as positionZ,
-        totaltime as totalTime,
-        arenaPoints,
-        totalHonorPoints,
-        totalKills
-      FROM characters
-      WHERE guid = ?`,
+        c.guid,
+        c.name,
+        c.account as accountId,
+        a.username as accountUsername,
+        c.race,
+        c.class,
+        c.gender,
+        c.level,
+        c.xp,
+        c.money,
+        c.online,
+        c.zone,
+        c.map,
+        c.position_x as positionX,
+        c.position_y as positionY,
+        c.position_z as positionZ,
+        c.totaltime as totalTime,
+        c.arenaPoints,
+        c.totalHonorPoints,
+        c.totalKills
+      FROM characters c
+      LEFT JOIN acore_auth.account a ON c.account = a.id
+      WHERE c.guid = ?`,
       [guid],
     );
 
@@ -141,6 +147,7 @@ export class CharacterService {
       guid: item.guid,
       name: item.name,
       accountId: item.accountId,
+      accountUsername: item.accountUsername || '-',
       race: item.race,
       class: item.class,
       gender: item.gender,

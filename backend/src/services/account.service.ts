@@ -12,6 +12,18 @@ export interface AccountListItem {
   lastLogin: Date | null;
   lastIp: string;
   locked: number;
+  characterCount: number;
+}
+
+export interface AccountCharacter {
+  guid: number;
+  name: string;
+  level: number;
+  race: number;
+  class: number;
+  gender: number;
+  online: number;
+  zone: number;
 }
 
 export interface AccountDetail {
@@ -81,9 +93,16 @@ export class AccountService {
         a.online,
         a.last_login as lastLogin,
         a.last_ip as lastIp,
-        a.locked
+        a.locked,
+        COALESCE(ch.char_count, 0) as characterCount
       FROM account a
       LEFT JOIN account_access aa ON a.id = aa.id
+      LEFT JOIN (
+        SELECT account, COUNT(*) as char_count
+        FROM acore_characters.characters
+        WHERE name != ''
+        GROUP BY account
+      ) ch ON a.id = ch.account
       ${whereClause}
       ORDER BY a.id DESC
       LIMIT ? OFFSET ?`,
@@ -100,6 +119,7 @@ export class AccountService {
         lastLogin: item.lastLogin,
         lastIp: item.lastIp,
         locked: item.locked,
+        characterCount: item.characterCount,
       })),
       total,
       page,
@@ -179,6 +199,35 @@ export class AccountService {
       bannedBy: item.bannedBy,
       banReason: item.banReason,
       active: item.active,
+    }));
+  }
+
+  async getAccountCharacters(accountId: number): Promise<AccountCharacter[]> {
+    const result = await authDataSource.query(
+      `SELECT
+        c.guid,
+        c.name,
+        c.level,
+        c.race,
+        c.class,
+        c.gender,
+        c.online,
+        c.zone
+      FROM acore_characters.characters c
+      WHERE c.account = ? AND c.name != ''
+      ORDER BY c.level DESC, c.name ASC`,
+      [accountId],
+    );
+
+    return result.map((item: any) => ({
+      guid: item.guid,
+      name: item.name,
+      level: item.level,
+      race: item.race,
+      class: item.class,
+      gender: item.gender,
+      online: item.online,
+      zone: item.zone,
     }));
   }
 

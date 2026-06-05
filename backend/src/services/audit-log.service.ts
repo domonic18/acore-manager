@@ -47,42 +47,46 @@ export class AuditLogService {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const countResult = await authDataSource.query(
-      `SELECT COUNT(*) as total FROM acm_operation_logs ${whereClause}`,
-      params,
-    );
-    const total = parseInt(countResult[0]?.total || '0', 10);
+    try {
+      const countResult = await authDataSource.query(
+        `SELECT COUNT(*) as total FROM acm_operation_logs ${whereClause}`,
+        params,
+      );
+      const total = parseInt(countResult[0]?.total || '0', 10);
 
-    const items = await authDataSource.query(
-      `SELECT
-        id,
-        operator_id as operatorId,
-        operator_name as operatorName,
-        operation,
-        target,
-        details,
-        created_at as createdAt
-      FROM acm_operation_logs
-      ${whereClause}
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
+      const items = await authDataSource.query(
+        `SELECT
+          id,
+          operator_id as operatorId,
+          operator_name as operatorName,
+          operation,
+          target,
+          details,
+          created_at as createdAt
+        FROM acm_operation_logs
+        ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?`,
+        [...params, pageSize, offset],
+      );
 
-    return {
-      items: items.map((item: any) => ({
-        id: item.id,
-        operatorId: item.operatorId,
-        operatorName: item.operatorName,
-        operation: item.operation,
-        target: item.target,
-        details: item.details,
-        createdAt: item.createdAt,
-      })),
-      total,
-      page,
-      pageSize,
-    };
+      return {
+        items: items.map((item: any) => ({
+          id: item.id,
+          operatorId: item.operatorId,
+          operatorName: item.operatorName,
+          operation: item.operation,
+          target: item.target,
+          details: item.details,
+          createdAt: item.createdAt,
+        })),
+        total,
+        page,
+        pageSize,
+      };
+    } catch {
+      return { items: [], total: 0, page, pageSize };
+    }
   }
 
   async record(log: Omit<OperationLog, 'id' | 'createdAt'>): Promise<void> {

@@ -119,7 +119,7 @@ export class AccountService {
         lastLogin: item.lastLogin,
         lastIp: item.lastIp,
         locked: item.locked,
-        characterCount: item.characterCount,
+        characterCount: parseInt(item.characterCount || '0', 10),
       })),
       total,
       page,
@@ -131,11 +131,6 @@ export class AccountService {
   }
 
   async getAccountDetail(accountId: number): Promise<AccountDetail | null> {
-    const account = await accountRepository.findByUsername('');
-    if (!account) {
-      return null;
-    }
-
     const result = await authDataSource.query(
       `SELECT
         a.id,

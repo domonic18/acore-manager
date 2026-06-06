@@ -9,19 +9,23 @@ async function bootstrap() {
   try {
     await initializeDataSources();
     logger.info('Database connections established');
-
-    await redis.ping();
-    logger.info('Redis connection established');
-
-    const app = createApp();
-
-    app.listen(env.PORT, () => {
-      logger.info(`Server listening on port ${env.PORT}`);
-    });
   } catch (error) {
-    logger.error({ error }, 'Failed to start server');
+    logger.error({ error }, 'Failed to connect to database');
     process.exit(1);
   }
+
+  // Redis 连接改为异步非阻塞，避免 SCF 初始化超时
+  redis.ping().then(() => {
+    logger.info('Redis connection established');
+  }).catch((error) => {
+    logger.error({ error }, 'Redis connection failed, will retry on demand');
+  });
+
+  const app = createApp();
+
+  app.listen(env.PORT, '0.0.0.0', () => {
+    logger.info(`Server listening on port ${env.PORT}`);
+  });
 }
 
 bootstrap();

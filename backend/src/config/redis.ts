@@ -19,6 +19,6 @@ export const redis = env.REDIS_URL
       ...redisOptions,
     });
 
-redis.on('error', (err) => {
+redis.on('error', (_err) => {
   // 静默处理连接错误，由调用方决定是否需要重试
 });

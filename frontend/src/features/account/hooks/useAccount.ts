@@ -34,3 +34,23 @@ export function useUnbanAccount() {
     },
   });
 }
+
+export function useBanAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { duration: string; reason: string } }) =>
+      accountApi.ban(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    },
+  });
+}
+
+export function useAccountLoginHistory(id: number) {
+  return useQuery({
+    queryKey: ['accounts', 'login-history', id],
+    queryFn: () => accountApi.loginHistory(id),
+    enabled: id > 0,
+  });
+}

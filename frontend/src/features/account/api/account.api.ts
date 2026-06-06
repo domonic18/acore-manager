@@ -59,4 +59,10 @@ export const accountApi = {
 
   unban: (id: number) =>
     apiClient.post<{ success: boolean }>(`/api/accounts/${id}/unban`),
+
+  ban: (id: number, data: { duration: string; reason: string }) =>
+    apiClient.post<{ success: boolean }>(`/api/accounts/${id}/ban`, data),
+
+  loginHistory: (id: number) =>
+    apiClient.get<{ items: Array<{ ip: string; time: Date; action: string; comment?: string }> }>(`/api/accounts/${id}/login-history`),
 };

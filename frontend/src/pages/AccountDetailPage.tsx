@@ -1,5 +1,12 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAccountDetail, useAccountCharacters, useUnbanAccount } from '@/features/account/hooks/useAccount';
+import {
+  useAccountDetail,
+  useAccountCharacters,
+  useUnbanAccount,
+  useBanAccount,
+  useAccountLoginHistory,
+} from '@/features/account/hooks/useAccount';
 
 const raceMap: Record<number, string> = {
   1: '人类', 2: '兽人', 3: '矮人', 4: '暗夜精灵', 5: '亡灵',
@@ -18,11 +25,23 @@ export default function AccountDetailPage() {
   const accountId = parseInt(id || '0');
   const { data: account, isLoading } = useAccountDetail(accountId);
   const { data: characters, isLoading: charsLoading } = useAccountCharacters(accountId);
+  const { data: loginHistory, isLoading: historyLoading } = useAccountLoginHistory(accountId);
   const unbanMutation = useUnbanAccount();
+  const banMutation = useBanAccount();
+
+  const [showBanForm, setShowBanForm] = useState(false);
+  const [banDuration, setBanDuration] = useState('1d');
+  const [banReason, setBanReason] = useState('违规');
 
   const handleUnban = () => {
     if (!confirm('确认解禁该账号？')) return;
     unbanMutation.mutate(accountId);
+  };
+
+  const handleBan = () => {
+    if (!confirm(`确认封禁该账号？\n时长: ${banDuration}\n原因: ${banReason}`)) return;
+    banMutation.mutate({ id: accountId, data: { duration: banDuration, reason: banReason } });
+    setShowBanForm(false);
   };
 
   if (isLoading) {
@@ -50,17 +69,64 @@ export default function AccountDetailPage() {
         </button>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">{account.username}</h1>
-        {activeBans.length > 0 && (
-          <button
-            onClick={handleUnban}
-            disabled={unbanMutation.isPending}
-            className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-          >
-            {unbanMutation.isPending ? '处理中...' : '解禁账号'}
-          </button>
-        )}
+        <div className="flex gap-2">
+          {activeBans.length > 0 ? (
+            <button
+              onClick={handleUnban}
+              disabled={unbanMutation.isPending}
+              className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              {unbanMutation.isPending ? '处理中...' : '解禁账号'}
+            </button>
+          ) : (
+            <>
+              {showBanForm ? (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={banDuration}
+                    onChange={(e) => setBanDuration(e.target.value)}
+                    className="px-2 py-1.5 rounded-md border border-border bg-card text-sm"
+                  >
+                    <option value="1h">1小时</option>
+                    <option value="1d">1天</option>
+                    <option value="7d">7天</option>
+                    <option value="30d">30天</option>
+                    <option value="-1">永久</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={banReason}
+                    onChange={(e) => setBanReason(e.target.value)}
+                    placeholder="封禁原因"
+                    className="px-2 py-1.5 rounded-md border border-border bg-card text-sm w-32"
+                  />
+                  <button
+                    onClick={handleBan}
+                    disabled={banMutation.isPending}
+                    className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {banMutation.isPending ? '...' : '确认'}
+                  </button>
+                  <button
+                    onClick={() => setShowBanForm(false)}
+                    className="px-3 py-1.5 rounded-md border border-border text-sm"
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowBanForm(true)}
+                  className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+                >
+                  封禁账号
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -139,6 +205,39 @@ export default function AccountDetailPage() {
           </div>
         )}
       </InfoCard>
+
+      {loginHistory && loginHistory.items.length > 0 && (
+        <InfoCard title="登录历史">
+          {historyLoading ? (
+            <div className="text-center py-8 text-muted-foreground">加载中...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-2 text-left text-muted-foreground">时间</th>
+                    <th className="px-3 py-2 text-left text-muted-foreground">IP</th>
+                    <th className="px-3 py-2 text-left text-muted-foreground">动作</th>
+                    <th className="px-3 py-2 text-left text-muted-foreground">备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loginHistory.items.map((record, index) => (
+                    <tr key={index} className="border-b border-border">
+                      <td className="px-3 py-2">
+                        {new Date(record.time).toLocaleString('zh-CN')}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">{record.ip}</td>
+                      <td className="px-3 py-2">{record.action}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{record.comment || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </InfoCard>
+      )}
 
       {account.bans && account.bans.length > 0 && (
         <InfoCard title="封禁记录">

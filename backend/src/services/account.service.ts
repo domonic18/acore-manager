@@ -1,5 +1,6 @@
 import { authDataSource } from '../config/database';
 import { cacheService } from './cache.service';
+import { soapService } from './soap.service';
 import { logger } from '../middleware/request-logger';
 
 export interface AccountListItem {
@@ -47,6 +48,13 @@ export interface BanRecord {
   bannedBy: string;
   banReason: string;
   active: number;
+}
+
+export interface LoginHistoryItem {
+  ip: string;
+  time: Date;
+  action: string;
+  comment?: string;
 }
 
 export interface AccountListResult {
@@ -226,20 +234,69 @@ export class AccountService {
   }
 
   async unbanAccount(accountId: number, operatorId: number): Promise<boolean> {
-    try {
-      await authDataSource.query(
-        'UPDATE account_banned SET active = 0 WHERE id = ? AND active = 1',
-        [accountId],
-      );
-
-      await cacheService.delPattern('accounts:list:*');
-
-      logger.info({ accountId, operatorId }, 'Account unbanned');
-      return true;
-    } catch (error) {
-      logger.error({ error, accountId }, 'Failed to unban account');
+    const account = await this.getAccountDetail(accountId);
+    if (!account) {
+      logger.error({ accountId }, 'Account not found for unban');
       return false;
     }
+
+    try {
+      await soapService.sendCommand(`.unban account ${account.username}`);
+      await cacheService.delPattern('accounts:list:*');
+      logger.info({ accountId, operatorId, username: account.username }, 'Account unban command sent');
+      return true;
+    } catch (error) {
+      logger.error({ error, accountId, username: account.username }, 'Failed to send account unban command');
+      return false;
+    }
+  }
+
+  async banAccount(
+    accountId: number,
+    operatorId: number,
+    duration: string,
+    reason: string,
+  ): Promise<boolean> {
+    const account = await this.getAccountDetail(accountId);
+    if (!account) {
+      logger.error({ accountId }, 'Account not found for ban');
+      return false;
+    }
+
+    try {
+      await soapService.sendCommand(`.ban account ${account.username} ${duration} ${reason}`);
+      await cacheService.delPattern('accounts:list:*');
+      logger.info(
+        { accountId, operatorId, username: account.username, duration, reason },
+        'Account ban command sent',
+      );
+      return true;
+    } catch (error) {
+      logger.error({ error, accountId, username: account.username }, 'Failed to send account ban command');
+      return false;
+    }
+  }
+
+  async getLoginHistory(accountId: number): Promise<LoginHistoryItem[]> {
+    const result = await authDataSource.query(
+      `SELECT
+        ip,
+        time,
+        systemnote as action,
+        comment
+      FROM logs_ip_actions
+      WHERE account_id = ?
+      ORDER BY time DESC
+      LIMIT 50`,
+      [accountId],
+    );
+
+    return result.map((item: any) => ({
+      ip: item.ip,
+      time: item.time,
+      action: item.action,
+      comment: item.comment,
+    }));
   }
 }
 

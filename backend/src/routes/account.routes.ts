@@ -1,5 +1,5 @@
 import { Request, Response, Router } from 'express';
-import { param, query, validationResult } from 'express-validator';
+import { body, param, query, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
 import { requireGmLevel } from '../middleware/gm-guard';
 import { accountService } from '../services/account.service';
@@ -76,8 +76,8 @@ router.get(
   },
 );
 
-router.post(
-  '/:id/unban',
+router.get(
+  '/:id/login-history',
   authMiddleware,
   requireGmLevel(1),
   [param('id').isInt().toInt()],
@@ -89,7 +89,55 @@ router.post(
     }
 
     const accountId = parseInt(req.params.id);
-    const success = await accountService.unbanAccount(accountId, 0);
+    const history = await accountService.getLoginHistory(accountId);
+
+    res.json({ success: true, count: history.length, data: history });
+  },
+);
+
+router.post(
+  '/:id/ban',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('id').isInt().toInt(),
+    body('duration').notEmpty().trim(),
+    body('reason').notEmpty().trim(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      return;
+    }
+
+    const accountId = parseInt(req.params.id);
+    const { duration, reason } = req.body;
+    const success = await accountService.banAccount(accountId, (req as any).user?.id || 0, duration, reason);
+
+    if (!success) {
+      res.status(500).json({ success: false, error: 'Failed to ban account' });
+      return;
+    }
+
+    res.json({ success: true, data: { success: true } });
+  },
+);
+
+router.post(
+  '/:id/unban',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('id').isInt().toInt()],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid account ID' });
+      return;
+    }
+
+    const accountId = parseInt(req.params.id);
+    const success = await accountService.unbanAccount(accountId, (req as any).user?.id || 0);
 
     if (!success) {
       res.status(500).json({ success: false, error: 'Failed to unban account' });

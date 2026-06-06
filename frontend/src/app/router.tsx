@@ -12,6 +12,7 @@ const CharacterDetailPage = lazy(() => import('@/pages/CharacterDetailPage'));
 const TransactionPage = lazy(() => import('@/pages/TransactionPage'));
 const GmToolPage = lazy(() => import('@/pages/GmToolPage'));
 const AuditLogPage = lazy(() => import('@/pages/AuditLogPage'));
+const IpBanPage = lazy(() => import('@/pages/IpBanPage'));
 
 function withSuspense(Component: React.ComponentType) {
   return (
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
           { path: 'characters/:guid', element: withSuspense(CharacterDetailPage) },
           { path: 'transactions', element: withSuspense(TransactionPage) },
           { path: 'gm-tools', element: withSuspense(GmToolPage) },
+          { path: 'ip-bans', element: withSuspense(IpBanPage) },
           { path: 'audit-logs', element: withSuspense(AuditLogPage) },
         ],
       },

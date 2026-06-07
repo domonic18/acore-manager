@@ -110,4 +110,57 @@ router.post(
   },
 );
 
+router.post(
+  '/:guid/mute',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('guid').isInt().toInt(),
+    body('duration').isString().trim().notEmpty(),
+    body('reason').isString().trim().notEmpty(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const { duration, reason } = req.body;
+    const success = await characterService.muteCharacter(guid, (req as any).user?.id || 0, duration, reason);
+
+    if (!success) {
+      res.status(500).json({ success: false, error: 'Failed to mute character' });
+      return;
+    }
+
+    res.json({ success: true, data: { muted: true } });
+  },
+);
+
+router.post(
+  '/:guid/unmute',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('guid').isInt().toInt()],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid character GUID' });
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const success = await characterService.unmuteCharacter(guid, (req as any).user?.id || 0);
+
+    if (!success) {
+      res.status(500).json({ success: false, error: 'Failed to unmute character' });
+      return;
+    }
+
+    res.json({ success: true, data: { unmuted: true } });
+  },
+);
+
 export default router;

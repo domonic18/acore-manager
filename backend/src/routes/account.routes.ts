@@ -148,6 +148,34 @@ router.post(
   },
 );
 
+router.post(
+  '/:id/change-password',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('id').isInt().toInt(),
+    body('password').isLength({ min: 4, max: 32 }),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      return;
+    }
+
+    const accountId = parseInt(req.params.id);
+    const { password } = req.body;
+    const success = await accountService.changePassword(accountId, (req as any).user?.id || 0, password);
+
+    if (!success) {
+      res.status(500).json({ success: false, error: 'Failed to change password' });
+      return;
+    }
+
+    res.json({ success: true, data: { success: true } });
+  },
+);
+
 router.get(
   '/gm/list',
   authMiddleware,

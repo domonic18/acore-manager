@@ -247,6 +247,50 @@ export class CharacterService {
       return false;
     }
   }
+
+  async muteCharacter(
+    guid: number,
+    operatorId: number,
+    duration: string,
+    reason: string,
+  ): Promise<boolean> {
+    const detail = await this.getCharacterDetail(guid);
+    if (!detail) {
+      logger.error({ guid }, 'Character not found for mute');
+      return false;
+    }
+
+    try {
+      await soapService.sendCommand(`.mute ${detail.name} ${duration}`);
+      await cacheService.delPattern('characters:*');
+      logger.info(
+        { guid, operatorId, name: detail.name, duration, reason },
+        'Character mute command sent',
+      );
+      return true;
+    } catch (error) {
+      logger.error({ error, guid, name: detail.name }, 'Failed to send character mute command');
+      return false;
+    }
+  }
+
+  async unmuteCharacter(guid: number, operatorId: number): Promise<boolean> {
+    const detail = await this.getCharacterDetail(guid);
+    if (!detail) {
+      logger.error({ guid }, 'Character not found for unmute');
+      return false;
+    }
+
+    try {
+      await soapService.sendCommand(`.unmute ${detail.name}`);
+      await cacheService.delPattern('characters:*');
+      logger.info({ guid, operatorId, name: detail.name }, 'Character unmute command sent');
+      return true;
+    } catch (error) {
+      logger.error({ error, guid, name: detail.name }, 'Failed to send character unmute command');
+      return false;
+    }
+  }
 }
 
 export const characterService = new CharacterService();

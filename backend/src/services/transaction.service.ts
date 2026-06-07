@@ -18,11 +18,27 @@ export interface TransactionListResult {
 }
 
 const TransactionTypeLabels: Record<number, string> = {
+  0: '拾取金币',
   1: '邮寄',
   2: '交易',
-  3: 'COD',
+  3: '货到付款',
   4: '拍卖行',
   5: '公会银行',
+  6: '修理装备',
+  7: '任务奖励',
+  8: '交易退款',
+  9: '拍卖出价',
+  10: '拍卖押金',
+  11: '拍卖手续费',
+  12: '拍卖出价退款',
+  13: '拍卖押金退款',
+  14: '公会银行取款',
+  15: '公会银行存款',
+  16: '商人买卖',
+  17: '法术花费',
+  18: '退款',
+  19: '日常任务奖励',
+  20: '额外邮件',
 };
 
 export class TransactionService {

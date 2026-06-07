@@ -340,6 +340,30 @@ export class AccountService {
     await cacheService.set(cacheKey, items, 300);
     return items;
   }
+
+  async changePassword(
+    accountId: number,
+    operatorId: number,
+    newPassword: string,
+  ): Promise<boolean> {
+    const account = await this.getAccountDetail(accountId);
+    if (!account) {
+      logger.error({ accountId }, 'Account not found for password change');
+      return false;
+    }
+
+    try {
+      await soapService.sendCommand(`.account set password ${account.username} ${newPassword} ${newPassword}`);
+      logger.info(
+        { accountId, operatorId, username: account.username },
+        'Account password changed',
+      );
+      return true;
+    } catch (error) {
+      logger.error({ error, accountId, username: account.username }, 'Failed to change account password');
+      return false;
+    }
+  }
 }
 
 export const accountService = new AccountService();

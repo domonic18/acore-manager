@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: production
+      args:
+        VITE_ICON_BASE_URL: ${VITE_ICON_BASE_URL}
+        VITE_AOWOW_BASE_URL: ${VITE_AOWOW_BASE_URL}
+    ports:
+      - "9000:9000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped

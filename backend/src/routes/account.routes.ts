@@ -1,3 +1,4 @@
+import { asyncHandler } from '../shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
@@ -15,7 +16,7 @@ router.get(
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('search').optional().trim(),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request parameters', 400);
@@ -28,7 +29,7 @@ router.get(
 
     const result = await accountService.listAccounts(page, pageSize, search);
     res.jsonSuccess(result, result.items.length);
-  },
+  }),
 );
 
 router.get(
@@ -36,7 +37,7 @@ router.get(
   authMiddleware,
   requireGmLevel(1),
   [param('id').isInt().toInt()],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid account ID', 400);
@@ -54,7 +55,7 @@ router.get(
     const bans = await accountService.getBanRecords(accountId);
 
     res.jsonSuccess({ ...detail, bans });
-  },
+  }),
 );
 
 router.get(
@@ -62,7 +63,7 @@ router.get(
   authMiddleware,
   requireGmLevel(1),
   [param('id').isInt().toInt()],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid account ID', 400);
@@ -73,7 +74,7 @@ router.get(
     const characters = await accountService.getAccountCharacters(accountId);
 
     res.jsonSuccess(characters);
-  },
+  }),
 );
 
 router.get(
@@ -81,7 +82,7 @@ router.get(
   authMiddleware,
   requireGmLevel(1),
   [param('id').isInt().toInt()],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid account ID', 400);
@@ -92,7 +93,7 @@ router.get(
     const history = await accountService.getLoginHistory(accountId);
 
     res.jsonSuccess(history);
-  },
+  }),
 );
 
 router.post(
@@ -104,7 +105,7 @@ router.post(
     body('duration').notEmpty().trim(),
     body('reason').notEmpty().trim(),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request parameters', 400);
@@ -116,7 +117,7 @@ router.post(
     await accountService.banAccount(accountId, (req as any).user?.id || 0, duration, reason);
 
     res.jsonSuccess({ success: true });
-  },
+  }),
 );
 
 router.post(
@@ -124,7 +125,7 @@ router.post(
   authMiddleware,
   requireGmLevel(2),
   [param('id').isInt().toInt()],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid account ID', 400);
@@ -135,7 +136,7 @@ router.post(
     await accountService.unbanAccount(accountId, (req as any).user?.id || 0);
 
     res.jsonSuccess({ success: true });
-  },
+  }),
 );
 
 router.post(
@@ -146,7 +147,7 @@ router.post(
     param('id').isInt().toInt(),
     body('password').isLength({ min: 4, max: 32 }),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request parameters', 400);
@@ -158,17 +159,17 @@ router.post(
     await accountService.changePassword(accountId, (req as any).user?.id || 0, password);
 
     res.jsonSuccess({ success: true });
-  },
+  }),
 );
 
 router.get(
   '/gm/list',
   authMiddleware,
   requireGmLevel(3),
-  async (_req: Request, res: Response) => {
+  asyncHandler(async (_req: Request, res: Response) => {
     const data = await accountService.listGmAccounts();
     res.jsonSuccess(data);
-  },
+  }),
 );
 
 export default router;

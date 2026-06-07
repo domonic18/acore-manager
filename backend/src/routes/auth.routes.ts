@@ -1,3 +1,4 @@
+import { asyncHandler } from '../shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authService } from '../services/auth.service';
@@ -11,7 +12,7 @@ router.post(
     body('username').notEmpty().withMessage('Username is required'),
     body('password').notEmpty().withMessage('Password is required'),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request', 400);
@@ -27,7 +28,7 @@ router.post(
     }
 
     res.jsonSuccess(result);
-  },
+  }),
 );
 
 router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {

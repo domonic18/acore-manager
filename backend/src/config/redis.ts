@@ -1,23 +1,21 @@
 import Redis from 'ioredis';
-import type { RedisOptions } from 'ioredis';
-import { env } from './env';
+import { env, redisConn } from './env';
 
-const redisOptions: RedisOptions = {
-  connectTimeout: 5000,
-  maxRetriesPerRequest: 1,
+const redis = new Redis({
+  host: redisConn.host,
+  port: redisConn.port,
+  password: redisConn.password || undefined,
+  db: redisConn.db,
+  lazyConnect: true,
   enableOfflineQueue: false,
-  retryStrategy: () => null,
-};
-
-export const redis = env.REDIS_URL
-  ? new Redis(env.REDIS_URL, redisOptions)
-  : new Redis({
-      host: env.REDIS_HOST,
-      port: env.REDIS_PORT,
-      password: env.REDIS_PASSWORD || undefined,
-      ...redisOptions,
-    });
-
-redis.on('error', () => {
-  // 静默处理连接错误，由调用方决定是否需要重试
+  maxRetriesPerRequest: 0,
 });
+
+redis.on('error', (err) => {
+  // Silently ignore connection errors in production (e.g. SCF without Redis)
+  if (env.NODE_ENV === 'development') {
+    console.error('Redis connection error / Redis 连接错误:', err.message);
+  }
+});
+
+export { redis };

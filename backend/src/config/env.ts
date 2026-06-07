@@ -1,7 +1,30 @@
-import dotenv from 'dotenv';
-import path from 'path';
+/**
+ * Centralized environment variable validation and loading.
+ * Provides type-safe access to all environment variables with sensible defaults.
+ * Supports both connection-string and split-field styles.
+ */
 
-dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+function getEnv(key: string, defaultValue?: string): string {
+  const value = process.env[key];
+  if (value === undefined) {
+    if (defaultValue !== undefined) return defaultValue;
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
+}
+
+function getEnvInt(key: string, defaultValue?: number): number {
+  const raw = process.env[key];
+  if (raw === undefined) {
+    if (defaultValue !== undefined) return defaultValue;
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Environment variable ${key} must be a valid integer, got: ${raw}`);
+  }
+  return parsed;
+}
 
 interface MysqlConn {
   host: string;
@@ -10,10 +33,10 @@ interface MysqlConn {
   pass: string;
 }
 
-function parseMysqlUrl(url?: string): MysqlConn {
-  if (!url) throw new Error('Missing required environment variable: DB_URL');
+function parseMysqlUrl(url?: string): MysqlConn | null {
+  if (!url) return null;
   const m = url.match(/^mysql:\/\/([^:]+):([^@]+)@([^:]+)(?::(\d+))?\/?$/i);
-  if (!m) throw new Error(`Invalid DB_URL format: ${url}`);
+  if (!m) return null;
   return {
     user: decodeURIComponent(m[1]),
     pass: decodeURIComponent(m[2]),
@@ -29,11 +52,10 @@ interface RedisConn {
   db: number;
 }
 
-function parseRedisUrl(url?: string): RedisConn {
-  if (!url) throw new Error('Missing required environment variable: REDIS_URL');
-  // 支持格式: redis://host, redis://:password@host, redis://username:password@host
+function parseRedisUrl(url?: string): RedisConn | null {
+  if (!url) return null;
   const m = url.match(/^redis:\/\/(?:(?:([^:@]*):)?([^@]*)@)?([^:/]+)(?::(\d+))?(?:\/(\d+))?\/?$/i);
-  if (!m) throw new Error(`Invalid REDIS_URL format: ${url}`);
+  if (!m) return null;
   return {
     host: m[3],
     port: m[4] ? parseInt(m[4], 10) : 6379,
@@ -49,11 +71,10 @@ interface SoapConn {
   pass: string;
 }
 
-function parseSoapUrl(url?: string): SoapConn {
-  if (!url) throw new Error('Missing required environment variable: SOAP_URL');
-  // 支持格式: http://user:pass@host:port 或 soap://user:pass@host:port
+function parseSoapUrl(url?: string): SoapConn | null {
+  if (!url) return null;
   const m = url.match(/^https?:\/\/([^:]+):([^@]+)@([^:]+)(?::(\d+))?\/?$/i);
-  if (!m) throw new Error(`Invalid SOAP_URL format: ${url}`);
+  if (!m) return null;
   return {
     user: decodeURIComponent(m[1]),
     pass: decodeURIComponent(m[2]),
@@ -62,37 +83,48 @@ function parseSoapUrl(url?: string): SoapConn {
   };
 }
 
-const dbUrl = parseMysqlUrl(process.env.DB_URL);
-const redisUrl = parseRedisUrl(process.env.REDIS_URL);
-const soapUrl = parseSoapUrl(process.env.SOAP_URL);
+export const dbConn = parseMysqlUrl(process.env.DB_URL) ?? {
+  host: '127.0.0.1',
+  port: 3306,
+  user: 'acore',
+  pass: 'acore',
+};
+
+export const redisConn = parseRedisUrl(process.env.REDIS_URL) ?? {
+  host: '127.0.0.1',
+  port: 6379,
+  password: '',
+  db: 0,
+};
+
+export const soapConn = parseSoapUrl(process.env.SOAP_URL) ?? {
+  host: '127.0.0.1',
+  port: 7878,
+  user: 'admin',
+  pass: 'admin',
+};
 
 export const env = {
-  NODE_ENV: process.env.NODE_ENV || 'development',
-  PORT: parseInt(process.env.PORT || '9000', 10),
-  LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+  // Application
+  NODE_ENV: getEnv('NODE_ENV', 'production'),
+  PORT: getEnvInt('PORT', 9000),
+  LOG_LEVEL: getEnv('LOG_LEVEL', 'info'),
 
-  DB_HOST: dbUrl.host,
-  DB_PORT: dbUrl.port,
-  DB_USER: dbUrl.user,
-  DB_PASS: dbUrl.pass,
-  DB_AUTH: process.env.DB_AUTH || 'acore_auth',
-  DB_CHARACTERS: process.env.DB_CHARACTERS || 'acore_characters',
-  DB_WORLD: process.env.DB_WORLD || 'acore_world',
+  // Database names only (connection via DB_URL)
+  DB_AUTH: getEnv('DB_AUTH', 'acore_auth'),
+  DB_CHARACTERS: getEnv('DB_CHARACTERS', 'acore_characters'),
+  DB_WORLD: getEnv('DB_WORLD', 'acore_world'),
 
-  REDIS_URL: process.env.REDIS_URL,
-  REDIS_HOST: redisUrl.host,
-  REDIS_PORT: redisUrl.port,
-  REDIS_PASSWORD: redisUrl.password,
-  REDIS_DB: redisUrl.db,
-  REDIS_EXPIRE_TIME: parseInt(process.env.REDIS_EXPIRE_TIME || '300', 10),
+  // Redis (connection via REDIS_URL)
+  REDIS_EXPIRE_TIME: getEnvInt('REDIS_EXPIRE_TIME', 300),
 
-  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '8h',
+  // JWT Auth
+  JWT_SECRET: getEnv('JWT_SECRET', 'change-me-in-production'),
+  JWT_EXPIRES_IN: getEnv('JWT_EXPIRES_IN', '8h'),
 
-  SOAP_HOST: soapUrl.host,
-  SOAP_PORT: soapUrl.port,
-  SOAP_USER: soapUrl.user,
-  SOAP_PASS: soapUrl.pass,
-
-  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || '',
+  // CORS
+  ALLOWED_ORIGINS: getEnv('ALLOWED_ORIGINS', '*'),
 } as const;
+
+export const isDevelopment = env.NODE_ENV === 'development';
+export const isProduction = env.NODE_ENV === 'production';

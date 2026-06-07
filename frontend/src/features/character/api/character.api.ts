@@ -13,6 +13,14 @@ export interface CharacterListItem {
   zone: number;
 }
 
+export interface CharacterBanRecord {
+  banDate: Date;
+  unbanDate: Date;
+  bannedBy: string;
+  banReason: string;
+  active: number;
+}
+
 export interface CharacterDetail extends CharacterListItem {
   xp: number;
   money: number;
@@ -24,6 +32,7 @@ export interface CharacterDetail extends CharacterListItem {
   arenaPoints: number;
   totalHonorPoints: number;
   totalKills: number;
+  bans: CharacterBanRecord[];
 }
 
 export interface CharacterListResult {
@@ -42,4 +51,10 @@ export const characterApi = {
     ),
 
   detail: (guid: number) => apiClient.get<CharacterDetail>(`/api/characters/${guid}`),
+
+  unban: (guid: number) =>
+    apiClient.post<{ success: boolean }>(`/api/characters/${guid}/unban`),
+
+  ban: (guid: number, data: { duration: string; reason: string }) =>
+    apiClient.post<{ success: boolean }>(`/api/characters/${guid}/ban`, data),
 };

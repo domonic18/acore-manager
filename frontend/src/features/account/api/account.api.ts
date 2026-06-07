@@ -47,6 +47,16 @@ export interface AccountListResult {
   pageSize: number;
 }
 
+export interface GmAccountItem {
+  accountId: number;
+  username: string;
+  email: string;
+  gmlevel: number;
+  realmId: number;
+  realmName: string;
+  comment?: string;
+}
+
 export const accountApi = {
   list: (params: { page?: number; pageSize?: number; search?: string }) =>
     apiClient.get<AccountListResult>(`/api/accounts?page=${params.page || 1}&pageSize=${params.pageSize || 20}${params.search ? `&search=${encodeURIComponent(params.search)}` : ''}`),
@@ -64,5 +74,8 @@ export const accountApi = {
     apiClient.post<{ success: boolean }>(`/api/accounts/${id}/ban`, data),
 
   loginHistory: (id: number) =>
-    apiClient.get<{ items: Array<{ ip: string; time: Date; action: string; comment?: string }> }>(`/api/accounts/${id}/login-history`),
+    apiClient.get<Array<{ ip: string; time: Date; action: string; comment?: string }>>(`/api/accounts/${id}/login-history`),
+
+  gmList: () =>
+    apiClient.get<GmAccountItem[]>('/api/accounts/gm/list'),
 };

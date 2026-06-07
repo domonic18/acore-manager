@@ -93,8 +93,6 @@ export default function TransactionPage() {
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">时间</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">发送方</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">接收方</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">阵营</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">级别</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   类型
@@ -113,13 +111,13 @@ export default function TransactionPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                   加载中...
                 </td>
               </tr>
             ) : data?.items.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                   暂无数据
                 </td>
               </tr>
@@ -129,26 +127,18 @@ export default function TransactionPage() {
                   <td className="px-4 py-3 text-muted-foreground">
                     {new Date(tx.date).toLocaleString('zh-CN')}
                   </td>
-                  <td className="px-4 py-3">{tx.senderName}</td>
-                  <td className="px-4 py-3">{tx.receiverName}</td>
-                  <td className="px-4 py-3 space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">发:</span>
-                      {factionBadge(tx.senderFaction)}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">收:</span>
-                      {factionBadge(tx.receiverFaction)}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{tx.senderName}</span>
+                      {tx.senderLevel !== null && levelBadge(tx.senderLevel)}
+                      {tx.senderFaction !== null && factionBadge(tx.senderFaction)}
                     </div>
                   </td>
-                  <td className="px-4 py-3 space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">发:</span>
-                      {levelBadge(tx.senderLevel)}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">收:</span>
-                      {levelBadge(tx.receiverLevel)}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{tx.receiverName}</span>
+                      {tx.receiverLevel !== null && levelBadge(tx.receiverLevel)}
+                      {tx.receiverFaction !== null && factionBadge(tx.receiverFaction)}
                     </div>
                   </td>
                   <td className="px-4 py-3">

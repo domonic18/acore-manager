@@ -9,7 +9,7 @@ export interface BanlistItem {
   banReason: string;
   bannedBy: string;
   characterNames: string;
-  banType: 'account' | 'character' | 'mute';
+  banType: 'account' | 'character';
 }
 
 export const banlistApi = {

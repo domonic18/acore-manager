@@ -15,6 +15,7 @@ const AuditLogPage = lazy(() => import('@/pages/AuditLogPage'));
 const IpBanPage = lazy(() => import('@/pages/IpBanPage'));
 const BanlistPage = lazy(() => import('@/pages/BanlistPage'));
 const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
+const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
 
 function withSuspense(Component: React.ComponentType) {
   return (
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
           { path: 'gm-tools', element: withSuspense(GmToolPage) },
           { path: 'gm-accounts', element: withSuspense(GmAccountPage) },
           { path: 'banlist', element: withSuspense(BanlistPage) },
+          { path: 'mutes', element: withSuspense(MuteListPage) },
           { path: 'ip-bans', element: withSuspense(IpBanPage) },
           { path: 'audit-logs', element: withSuspense(AuditLogPage) },
         ],

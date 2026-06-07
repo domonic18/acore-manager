@@ -6,10 +6,3 @@ export function useBroadcast() {
     mutationFn: (message: string) => gmToolApi.broadcast(message),
   });
 }
-
-export function useSendItems() {
-  return useMutation({
-    mutationFn: (data: { playerName: string; itemId: number; count?: number }) =>
-      gmToolApi.sendItems(data.playerName, data.itemId, data.count),
-  });
-}

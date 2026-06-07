@@ -7,6 +7,12 @@ export interface TransactionRecord {
   date: Date;
   type: number;
   typeLabel: string;
+  senderLevel: number | null;
+  senderRace: number | null;
+  senderFaction: 'alliance' | 'horde' | null;
+  receiverLevel: number | null;
+  receiverRace: number | null;
+  receiverFaction: 'alliance' | 'horde' | null;
 }
 
 export interface TransactionListResult {

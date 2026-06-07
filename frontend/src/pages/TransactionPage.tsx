@@ -5,28 +5,28 @@ import { Dialog } from '@/shared/components/Dialog';
 import { HelpCircle } from 'lucide-react';
 
 const typeDescriptions: Record<number, string> = {
-  0: '拾取金币 - 从怪物尸体或宝箱中获得的金币',
-  1: '邮寄 - 通过邮件系统发送或接收的金币',
-  2: '交易 - 与其他玩家直接交易的金币',
-  3: '货到付款 - 货到付款邮件的相关金币',
-  4: '拍卖行 - 通过拍卖行买卖物品的金币',
-  5: '公会银行 - 公会银行相关的金币流动',
-  6: '修理装备 - 修理装备花费的金币',
-  7: '任务奖励 - 完成任务获得的金币奖励',
-  8: '交易退款 - 交易取消或退款',
-  9: '拍卖出价 - 在拍卖行出价',
-  10: '拍卖押金 - 发布拍卖时支付的押金',
-  11: '拍卖手续费 - 拍卖成功后的手续费',
-  12: '拍卖出价退款 - 拍卖出价被超后的退款',
-  13: '拍卖押金退款 - 拍卖结束后的押金退还',
-  14: '公会银行取款 - 从公会银行取出金币',
-  15: '公会银行存款 - 向公会银行存入金币',
-  16: '商人买卖 - 与NPC商人购买或出售物品',
-  17: '法术花费 - 学习技能或法术的花费',
-  18: '退款 - 物品售回商店或系统退款',
-  19: '日常任务奖励 - 完成日常任务获得的金币',
-  20: '额外邮件 - 系统邮件或其他特殊邮件',
+  1: '货到付款 - 收取货到付款邮件时支付的金币',
+  2: '拍卖行 - 拍卖成交时记录的成交金额',
+  3: '公会银行存款 - 向公会银行存入金币',
+  4: '公会银行取款 - 从公会银行取出金币（含修理费）',
+  5: '邮寄 - 发送附带金币的邮件',
+  6: '交易 - 与其他玩家直接交易的金币',
 };
+
+function factionBadge(faction: 'alliance' | 'horde' | null) {
+  if (faction === 'alliance') {
+    return <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400">联盟</span>;
+  }
+  if (faction === 'horde') {
+    return <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400">部落</span>;
+  }
+  return <span className="text-muted-foreground text-xs">—</span>;
+}
+
+function levelBadge(level: number | null) {
+  if (level === null) return <span className="text-muted-foreground text-xs">—</span>;
+  return <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-400">Lv.{level}</span>;
+}
 
 export default function TransactionPage() {
   const [page, setPage] = useState(1);
@@ -65,27 +65,12 @@ export default function TransactionPage() {
           className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">全部类型</option>
-          <option value="0">拾取金币</option>
-          <option value="1">邮寄</option>
-          <option value="2">交易</option>
-          <option value="3">货到付款</option>
-          <option value="4">拍卖行</option>
-          <option value="5">公会银行</option>
-          <option value="6">修理装备</option>
-          <option value="7">任务奖励</option>
-          <option value="8">交易退款</option>
-          <option value="9">拍卖出价</option>
-          <option value="10">拍卖押金</option>
-          <option value="11">拍卖手续费</option>
-          <option value="12">拍卖出价退款</option>
-          <option value="13">拍卖押金退款</option>
-          <option value="14">公会银行取款</option>
-          <option value="15">公会银行存款</option>
-          <option value="16">商人买卖</option>
-          <option value="17">法术花费</option>
-          <option value="18">退款</option>
-          <option value="19">日常任务奖励</option>
-          <option value="20">额外邮件</option>
+          <option value="1">货到付款</option>
+          <option value="2">拍卖行</option>
+          <option value="3">公会银行存款</option>
+          <option value="4">公会银行取款</option>
+          <option value="5">邮寄</option>
+          <option value="6">交易</option>
         </select>
         <input
           type="date"
@@ -108,6 +93,8 @@ export default function TransactionPage() {
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">时间</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">发送方</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">接收方</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">阵营</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">级别</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   类型
@@ -126,13 +113,13 @@ export default function TransactionPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   加载中...
                 </td>
               </tr>
             ) : data?.items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   暂无数据
                 </td>
               </tr>
@@ -144,6 +131,26 @@ export default function TransactionPage() {
                   </td>
                   <td className="px-4 py-3">{tx.senderName}</td>
                   <td className="px-4 py-3">{tx.receiverName}</td>
+                  <td className="px-4 py-3 space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">发:</span>
+                      {factionBadge(tx.senderFaction)}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">收:</span>
+                      {factionBadge(tx.receiverFaction)}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">发:</span>
+                      {levelBadge(tx.senderLevel)}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">收:</span>
+                      {levelBadge(tx.receiverLevel)}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
                       {tx.typeLabel}

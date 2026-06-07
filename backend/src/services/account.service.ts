@@ -176,7 +176,7 @@ export class AccountService {
       logger.info({ accountId, operatorId, username: account.username }, 'Account unban command sent');
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to send account unban command');
-      throw new Error('Failed to unban account');
+      throw new Error('Failed to unban account', { cause: error });
     }
   }
 
@@ -201,7 +201,7 @@ export class AccountService {
       );
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to send account ban command');
-      throw new Error('Failed to ban account');
+      throw new Error('Failed to ban account', { cause: error });
     }
   }
 
@@ -256,7 +256,7 @@ export class AccountService {
       );
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to change account password');
-      throw new Error('Failed to change password');
+      throw new Error('Failed to change password', { cause: error });
     }
   }
 }

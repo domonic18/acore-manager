@@ -153,7 +153,7 @@ export class CharacterService {
       logger.info({ guid, operatorId, name: detail.name }, 'Character unban command sent');
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character unban command');
-      throw new Error('Failed to unban character');
+      throw new Error('Failed to unban character', { cause: error });
     }
   }
 
@@ -178,7 +178,7 @@ export class CharacterService {
       );
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character ban command');
-      throw new Error('Failed to ban character');
+      throw new Error('Failed to ban character', { cause: error });
     }
   }
 
@@ -203,7 +203,7 @@ export class CharacterService {
       );
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character mute command');
-      throw new Error('Failed to mute character');
+      throw new Error('Failed to mute character', { cause: error });
     }
   }
 
@@ -220,7 +220,7 @@ export class CharacterService {
       logger.info({ guid, operatorId, name: detail.name }, 'Character unmute command sent');
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character unmute command');
-      throw new Error('Failed to unmute character');
+      throw new Error('Failed to unmute character', { cause: error });
     }
   }
 }

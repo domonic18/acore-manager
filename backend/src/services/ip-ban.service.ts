@@ -60,7 +60,7 @@ export class IpBanService {
       logger.info({ ip, operatorId, duration, reason }, 'IP ban command sent');
     } catch (error) {
       logger.error({ error, ip }, 'Failed to send IP ban command');
-      throw new Error('Failed to ban IP');
+      throw new Error('Failed to ban IP', { cause: error });
     }
   }
 
@@ -70,7 +70,7 @@ export class IpBanService {
       logger.info({ ip, operatorId }, 'IP unban command sent');
     } catch (error) {
       logger.error({ error, ip }, 'Failed to send IP unban command');
-      throw new Error('Failed to unban IP');
+      throw new Error('Failed to unban IP', { cause: error });
     }
   }
 }

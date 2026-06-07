@@ -79,8 +79,8 @@ export default function AccountDetailPage() {
           setShowConfirmDialog(false);
           toast.success('封禁操作成功');
         },
-        onError: (error: any) => {
-          toast.error(error?.message || '封禁失败，请检查 SOAP 服务器连接');
+        onError: (error: Error) => {
+          toast.error(error.message || '封禁失败，请检查 SOAP 服务器连接');
         },
       }
     );
@@ -96,8 +96,8 @@ export default function AccountDetailPage() {
         setShowUnbanConfirmDialog(false);
         toast.success('解禁成功');
       },
-      onError: (error: any) => {
-        toast.error(error?.message || '解禁失败，请检查 SOAP 服务器连接');
+      onError: (error: Error) => {
+        toast.error(error.message || '解禁失败，请检查 SOAP 服务器连接');
       },
     });
   };
@@ -113,8 +113,8 @@ export default function AccountDetailPage() {
           setConfirmPassword('');
           toast.success('密码修改成功');
         },
-        onError: (error: any) => {
-          toast.error(error?.message || '密码修改失败，请检查 SOAP 服务器连接');
+        onError: (error: Error) => {
+          toast.error(error.message || '密码修改失败，请检查 SOAP 服务器连接');
         },
       }
     );

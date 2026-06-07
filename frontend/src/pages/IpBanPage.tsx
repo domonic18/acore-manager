@@ -58,8 +58,8 @@ export default function IpBanPage() {
           setIp('');
           toast.success('IP 封禁成功');
         },
-        onError: (error: any) => {
-          toast.error(error?.message || '封禁失败，请检查 SOAP 服务器连接');
+        onError: (error: Error) => {
+          toast.error(error.message || '封禁失败，请检查 SOAP 服务器连接');
         },
       }
     );
@@ -77,8 +77,8 @@ export default function IpBanPage() {
         setUnbanTarget('');
         toast.success('解封成功');
       },
-      onError: (error: any) => {
-        toast.error(error?.message || '解封失败，请检查 SOAP 服务器连接');
+      onError: (error: Error) => {
+        toast.error(error.message || '解封失败，请检查 SOAP 服务器连接');
       },
     });
   };

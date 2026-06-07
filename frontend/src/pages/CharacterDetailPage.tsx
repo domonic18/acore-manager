@@ -4,6 +4,8 @@ import {
   useCharacterDetail,
   useUnbanCharacter,
   useBanCharacter,
+  useMuteCharacter,
+  useUnmuteCharacter,
 } from '@/features/character/hooks/useCharacter';
 import { Dialog } from '@/shared/components/Dialog';
 
@@ -43,6 +45,8 @@ export default function CharacterDetailPage() {
   const { data: character, isLoading } = useCharacterDetail(characterGuid);
   const unbanMutation = useUnbanCharacter();
   const banMutation = useBanCharacter();
+  const muteMutation = useMuteCharacter();
+  const unmuteMutation = useUnmuteCharacter();
 
   const [showBanDialog, setShowBanDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -50,9 +54,18 @@ export default function CharacterDetailPage() {
   const [banReasonType, setBanReasonType] = useState('违规');
   const [customReason, setCustomReason] = useState('');
 
+  const [showMuteDialog, setShowMuteDialog] = useState(false);
+  const [muteDuration, setMuteDuration] = useState('1h');
+  const [muteReasonType, setMuteReasonType] = useState('恶意刷屏');
+  const [muteCustomReason, setMuteCustomReason] = useState('');
+
   const isCustomReason = banReasonType === '__custom__';
   const finalBanReason = isCustomReason ? customReason : banReasonType;
   const canProceed = !isCustomReason || customReason.trim().length > 0;
+
+  const isMuteCustomReason = muteReasonType === '__custom__';
+  const finalMuteReason = isMuteCustomReason ? muteCustomReason : muteReasonType;
+  const canMuteProceed = !isMuteCustomReason || muteCustomReason.trim().length > 0;
 
   const handleOpenBanDialog = () => {
     setBanDuration('1d');
@@ -81,6 +94,30 @@ export default function CharacterDetailPage() {
   const handleUnban = () => {
     if (!confirm('确认解禁该角色？')) return;
     unbanMutation.mutate(characterGuid);
+  };
+
+  const handleOpenMuteDialog = () => {
+    setMuteDuration('1h');
+    setMuteReasonType('恶意刷屏');
+    setMuteCustomReason('');
+    setShowMuteDialog(true);
+  };
+
+  const handleExecuteMute = () => {
+    if (!canMuteProceed) return;
+    muteMutation.mutate(
+      { guid: characterGuid, data: { duration: muteDuration, reason: finalMuteReason } },
+      {
+        onSuccess: () => {
+          setShowMuteDialog(false);
+        },
+      }
+    );
+  };
+
+  const handleUnmute = () => {
+    if (!confirm('确认解除该角色的聊天禁言？')) return;
+    unmuteMutation.mutate(characterGuid);
   };
 
   if (isLoading) {
@@ -114,6 +151,19 @@ export default function CharacterDetailPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">{character.name}</h1>
         <div className="flex gap-2">
+          <button
+            onClick={handleOpenMuteDialog}
+            className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
+          >
+            禁言聊天
+          </button>
+          <button
+            onClick={handleUnmute}
+            disabled={unmuteMutation.isPending}
+            className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {unmuteMutation.isPending ? '处理中...' : '解禁聊天'}
+          </button>
           {activeBans.length > 0 ? (
             <button
               onClick={handleUnban}
@@ -320,6 +370,82 @@ export default function CharacterDetailPage() {
             <span className="font-medium">{finalBanReason}</span>
           </div>
         </div>
+      </Dialog>
+
+      {/* 禁言对话框 */}
+      <Dialog
+        open={showMuteDialog}
+        onClose={() => setShowMuteDialog(false)}
+        title="禁言角色"
+        footer={
+          <>
+            <button
+              onClick={() => setShowMuteDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleExecuteMute}
+              disabled={!canMuteProceed || muteMutation.isPending}
+              className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
+            >
+              {muteMutation.isPending ? '处理中...' : '确认禁言'}
+            </button>
+          </>
+        }
+      >
+        <div className="bg-muted/50 rounded-md p-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">目标角色</span>
+            <span className="font-medium">{character.name}</span>
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-muted-foreground">角色GUID</span>
+            <span>{character.guid}</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">禁言时长</label>
+          <select
+            value={muteDuration}
+            onChange={(e) => setMuteDuration(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="10m">10分钟</option>
+            <option value="1h">1小时</option>
+            <option value="1d">1天</option>
+            <option value="7d">7天</option>
+            <option value="30d">30天</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">禁言原因</label>
+          <select
+            value={muteReasonType}
+            onChange={(e) => setMuteReasonType(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {banReasonOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {isMuteCustomReason && (
+          <div>
+            <label className="block text-sm font-medium mb-1.5">自定义原因</label>
+            <input
+              type="text"
+              value={muteCustomReason}
+              onChange={(e) => setMuteCustomReason(e.target.value)}
+              placeholder="请输入禁言原因"
+              className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        )}
       </Dialog>
     </div>
   );

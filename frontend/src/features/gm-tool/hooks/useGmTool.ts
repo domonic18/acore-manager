@@ -13,9 +13,3 @@ export function useSendItems() {
       gmToolApi.sendItems(data.playerName, data.itemId, data.count),
   });
 }
-
-export function useFindPlayer() {
-  return useMutation({
-    mutationFn: (name: string) => gmToolApi.findPlayer(name),
-  });
-}

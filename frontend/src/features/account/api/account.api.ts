@@ -78,4 +78,7 @@ export const accountApi = {
 
   gmList: () =>
     apiClient.get<GmAccountItem[]>('/api/accounts/gm/list'),
+
+  changePassword: (id: number, password: string) =>
+    apiClient.post<{ success: boolean }>(`/api/accounts/${id}/change-password`, { password }),
 };

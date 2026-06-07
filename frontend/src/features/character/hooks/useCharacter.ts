@@ -38,3 +38,26 @@ export function useBanCharacter() {
     },
   });
 }
+
+export function useMuteCharacter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ guid, data }: { guid: number; data: { duration: string; reason: string } }) =>
+      characterApi.mute(guid, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+    },
+  });
+}
+
+export function useUnmuteCharacter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (guid: number) => characterApi.unmute(guid),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['characters'] });
+    },
+  });
+}

@@ -6,7 +6,4 @@ export const gmToolApi = {
 
   sendItems: (playerName: string, itemId: number, count?: number) =>
     apiClient.post('/api/gm/send-items', { playerName, itemId, count }),
-
-  findPlayer: (name: string) =>
-    apiClient.get<{ result: string }>(`/api/gm/find-player?name=${encodeURIComponent(name)}`),
 };

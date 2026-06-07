@@ -1,6 +1,32 @@
 import { useState } from 'react';
 import { useTransactionList } from '@/features/transaction/hooks/useTransaction';
 import { formatGold } from '@/shared/utils/gold.util';
+import { Dialog } from '@/shared/components/Dialog';
+import { HelpCircle } from 'lucide-react';
+
+const typeDescriptions: Record<number, string> = {
+  0: '拾取金币 - 从怪物尸体或宝箱中获得的金币',
+  1: '邮寄 - 通过邮件系统发送或接收的金币',
+  2: '交易 - 与其他玩家直接交易的金币',
+  3: '货到付款 - 货到付款邮件的相关金币',
+  4: '拍卖行 - 通过拍卖行买卖物品的金币',
+  5: '公会银行 - 公会银行相关的金币流动',
+  6: '修理装备 - 修理装备花费的金币',
+  7: '任务奖励 - 完成任务获得的金币奖励',
+  8: '交易退款 - 交易取消或退款',
+  9: '拍卖出价 - 在拍卖行出价',
+  10: '拍卖押金 - 发布拍卖时支付的押金',
+  11: '拍卖手续费 - 拍卖成功后的手续费',
+  12: '拍卖出价退款 - 拍卖出价被超后的退款',
+  13: '拍卖押金退款 - 拍卖结束后的押金退还',
+  14: '公会银行取款 - 从公会银行取出金币',
+  15: '公会银行存款 - 向公会银行存入金币',
+  16: '商人买卖 - 与NPC商人购买或出售物品',
+  17: '法术花费 - 学习技能或法术的花费',
+  18: '退款 - 物品售回商店或系统退款',
+  19: '日常任务奖励 - 完成日常任务获得的金币',
+  20: '额外邮件 - 系统邮件或其他特殊邮件',
+};
 
 export default function TransactionPage() {
   const [page, setPage] = useState(1);
@@ -8,6 +34,7 @@ export default function TransactionPage() {
   const [type, setType] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showTypeHelp, setShowTypeHelp] = useState(false);
 
   const { data, isLoading } = useTransactionList({
     page,
@@ -21,116 +48,166 @@ export default function TransactionPage() {
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
 
   return (
-    
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold">交易记录</h1>
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">交易记录</h1>
 
-        <div className="flex flex-wrap gap-2">
-          <input
-            type="text"
-            value={characterName}
-            onChange={(e) => setCharacterName(e.target.value)}
-            placeholder="角色名"
-            className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-            className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">全部类型</option>
-            <option value="1">邮寄</option>
-            <option value="2">交易</option>
-            <option value="3">COD</option>
-            <option value="4">拍卖行</option>
-            <option value="5">公会银行</option>
-          </select>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-
-        <div className="rounded-lg border border-border overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-card">
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">时间</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">发送方</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">接收方</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">类型</th>
-                <th className="px-4 py-3 text-right font-medium text-muted-foreground">金额</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                    加载中...
-                  </td>
-                </tr>
-              ) : data?.items.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                    暂无数据
-                  </td>
-                </tr>
-              ) : (
-                data?.items.map((tx, index) => (
-                  <tr key={index} className="border-b border-border hover:bg-accent/50">
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {new Date(tx.date).toLocaleString('zh-CN')}
-                    </td>
-                    <td className="px-4 py-3">{tx.senderName}</td>
-                    <td className="px-4 py-3">{tx.receiverName}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
-                        {tx.typeLabel}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">
-                      <span className="text-amber-400">{formatGold(tx.amount)}</span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">共 {data?.total} 条记录</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
-              >
-                上一页
-              </button>
-              <span className="px-3 py-1.5 text-sm text-muted-foreground">
-                第 {page} / {totalPages} 页
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        )}
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="text"
+          value={characterName}
+          onChange={(e) => setCharacterName(e.target.value)}
+          placeholder="角色名"
+          className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="">全部类型</option>
+          <option value="0">拾取金币</option>
+          <option value="1">邮寄</option>
+          <option value="2">交易</option>
+          <option value="3">货到付款</option>
+          <option value="4">拍卖行</option>
+          <option value="5">公会银行</option>
+          <option value="6">修理装备</option>
+          <option value="7">任务奖励</option>
+          <option value="8">交易退款</option>
+          <option value="9">拍卖出价</option>
+          <option value="10">拍卖押金</option>
+          <option value="11">拍卖手续费</option>
+          <option value="12">拍卖出价退款</option>
+          <option value="13">拍卖押金退款</option>
+          <option value="14">公会银行取款</option>
+          <option value="15">公会银行存款</option>
+          <option value="16">商人买卖</option>
+          <option value="17">法术花费</option>
+          <option value="18">退款</option>
+          <option value="19">日常任务奖励</option>
+          <option value="20">额外邮件</option>
+        </select>
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
       </div>
-    
+
+      <div className="rounded-lg border border-border overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-card">
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">时间</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">发送方</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">接收方</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  类型
+                  <button
+                    onClick={() => setShowTypeHelp(true)}
+                    className="text-muted-foreground hover:text-primary transition-colors"
+                    title="点击查看类型说明"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              </th>
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">金额</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  加载中...
+                </td>
+              </tr>
+            ) : data?.items.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  暂无数据
+                </td>
+              </tr>
+            ) : (
+              data?.items.map((tx, index) => (
+                <tr key={index} className="border-b border-border hover:bg-accent/50">
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {new Date(tx.date).toLocaleString('zh-CN')}
+                  </td>
+                  <td className="px-4 py-3">{tx.senderName}</td>
+                  <td className="px-4 py-3">{tx.receiverName}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
+                      {tx.typeLabel}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    <span className="text-amber-400">{formatGold(tx.amount)}</span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">共 {data?.total} 条记录</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
+            >
+              上一页
+            </button>
+            <span className="px-3 py-1.5 text-sm text-muted-foreground">
+              第 {page} / {totalPages} 页
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
+            >
+              下一页
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Dialog
+        open={showTypeHelp}
+        onClose={() => setShowTypeHelp(false)}
+        title="交易类型说明"
+        footer={
+          <button
+            onClick={() => setShowTypeHelp(false)}
+            className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+          >
+            关闭
+          </button>
+        }
+      >
+        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          {Object.entries(typeDescriptions).map(([typeNum, desc]) => (
+            <div key={typeNum} className="flex gap-2 text-sm">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-secondary text-xs font-medium shrink-0">
+                {typeNum}
+              </span>
+              <span className="text-muted-foreground">{desc}</span>
+            </div>
+          ))}
+        </div>
+      </Dialog>
+    </div>
   );
 }

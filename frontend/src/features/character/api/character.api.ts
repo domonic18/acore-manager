@@ -57,4 +57,10 @@ export const characterApi = {
 
   ban: (guid: number, data: { duration: string; reason: string }) =>
     apiClient.post<{ success: boolean }>(`/api/characters/${guid}/ban`, data),
+
+  mute: (guid: number, data: { duration: string; reason: string }) =>
+    apiClient.post<{ success: boolean }>(`/api/characters/${guid}/mute`, data),
+
+  unmute: (guid: number) =>
+    apiClient.post<{ success: boolean }>(`/api/characters/${guid}/unmute`),
 };

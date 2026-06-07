@@ -1,16 +1,13 @@
 import { useState } from 'react';
-import { useBroadcast, useSendItems, useFindPlayer } from '@/features/gm-tool/hooks/useGmTool';
+import { useBroadcast, useSendItems } from '@/features/gm-tool/hooks/useGmTool';
 
 export default function GmToolPage() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [itemId, setItemId] = useState('');
-  const [findName, setFindName] = useState('');
-  const [findResult, setFindResult] = useState('');
 
   const broadcastMutation = useBroadcast();
   const sendItemsMutation = useSendItems();
-  const findPlayerMutation = useFindPlayer();
 
   const handleBroadcast = async () => {
     if (!broadcastMessage.trim()) return;
@@ -30,14 +27,8 @@ export default function GmToolPage() {
     alert('物品发送成功');
   };
 
-  const handleFindPlayer = async () => {
-    if (!findName.trim()) return;
-    const result = await findPlayerMutation.mutateAsync(findName);
-    setFindResult(result.result);
-  };
-
   return (
-    
+
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">GM 工具</h1>
 
@@ -83,34 +74,9 @@ export default function GmToolPage() {
               {sendItemsMutation.isPending ? '发送中...' : '发送物品'}
             </button>
           </ToolCard>
-
-          {/* Find Player */}
-          <ToolCard title="查找玩家">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={findName}
-                onChange={(e) => setFindName(e.target.value)}
-                placeholder="玩家名称"
-                className="flex-1 px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <button
-                onClick={handleFindPlayer}
-                disabled={findPlayerMutation.isPending}
-                className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-              >
-                {findPlayerMutation.isPending ? '查找中...' : '查找'}
-              </button>
-            </div>
-            {findResult && (
-              <pre className="mt-2 p-3 rounded-md bg-secondary text-xs overflow-auto max-h-[200px]">
-                {findResult}
-              </pre>
-            )}
-          </ToolCard>
         </div>
       </div>
-    
+
   );
 }
 

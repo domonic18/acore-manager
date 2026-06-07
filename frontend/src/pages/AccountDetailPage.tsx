@@ -6,6 +6,7 @@ import {
   useUnbanAccount,
   useBanAccount,
   useAccountLoginHistory,
+  useChangePassword,
 } from '@/features/account/hooks/useAccount';
 import { Dialog } from '@/shared/components/Dialog';
 
@@ -47,6 +48,7 @@ export default function AccountDetailPage() {
   const { data: loginHistory, isLoading: historyLoading } = useAccountLoginHistory(accountId);
   const unbanMutation = useUnbanAccount();
   const banMutation = useBanAccount();
+  const changePasswordMutation = useChangePassword();
 
   // 封禁对话框状态
   const [showBanDialog, setShowBanDialog] = useState(false);
@@ -55,9 +57,15 @@ export default function AccountDetailPage() {
   const [banReasonType, setBanReasonType] = useState('违规');
   const [customReason, setCustomReason] = useState('');
 
+  // 更改密码对话框状态
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const isCustomReason = banReasonType === '__custom__';
   const finalBanReason = isCustomReason ? customReason : banReasonType;
   const canProceed = !isCustomReason || customReason.trim().length > 0;
+  const passwordsMatch = newPassword.length >= 4 && newPassword === confirmPassword;
 
   const handleOpenBanDialog = () => {
     setBanDuration('1d');
@@ -88,6 +96,20 @@ export default function AccountDetailPage() {
     unbanMutation.mutate(accountId);
   };
 
+  const handleChangePassword = () => {
+    if (!passwordsMatch) return;
+    changePasswordMutation.mutate(
+      { id: accountId, password: newPassword },
+      {
+        onSuccess: () => {
+          setShowPasswordDialog(false);
+          setNewPassword('');
+          setConfirmPassword('');
+        },
+      }
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="text-center py-12 text-muted-foreground">加载中...</div>
@@ -116,6 +138,16 @@ export default function AccountDetailPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">{account.username}</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setNewPassword('');
+              setConfirmPassword('');
+              setShowPasswordDialog(true);
+            }}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            更改密码
+          </button>
           {activeBans.length > 0 ? (
             <button
               onClick={handleUnban}
@@ -403,6 +435,62 @@ export default function AccountDetailPage() {
             <span className="text-muted-foreground">封禁原因</span>
             <span className="font-medium">{finalBanReason}</span>
           </div>
+        </div>
+      </Dialog>
+
+      {/* 更改密码对话框 */}
+      <Dialog
+        open={showPasswordDialog}
+        onClose={() => setShowPasswordDialog(false)}
+        title="更改密码"
+        footer={
+          <>
+            <button
+              onClick={() => setShowPasswordDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleChangePassword}
+              disabled={!passwordsMatch || changePasswordMutation.isPending}
+              className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {changePasswordMutation.isPending ? '处理中...' : '确认更改'}
+            </button>
+          </>
+        }
+      >
+        <div className="bg-muted/50 rounded-md p-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">目标账号</span>
+            <span className="font-medium">{account.username}</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">新密码</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="输入新密码（至少4位）"
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">确认密码</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="再次输入新密码"
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          {confirmPassword && newPassword !== confirmPassword && (
+            <p className="text-xs text-red-400 mt-1">两次输入的密码不一致</p>
+          )}
         </div>
       </Dialog>
     </div>

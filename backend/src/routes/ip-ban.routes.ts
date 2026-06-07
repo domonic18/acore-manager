@@ -18,7 +18,7 @@ router.get(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      res.jsonError('Invalid request parameters', 400);
       return;
     }
 
@@ -27,7 +27,7 @@ router.get(
     const search = req.query.search as string | undefined;
 
     const result = await ipBanService.listIpBans(page, pageSize, search);
-    res.json({ success: true, count: result.items.length, data: result });
+    res.jsonSuccess(result, result.items.length);
   },
 );
 
@@ -36,31 +36,27 @@ router.post(
   authMiddleware,
   requireGmLevel(2),
   [
-    body('ip').isIP().withMessage('Invalid IP address'),
+    body('ip').trim().isIP().withMessage('无效的 IP 地址'),
     body('duration').notEmpty().trim(),
     body('reason').notEmpty().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      const messages = errors.array().map((e) => e.msg).join('; ');
+      res.jsonError(messages, 400);
       return;
     }
 
     const { ip, duration, reason } = req.body;
-    const success = await ipBanService.banIp(
+    await ipBanService.banIp(
       ip,
       duration,
       reason,
       (req as any).user?.id || 0,
     );
 
-    if (!success) {
-      res.status(500).json({ success: false, error: 'Failed to ban IP' });
-      return;
-    }
-
-    res.json({ success: true, data: { success: true } });
+    res.jsonSuccess({ success: true });
   },
 );
 
@@ -72,19 +68,14 @@ router.delete(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid IP address' });
+      res.jsonError('Invalid IP address', 400);
       return;
     }
 
     const ip = req.params.ip;
-    const success = await ipBanService.unbanIp(ip, (req as any).user?.id || 0);
+    await ipBanService.unbanIp(ip, (req as any).user?.id || 0);
 
-    if (!success) {
-      res.status(500).json({ success: false, error: 'Failed to unban IP' });
-      return;
-    }
-
-    res.json({ success: true, data: { success: true } });
+    res.jsonSuccess({ success: true });
   },
 );
 

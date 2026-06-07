@@ -6,18 +6,26 @@ import {
   useUnbanAccount,
   useBanAccount,
   useAccountLoginHistory,
+  useChangePassword,
 } from '@/features/account/hooks/useAccount';
+import { Dialog } from '@/shared/components/Dialog';
+import { raceMap, classMap, banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
+import { toast } from '@/shared/utils/toast.util';
 
-const raceMap: Record<number, string> = {
-  1: '人类', 2: '兽人', 3: '矮人', 4: '暗夜精灵', 5: '亡灵',
-  6: '牛头人', 7: '侏儒', 8: '巨魔', 9: '地精', 10: '血精灵',
-  11: '德莱尼', 22: '狼人',
-};
-
-const classMap: Record<number, string> = {
-  1: '战士', 2: '圣骑士', 3: '猎人', 4: '潜行者', 5: '牧师',
-  6: '死亡骑士', 7: '萨满', 8: '法师', 9: '术士', 11: '德鲁伊',
-};
+function formatMuteTime(muteTime: number): string {
+  if (!muteTime || muteTime <= 0) return '-';
+  const now = Math.floor(Date.now() / 1000);
+  if (muteTime <= now) return '-';
+  const remaining = muteTime - now;
+  const days = Math.floor(remaining / 86400);
+  const hours = Math.floor((remaining % 86400) / 3600);
+  const minutes = Math.floor((remaining % 3600) / 60);
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}天`);
+  if (hours > 0) parts.push(`${hours}小时`);
+  if (minutes > 0) parts.push(`${minutes}分钟`);
+  return parts.length > 0 ? parts.join('') : '不足1分钟';
+}
 
 export default function AccountDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,20 +36,88 @@ export default function AccountDetailPage() {
   const { data: loginHistory, isLoading: historyLoading } = useAccountLoginHistory(accountId);
   const unbanMutation = useUnbanAccount();
   const banMutation = useBanAccount();
+  const changePasswordMutation = useChangePassword();
 
-  const [showBanForm, setShowBanForm] = useState(false);
+  // 封禁对话框状态
+  const [showBanDialog, setShowBanDialog] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [banDuration, setBanDuration] = useState('1d');
-  const [banReason, setBanReason] = useState('违规');
+  const [banReasonType, setBanReasonType] = useState('违规');
+  const [customReason, setCustomReason] = useState('');
 
-  const handleUnban = () => {
-    if (!confirm('确认解禁该账号？')) return;
-    unbanMutation.mutate(accountId);
+  // 更改密码对话框状态
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // 解封确认对话框状态
+  const [showUnbanConfirmDialog, setShowUnbanConfirmDialog] = useState(false);
+
+  const isCustomReason = banReasonType === '__custom__';
+  const finalBanReason = isCustomReason ? customReason : banReasonType;
+  const canProceed = !isCustomReason || customReason.trim().length > 0;
+  const passwordsMatch = newPassword.length >= 4 && newPassword === confirmPassword;
+
+  const handleOpenBanDialog = () => {
+    setBanDuration('1d');
+    setBanReasonType('违规');
+    setCustomReason('');
+    setShowBanDialog(true);
   };
 
-  const handleBan = () => {
-    if (!confirm(`确认封禁该账号？\n时长: ${banDuration}\n原因: ${banReason}`)) return;
-    banMutation.mutate({ id: accountId, data: { duration: banDuration, reason: banReason } });
-    setShowBanForm(false);
+  const handleProceedToConfirm = () => {
+    if (!canProceed) return;
+    setShowBanDialog(false);
+    setShowConfirmDialog(true);
+  };
+
+  const handleExecuteBan = () => {
+    banMutation.mutate(
+      { id: accountId, data: { duration: banDuration, reason: finalBanReason } },
+      {
+        onSuccess: () => {
+          setShowConfirmDialog(false);
+          toast.success('封禁操作成功');
+        },
+        onError: (error: Error) => {
+          toast.error(error.message || '封禁失败，请检查 SOAP 服务器连接');
+        },
+      }
+    );
+  };
+
+  const handleOpenUnbanConfirm = () => {
+    setShowUnbanConfirmDialog(true);
+  };
+
+  const handleExecuteUnban = () => {
+    unbanMutation.mutate(accountId, {
+      onSuccess: () => {
+        setShowUnbanConfirmDialog(false);
+        toast.success('解禁成功');
+      },
+      onError: (error: Error) => {
+        toast.error(error.message || '解禁失败，请检查 SOAP 服务器连接');
+      },
+    });
+  };
+
+  const handleChangePassword = () => {
+    if (!passwordsMatch) return;
+    changePasswordMutation.mutate(
+      { id: accountId, password: newPassword },
+      {
+        onSuccess: () => {
+          setShowPasswordDialog(false);
+          setNewPassword('');
+          setConfirmPassword('');
+          toast.success('密码修改成功');
+        },
+        onError: (error: Error) => {
+          toast.error(error.message || '密码修改失败，请检查 SOAP 服务器连接');
+        },
+      }
+    );
   };
 
   if (isLoading) {
@@ -72,59 +148,31 @@ export default function AccountDetailPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">{account.username}</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setNewPassword('');
+              setConfirmPassword('');
+              setShowPasswordDialog(true);
+            }}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            更改密码
+          </button>
           {activeBans.length > 0 ? (
             <button
-              onClick={handleUnban}
+              onClick={handleOpenUnbanConfirm}
               disabled={unbanMutation.isPending}
               className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
               {unbanMutation.isPending ? '处理中...' : '解禁账号'}
             </button>
           ) : (
-            <>
-              {showBanForm ? (
-                <div className="flex items-center gap-2">
-                  <select
-                    value={banDuration}
-                    onChange={(e) => setBanDuration(e.target.value)}
-                    className="px-2 py-1.5 rounded-md border border-border bg-card text-sm"
-                  >
-                    <option value="1h">1小时</option>
-                    <option value="1d">1天</option>
-                    <option value="7d">7天</option>
-                    <option value="30d">30天</option>
-                    <option value="-1">永久</option>
-                  </select>
-                  <input
-                    type="text"
-                    value={banReason}
-                    onChange={(e) => setBanReason(e.target.value)}
-                    placeholder="封禁原因"
-                    className="px-2 py-1.5 rounded-md border border-border bg-card text-sm w-32"
-                  />
-                  <button
-                    onClick={handleBan}
-                    disabled={banMutation.isPending}
-                    className="px-3 py-1.5 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {banMutation.isPending ? '...' : '确认'}
-                  </button>
-                  <button
-                    onClick={() => setShowBanForm(false)}
-                    className="px-3 py-1.5 rounded-md border border-border text-sm"
-                  >
-                    取消
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowBanForm(true)}
-                  className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700"
-                >
-                  封禁账号
-                </button>
-              )}
-            </>
+            <button
+              onClick={handleOpenBanDialog}
+              className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+            >
+              封禁账号
+            </button>
           )}
         </div>
       </div>
@@ -158,7 +206,7 @@ export default function AccountDetailPage() {
           <InfoRow label="登录失败次数" value={account.failedLogins} />
           <InfoRow label="总在线时长" value={`${Math.floor(account.totalTime / 3600)} 小时`} />
           <InfoRow label="角色数量" value={account.characterCount || 0} />
-          <InfoRow label="禁言时长" value={account.muteTime > 0 ? `${account.muteTime} 秒` : '-'} />
+          <InfoRow label="禁言时长" value={formatMuteTime(account.muteTime)} />
           <InfoRow label="禁言原因" value={account.muteReason || '-'} />
         </InfoCard>
       </div>
@@ -206,7 +254,7 @@ export default function AccountDetailPage() {
         )}
       </InfoCard>
 
-      {loginHistory && loginHistory.items.length > 0 && (
+      {loginHistory && loginHistory.length > 0 && (
         <InfoCard title="登录历史">
           {historyLoading ? (
             <div className="text-center py-8 text-muted-foreground">加载中...</div>
@@ -222,7 +270,7 @@ export default function AccountDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loginHistory.items.map((record, index) => (
+                  {loginHistory.map((record, index) => (
                     <tr key={index} className="border-b border-border">
                       <td className="px-3 py-2">
                         {new Date(record.time).toLocaleString('zh-CN')}
@@ -259,7 +307,11 @@ export default function AccountDetailPage() {
                       {new Date(ban.banDate).toLocaleString('zh-CN')}
                     </td>
                     <td className="px-3 py-2">
-                      {new Date(ban.unbanDate).toLocaleString('zh-CN')}
+                      {new Date(ban.banDate).getTime() === new Date(ban.unbanDate).getTime() ? (
+                        <span className="text-red-400">永久</span>
+                      ) : (
+                        new Date(ban.unbanDate).toLocaleString('zh-CN')
+                      )}
                     </td>
                     <td className="px-3 py-2">{ban.bannedBy}</td>
                     <td className="px-3 py-2">{ban.banReason}</td>
@@ -277,6 +329,212 @@ export default function AccountDetailPage() {
           </div>
         </InfoCard>
       )}
+
+      {/* 封禁信息填写对话框 */}
+      <Dialog
+        open={showBanDialog}
+        onClose={() => setShowBanDialog(false)}
+        title="封禁账号"
+        footer={
+          <>
+            <button
+              onClick={() => setShowBanDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleProceedToConfirm}
+              disabled={!canProceed}
+              className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              下一步
+            </button>
+          </>
+        }
+      >
+        <div className="bg-muted/50 rounded-md p-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">目标账号</span>
+            <span className="font-medium">{account.username}</span>
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className="text-muted-foreground">账号ID</span>
+            <span>{account.id}</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">封禁时长</label>
+          <select
+            value={banDuration}
+            onChange={(e) => setBanDuration(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="1h">1小时</option>
+            <option value="1d">1天</option>
+            <option value="7d">7天</option>
+            <option value="30d">30天</option>
+            <option value="-1">永久</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">封禁原因</label>
+          <select
+            value={banReasonType}
+            onChange={(e) => setBanReasonType(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {banReasonOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {isCustomReason && (
+          <div>
+            <label className="block text-sm font-medium mb-1.5">自定义原因</label>
+            <input
+              type="text"
+              value={customReason}
+              onChange={(e) => setCustomReason(e.target.value)}
+              placeholder="请输入封禁原因"
+              className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        )}
+      </Dialog>
+
+      {/* 二次确认对话框 */}
+      <Dialog
+        open={showConfirmDialog}
+        onClose={() => setShowConfirmDialog(false)}
+        title="确认封禁"
+        footer={
+          <>
+            <button
+              onClick={() => {
+                setShowConfirmDialog(false);
+                setShowBanDialog(true);
+              }}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              返回修改
+            </button>
+            <button
+              onClick={handleExecuteBan}
+              disabled={banMutation.isPending}
+              className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              {banMutation.isPending ? '处理中...' : '确认封禁'}
+            </button>
+          </>
+        }
+      >
+        <div className="text-sm text-muted-foreground mb-4">
+          请再次确认以下封禁信息，操作后将立即生效：
+        </div>
+
+        <div className="space-y-3 bg-muted/50 rounded-md p-4 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">目标账号</span>
+            <span className="font-medium">{account.username}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">封禁时长</span>
+            <span className="font-medium text-red-400">{durationLabels[banDuration]}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">封禁原因</span>
+            <span className="font-medium">{finalBanReason}</span>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* 更改密码对话框 */}
+      <Dialog
+        open={showPasswordDialog}
+        onClose={() => setShowPasswordDialog(false)}
+        title="更改密码"
+        footer={
+          <>
+            <button
+              onClick={() => setShowPasswordDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleChangePassword}
+              disabled={!passwordsMatch || changePasswordMutation.isPending}
+              className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {changePasswordMutation.isPending ? '处理中...' : '确认更改'}
+            </button>
+          </>
+        }
+      >
+        <div className="bg-muted/50 rounded-md p-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">目标账号</span>
+            <span className="font-medium">{account.username}</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">新密码</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="输入新密码（至少4位）"
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5">确认密码</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="再次输入新密码"
+            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          {confirmPassword && newPassword !== confirmPassword && (
+            <p className="text-xs text-red-400 mt-1">两次输入的密码不一致</p>
+          )}
+        </div>
+      </Dialog>
+
+      {/* 解禁确认对话框 */}
+      <Dialog
+        open={showUnbanConfirmDialog}
+        onClose={() => setShowUnbanConfirmDialog(false)}
+        title="确认解禁"
+        footer={
+          <>
+            <button
+              onClick={() => setShowUnbanConfirmDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleExecuteUnban}
+              disabled={unbanMutation.isPending}
+              className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              {unbanMutation.isPending ? '处理中...' : '确认解禁'}
+            </button>
+          </>
+        }
+      >
+        <div className="text-sm text-muted-foreground mb-4">
+          确认要解禁账号 <span className="font-medium text-foreground">{account?.username}</span> 吗？
+        </div>
+      </Dialog>
     </div>
   );
 }

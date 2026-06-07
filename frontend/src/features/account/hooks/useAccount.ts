@@ -54,3 +54,17 @@ export function useAccountLoginHistory(id: number) {
     enabled: id > 0,
   });
 }
+
+export function useGmAccountList() {
+  return useQuery({
+    queryKey: ['accounts', 'gm-list'],
+    queryFn: () => accountApi.gmList(),
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: ({ id, password }: { id: number; password: string }) =>
+      accountApi.changePassword(id, password),
+  });
+}

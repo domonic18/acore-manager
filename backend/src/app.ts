@@ -15,6 +15,8 @@ import auditLogRoutes from './routes/audit-log.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import healthRoutes from './routes/health.routes';
 import ipBanRoutes from './routes/ip-ban.routes';
+import banlistRoutes from './routes/banlist.routes';
+import muteRoutes from './routes/mute.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -44,6 +46,8 @@ export function createApp(): Application {
   app.use('/api/transactions', transactionRoutes);
   app.use('/api/gm', gmToolRoutes);
   app.use('/api/ip-bans', ipBanRoutes);
+  app.use('/api/banlist', banlistRoutes);
+  app.use('/api/mutes', muteRoutes);
   app.use('/api/audit', auditLogRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/health', healthRoutes);

@@ -6,7 +6,7 @@ const router = Router();
 
 router.get('/stats', authMiddleware, async (_req: Request, res: Response) => {
   const stats = await dashboardService.getStats();
-  res.json({ success: true, data: stats });
+  res.jsonSuccess(stats);
 });
 
 export default router;

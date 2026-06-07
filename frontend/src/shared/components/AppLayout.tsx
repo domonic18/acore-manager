@@ -13,6 +13,9 @@ import {
   Menu,
   X,
   Ban,
+  ShieldAlert,
+  Crown,
+  MessageSquareOff,
 } from 'lucide-react';
 
 const menuItems = [
@@ -21,6 +24,9 @@ const menuItems = [
   { path: '/characters', label: '角色管理', icon: UserCircle },
   { path: '/transactions', label: '交易记录', icon: Receipt },
   { path: '/gm-tools', label: 'GM 工具', icon: Shield },
+  { path: '/gm-accounts', label: 'GM 账号', icon: Crown },
+  { path: '/banlist', label: '封号列表', icon: ShieldAlert },
+  { path: '/mutes', label: '禁言列表', icon: MessageSquareOff },
   { path: '/ip-bans', label: 'IP 封禁', icon: Ban },
   { path: '/audit-logs', label: '日志审计', icon: ScrollText },
 ];

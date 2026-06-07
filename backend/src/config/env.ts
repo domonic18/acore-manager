@@ -42,8 +42,29 @@ function parseRedisUrl(url?: string): RedisConn {
   };
 }
 
+interface SoapConn {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+}
+
+function parseSoapUrl(url?: string): SoapConn {
+  if (!url) throw new Error('Missing required environment variable: SOAP_URL');
+  // 支持格式: http://user:pass@host:port 或 soap://user:pass@host:port
+  const m = url.match(/^https?:\/\/([^:]+):([^@]+)@([^:]+)(?::(\d+))?\/?$/i);
+  if (!m) throw new Error(`Invalid SOAP_URL format: ${url}`);
+  return {
+    user: decodeURIComponent(m[1]),
+    pass: decodeURIComponent(m[2]),
+    host: m[3],
+    port: m[4] ? parseInt(m[4], 10) : 7878,
+  };
+}
+
 const dbUrl = parseMysqlUrl(process.env.DB_URL);
 const redisUrl = parseRedisUrl(process.env.REDIS_URL);
+const soapUrl = parseSoapUrl(process.env.SOAP_URL);
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -68,10 +89,10 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '8h',
 
-  SOAP_HOST: process.env.SOAP_HOST || '127.0.0.1',
-  SOAP_PORT: parseInt(process.env.SOAP_PORT || '7878', 10),
-  SOAP_USER: process.env.SOAP_USER || 'admin',
-  SOAP_PASS: process.env.SOAP_PASS || 'admin',
+  SOAP_HOST: soapUrl.host,
+  SOAP_PORT: soapUrl.port,
+  SOAP_USER: soapUrl.user,
+  SOAP_PASS: soapUrl.pass,
 
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || '',
 } as const;

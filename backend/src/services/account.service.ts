@@ -1,7 +1,7 @@
-import { authDataSource } from '../config/database';
 import { cacheService } from './cache.service';
 import { soapService } from './soap.service';
 import { logger } from '../middleware/request-logger';
+import { accountRepository } from '../repositories/account.repository';
 
 export interface AccountListItem {
   id: number;
@@ -40,6 +40,7 @@ export interface AccountDetail {
   muteTime: number;
   muteReason: string;
   totalTime: number;
+  characterCount: number;
 }
 
 export interface BanRecord {
@@ -64,6 +65,16 @@ export interface AccountListResult {
   pageSize: number;
 }
 
+export interface GmAccountItem {
+  accountId: number;
+  username: string;
+  email: string;
+  gmlevel: number;
+  realmId: number;
+  realmName: string;
+  comment?: string;
+}
+
 export class AccountService {
   async listAccounts(
     page: number = 1,
@@ -77,44 +88,7 @@ export class AccountService {
     }
 
     const offset = (page - 1) * pageSize;
-    let whereClause = '';
-    let params: any[] = [];
-
-    if (search) {
-      whereClause = 'WHERE a.username LIKE ? OR a.email LIKE ? OR a.last_ip LIKE ?';
-      params = [`%${search}%`, `%${search}%`, `%${search}%`];
-    }
-
-    const countResult = await authDataSource.query(
-      `SELECT COUNT(*) as total FROM account a ${whereClause}`,
-      params,
-    );
-    const total = parseInt(countResult[0]?.total || '0', 10);
-
-    const items = await authDataSource.query(
-      `SELECT
-        a.id,
-        a.username,
-        a.email,
-        COALESCE(aa.gmlevel, 0) as gmlevel,
-        a.online,
-        a.last_login as lastLogin,
-        a.last_ip as lastIp,
-        a.locked,
-        COALESCE(ch.char_count, 0) as characterCount
-      FROM account a
-      LEFT JOIN account_access aa ON a.id = aa.id
-      LEFT JOIN (
-        SELECT account, COUNT(*) as char_count
-        FROM acore_characters.characters
-        WHERE name != ''
-        GROUP BY account
-      ) ch ON a.id = ch.account
-      ${whereClause}
-      ORDER BY a.id DESC
-      LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
+    const { items, total } = await accountRepository.listAccounts(offset, pageSize, search);
 
     const result: AccountListResult = {
       items: items.map((item: any) => ({
@@ -138,32 +112,12 @@ export class AccountService {
   }
 
   async getAccountDetail(accountId: number): Promise<AccountDetail | null> {
-    const result = await authDataSource.query(
-      `SELECT
-        a.id,
-        a.username,
-        a.email,
-        COALESCE(aa.gmlevel, 0) as gmlevel,
-        a.online,
-        a.last_login as lastLogin,
-        a.last_ip as lastIp,
-        a.joindate as joinDate,
-        a.locked,
-        a.failed_logins as failedLogins,
-        a.mutetime as muteTime,
-        a.mutereason as muteReason,
-        a.totaltime as totalTime
-      FROM account a
-      LEFT JOIN account_access aa ON a.id = aa.id
-      WHERE a.id = ?`,
-      [accountId],
-    );
+    const item = await accountRepository.getAccountDetail(accountId);
 
-    if (result.length === 0) {
+    if (!item) {
       return null;
     }
 
-    const item = result[0];
     return {
       id: item.id,
       username: item.username,
@@ -178,26 +132,16 @@ export class AccountService {
       muteTime: item.muteTime,
       muteReason: item.muteReason,
       totalTime: item.totalTime,
+      characterCount: parseInt(item.characterCount || '0', 10),
     };
   }
 
   async getBanRecords(accountId: number): Promise<BanRecord[]> {
-    const result = await authDataSource.query(
-      `SELECT
-        bandate as banDate,
-        unbandate as unbanDate,
-        bannedby as bannedBy,
-        banreason as banReason,
-        active
-      FROM account_banned
-      WHERE id = ?
-      ORDER BY bandate DESC`,
-      [accountId],
-    );
+    const result = await accountRepository.getBanRecords(accountId);
 
     return result.map((item: any) => ({
-      banDate: item.banDate,
-      unbanDate: item.unbanDate,
+      banDate: new Date(item.banDate * 1000),
+      unbanDate: new Date(item.unbanDate * 1000),
       bannedBy: item.bannedBy,
       banReason: item.banReason,
       active: item.active,
@@ -205,21 +149,7 @@ export class AccountService {
   }
 
   async getAccountCharacters(accountId: number): Promise<AccountCharacter[]> {
-    const result = await authDataSource.query(
-      `SELECT
-        c.guid,
-        c.name,
-        c.level,
-        c.race,
-        c.class,
-        c.gender,
-        c.online,
-        c.zone
-      FROM acore_characters.characters c
-      WHERE c.account = ? AND c.name != ''
-      ORDER BY c.level DESC, c.name ASC`,
-      [accountId],
-    );
+    const result = await accountRepository.getAccountCharacters(accountId);
 
     return result.map((item: any) => ({
       guid: item.guid,
@@ -233,21 +163,20 @@ export class AccountService {
     }));
   }
 
-  async unbanAccount(accountId: number, operatorId: number): Promise<boolean> {
+  async unbanAccount(accountId: number, operatorId: number): Promise<void> {
     const account = await this.getAccountDetail(accountId);
     if (!account) {
       logger.error({ accountId }, 'Account not found for unban');
-      return false;
+      throw new Error('Account not found');
     }
 
     try {
       await soapService.sendCommand(`.unban account ${account.username}`);
       await cacheService.delPattern('accounts:list:*');
       logger.info({ accountId, operatorId, username: account.username }, 'Account unban command sent');
-      return true;
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to send account unban command');
-      return false;
+      throw new Error('Failed to unban account', { cause: error });
     }
   }
 
@@ -256,11 +185,11 @@ export class AccountService {
     operatorId: number,
     duration: string,
     reason: string,
-  ): Promise<boolean> {
+  ): Promise<void> {
     const account = await this.getAccountDetail(accountId);
     if (!account) {
       logger.error({ accountId }, 'Account not found for ban');
-      return false;
+      throw new Error('Account not found');
     }
 
     try {
@@ -270,26 +199,14 @@ export class AccountService {
         { accountId, operatorId, username: account.username, duration, reason },
         'Account ban command sent',
       );
-      return true;
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to send account ban command');
-      return false;
+      throw new Error('Failed to ban account', { cause: error });
     }
   }
 
   async getLoginHistory(accountId: number): Promise<LoginHistoryItem[]> {
-    const result = await authDataSource.query(
-      `SELECT
-        ip,
-        time,
-        systemnote as action,
-        comment
-      FROM logs_ip_actions
-      WHERE account_id = ?
-      ORDER BY time DESC
-      LIMIT 50`,
-      [accountId],
-    );
+    const result = await accountRepository.getLoginHistory(accountId);
 
     return result.map((item: any) => ({
       ip: item.ip,
@@ -297,6 +214,50 @@ export class AccountService {
       action: item.action,
       comment: item.comment,
     }));
+  }
+
+  async listGmAccounts(): Promise<GmAccountItem[]> {
+    const cacheKey = 'accounts:gm-list';
+    const cached = await cacheService.get<GmAccountItem[]>(cacheKey);
+    if (cached) return cached;
+
+    const result = await accountRepository.listGmAccounts();
+
+    const items: GmAccountItem[] = result.map((item: any) => ({
+      accountId: item.accountId,
+      username: item.username,
+      email: item.email,
+      gmlevel: item.gmlevel,
+      realmId: item.realmId,
+      realmName: item.realmId === -1 ? '所有服务器' : `服务器 ${item.realmId}`,
+      comment: item.comment,
+    }));
+
+    await cacheService.set(cacheKey, items, 300);
+    return items;
+  }
+
+  async changePassword(
+    accountId: number,
+    operatorId: number,
+    newPassword: string,
+  ): Promise<void> {
+    const account = await this.getAccountDetail(accountId);
+    if (!account) {
+      logger.error({ accountId }, 'Account not found for password change');
+      throw new Error('Account not found');
+    }
+
+    try {
+      await soapService.sendCommand(`.account set password ${account.username} ${newPassword} ${newPassword}`);
+      logger.info(
+        { accountId, operatorId, username: account.username },
+        'Account password changed',
+      );
+    } catch (error) {
+      logger.error({ error, accountId, username: account.username }, 'Failed to change account password');
+      throw new Error('Failed to change password', { cause: error });
+    }
   }
 }
 

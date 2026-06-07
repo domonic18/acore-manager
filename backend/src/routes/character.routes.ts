@@ -1,5 +1,5 @@
 import { Request, Response, Router } from 'express';
-import { param, query, validationResult } from 'express-validator';
+import { param, query, body, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
 import { requireGmLevel } from '../middleware/gm-guard';
 import { characterService } from '../services/character.service';
@@ -19,7 +19,7 @@ router.get(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      res.jsonError('Invalid request parameters', 400);
       return;
     }
 
@@ -29,7 +29,7 @@ router.get(
     const includeDeleted = req.query.includeDeleted as boolean | undefined;
 
     const result = await characterService.listCharacters(page, pageSize, search, includeDeleted);
-    res.json({ success: true, count: result.items.length, data: result });
+    res.jsonSuccess(result, result.items.length);
   },
 );
 
@@ -41,7 +41,7 @@ router.get(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid character GUID' });
+      res.jsonError('Invalid character GUID', 400);
       return;
     }
 
@@ -49,11 +49,97 @@ router.get(
     const detail = await characterService.getCharacterDetail(guid);
 
     if (!detail) {
-      res.status(404).json({ success: false, error: 'Character not found' });
+      res.jsonError('Character not found', 404);
       return;
     }
 
-    res.json({ success: true, data: detail });
+    res.jsonSuccess(detail);
+  },
+);
+
+router.post(
+  '/:guid/ban',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('guid').isInt().toInt(),
+    body('duration').isString().trim().notEmpty(),
+    body('reason').isString().trim().notEmpty(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const { duration, reason } = req.body;
+    await characterService.banCharacter(guid, (req as any).user?.id || 0, duration, reason);
+
+    res.jsonSuccess({ banned: true });
+  },
+);
+
+router.post(
+  '/:guid/unban',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('guid').isInt().toInt()],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid character GUID', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    await characterService.unbanCharacter(guid, (req as any).user?.id || 0);
+
+    res.jsonSuccess({ unbanned: true });
+  },
+);
+
+router.post(
+  '/:guid/mute',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('guid').isInt().toInt(),
+    body('duration').isString().trim().notEmpty(),
+    body('reason').isString().trim().notEmpty(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const { duration, reason } = req.body;
+    await characterService.muteCharacter(guid, (req as any).user?.id || 0, duration, reason);
+
+    res.jsonSuccess({ muted: true });
+  },
+);
+
+router.post(
+  '/:guid/unmute',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('guid').isInt().toInt()],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid character GUID', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    await characterService.unmuteCharacter(guid, (req as any).user?.id || 0);
+
+    res.jsonSuccess({ unmuted: true });
   },
 );
 

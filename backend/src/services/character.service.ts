@@ -1,5 +1,7 @@
 import { charactersDataSource } from '../config/database';
 import { cacheService } from './cache.service';
+import { soapService } from './soap.service';
+import { logger } from '../middleware/request-logger';
 
 export interface CharacterListItem {
   guid: number;
@@ -14,6 +16,14 @@ export interface CharacterListItem {
   zone: number;
 }
 
+export interface CharacterBanRecord {
+  banDate: Date;
+  unbanDate: Date;
+  bannedBy: string;
+  banReason: string;
+  active: number;
+}
+
 export interface CharacterDetail extends CharacterListItem {
   xp: number;
   money: number;
@@ -25,6 +35,7 @@ export interface CharacterDetail extends CharacterListItem {
   arenaPoints: number;
   totalHonorPoints: number;
   totalKills: number;
+  bans: CharacterBanRecord[];
 }
 
 export interface CharacterListResult {
@@ -109,6 +120,29 @@ export class CharacterService {
     return result;
   }
 
+  async getCharacterBanRecords(guid: number): Promise<CharacterBanRecord[]> {
+    const result = await charactersDataSource.query(
+      `SELECT
+        bandate as banDate,
+        unbandate as unbanDate,
+        bannedby as bannedBy,
+        banreason as banReason,
+        active
+      FROM character_banned
+      WHERE guid = ?
+      ORDER BY bandate DESC`,
+      [guid],
+    );
+
+    return result.map((item: any) => ({
+      banDate: item.banDate,
+      unbanDate: item.unbanDate,
+      bannedBy: item.bannedBy,
+      banReason: item.banReason,
+      active: item.active,
+    }));
+  }
+
   async getCharacterDetail(guid: number): Promise<CharacterDetail | null> {
     const result = await charactersDataSource.query(
       `SELECT
@@ -143,6 +177,8 @@ export class CharacterService {
     }
 
     const item = result[0];
+    const bans = await this.getCharacterBanRecords(guid);
+
     return {
       guid: item.guid,
       name: item.name,
@@ -164,7 +200,52 @@ export class CharacterService {
       arenaPoints: item.arenaPoints,
       totalHonorPoints: item.totalHonorPoints,
       totalKills: item.totalKills,
+      bans,
     };
+  }
+
+  async unbanCharacter(guid: number, operatorId: number): Promise<boolean> {
+    const detail = await this.getCharacterDetail(guid);
+    if (!detail) {
+      logger.error({ guid }, 'Character not found for unban');
+      return false;
+    }
+
+    try {
+      await soapService.sendCommand(`.unban character ${detail.name}`);
+      await cacheService.delPattern('characters:*');
+      logger.info({ guid, operatorId, name: detail.name }, 'Character unban command sent');
+      return true;
+    } catch (error) {
+      logger.error({ error, guid, name: detail.name }, 'Failed to send character unban command');
+      return false;
+    }
+  }
+
+  async banCharacter(
+    guid: number,
+    operatorId: number,
+    duration: string,
+    reason: string,
+  ): Promise<boolean> {
+    const detail = await this.getCharacterDetail(guid);
+    if (!detail) {
+      logger.error({ guid }, 'Character not found for ban');
+      return false;
+    }
+
+    try {
+      await soapService.sendCommand(`.ban character ${detail.name} ${duration} ${reason}`);
+      await cacheService.delPattern('characters:*');
+      logger.info(
+        { guid, operatorId, name: detail.name, duration, reason },
+        'Character ban command sent',
+      );
+      return true;
+    } catch (error) {
+      logger.error({ error, guid, name: detail.name }, 'Failed to send character ban command');
+      return false;
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import { Request, Response, Router } from 'express';
-import { param, query, validationResult } from 'express-validator';
+import { param, query, body, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
 import { requireGmLevel } from '../middleware/gm-guard';
 import { characterService } from '../services/character.service';
@@ -54,6 +54,59 @@ router.get(
     }
 
     res.json({ success: true, data: detail });
+  },
+);
+
+router.post(
+  '/:guid/ban',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('guid').isInt().toInt(),
+    body('duration').isString().trim().notEmpty(),
+    body('reason').isString().trim().notEmpty(),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const { duration, reason } = req.body;
+    const success = await characterService.banCharacter(guid, (req as any).user?.id || 0, duration, reason);
+
+    if (!success) {
+      res.status(500).json({ success: false, error: 'Failed to ban character' });
+      return;
+    }
+
+    res.json({ success: true, data: { banned: true } });
+  },
+);
+
+router.post(
+  '/:guid/unban',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('guid').isInt().toInt()],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.status(400).json({ success: false, error: 'Invalid character GUID' });
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const success = await characterService.unbanCharacter(guid, (req as any).user?.id || 0);
+
+    if (!success) {
+      res.status(500).json({ success: false, error: 'Failed to unban character' });
+      return;
+    }
+
+    res.json({ success: true, data: { unbanned: true } });
   },
 );
 

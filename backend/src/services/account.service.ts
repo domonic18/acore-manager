@@ -64,6 +64,16 @@ export interface AccountListResult {
   pageSize: number;
 }
 
+export interface GmAccountItem {
+  accountId: number;
+  username: string;
+  email: string;
+  gmlevel: number;
+  realmId: number;
+  realmName: string;
+  comment?: string;
+}
+
 export class AccountService {
   async listAccounts(
     page: number = 1,
@@ -297,6 +307,38 @@ export class AccountService {
       action: item.action,
       comment: item.comment,
     }));
+  }
+
+  async listGmAccounts(): Promise<GmAccountItem[]> {
+    const cacheKey = 'accounts:gm-list';
+    const cached = await cacheService.get<GmAccountItem[]>(cacheKey);
+    if (cached) return cached;
+
+    const result = await authDataSource.query(
+      `SELECT
+        aa.id as accountId,
+        a.username,
+        a.email,
+        aa.gmlevel,
+        aa.RealmID as realmId,
+        aa.comment
+      FROM account_access aa
+      LEFT JOIN account a ON aa.id = a.id
+      ORDER BY aa.gmlevel DESC, a.username ASC`,
+    );
+
+    const items: GmAccountItem[] = result.map((item: any) => ({
+      accountId: item.accountId,
+      username: item.username,
+      email: item.email,
+      gmlevel: item.gmlevel,
+      realmId: item.realmId,
+      realmName: item.realmId === -1 ? '所有服务器' : `服务器 ${item.realmId}`,
+      comment: item.comment,
+    }));
+
+    await cacheService.set(cacheKey, items, 300);
+    return items;
   }
 }
 

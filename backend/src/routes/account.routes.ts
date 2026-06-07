@@ -148,4 +148,14 @@ router.post(
   },
 );
 
+router.get(
+  '/gm/list',
+  authMiddleware,
+  requireGmLevel(3),
+  async (_req: Request, res: Response) => {
+    const data = await accountService.listGmAccounts();
+    res.json({ success: true, count: data.length, data });
+  },
+);
+
 export default router;

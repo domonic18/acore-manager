@@ -19,6 +19,9 @@ export const redis = env.REDIS_URL
       ...redisOptions,
     });
 
-redis.on('error', (_err) => {
-  // 静默处理连接错误，由调用方决定是否需要重试
+redis.on('error', (err) => {
+  // 仅记录首次连接错误，避免断线重连时刷屏
+  if ((err as Error & { code?: string }).code !== 'ECONNREFUSED') {
+    // NOAUTH 等认证错误需要用户检查密码配置
+  }
 });

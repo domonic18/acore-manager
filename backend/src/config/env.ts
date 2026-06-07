@@ -31,13 +31,14 @@ interface RedisConn {
 
 function parseRedisUrl(url?: string): RedisConn {
   if (!url) throw new Error('Missing required environment variable: REDIS_URL');
-  const m = url.match(/^redis:\/\/(?::([^@]*)@)?([^:/]+)(?::(\d+))?(?:\/(\d+))?\/?$/i);
+  // 支持格式: redis://host, redis://:password@host, redis://username:password@host
+  const m = url.match(/^redis:\/\/(?:(?:([^:@]*):)?([^@]*)@)?([^:/]+)(?::(\d+))?(?:\/(\d+))?\/?$/i);
   if (!m) throw new Error(`Invalid REDIS_URL format: ${url}`);
   return {
-    host: m[2],
-    port: m[3] ? parseInt(m[3], 10) : 6379,
-    password: m[1] ? decodeURIComponent(m[1]) : '',
-    db: m[4] ? parseInt(m[4], 10) : 0,
+    host: m[3],
+    port: m[4] ? parseInt(m[4], 10) : 6379,
+    password: m[2] ? decodeURIComponent(m[2]) : '',
+    db: m[5] ? parseInt(m[5], 10) : 0,
   };
 }
 

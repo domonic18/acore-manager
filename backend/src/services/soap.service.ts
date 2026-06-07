@@ -1,5 +1,5 @@
 import { request } from 'http';
-import { env } from '../config/env';
+import { soapConn } from '../config/env';
 import { logger } from '../middleware/request-logger';
 
 export class SoapService {
@@ -7,10 +7,10 @@ export class SoapService {
     return new Promise((resolve, reject) => {
       const req = request(
         {
-          hostname: env.SOAP_HOST,
-          port: env.SOAP_PORT,
+          hostname: soapConn.host,
+          port: soapConn.port,
           method: 'POST',
-          auth: `${env.SOAP_USER}:${env.SOAP_PASS}`,
+          auth: `${soapConn.user}:${soapConn.pass}`,
           timeout: 5000,
         },
         (res) => {

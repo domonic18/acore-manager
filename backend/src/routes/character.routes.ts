@@ -19,7 +19,7 @@ router.get(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      res.jsonError('Invalid request parameters', 400);
       return;
     }
 
@@ -29,7 +29,7 @@ router.get(
     const includeDeleted = req.query.includeDeleted as boolean | undefined;
 
     const result = await characterService.listCharacters(page, pageSize, search, includeDeleted);
-    res.json({ success: true, count: result.items.length, data: result });
+    res.jsonSuccess(result, result.items.length);
   },
 );
 
@@ -41,7 +41,7 @@ router.get(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid character GUID' });
+      res.jsonError('Invalid character GUID', 400);
       return;
     }
 
@@ -49,11 +49,11 @@ router.get(
     const detail = await characterService.getCharacterDetail(guid);
 
     if (!detail) {
-      res.status(404).json({ success: false, error: 'Character not found' });
+      res.jsonError('Character not found', 404);
       return;
     }
 
-    res.json({ success: true, data: detail });
+    res.jsonSuccess(detail);
   },
 );
 
@@ -69,20 +69,15 @@ router.post(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      res.jsonError('Invalid request parameters', 400);
       return;
     }
 
     const guid = parseInt(req.params.guid);
     const { duration, reason } = req.body;
-    const success = await characterService.banCharacter(guid, (req as any).user?.id || 0, duration, reason);
+    await characterService.banCharacter(guid, (req as any).user?.id || 0, duration, reason);
 
-    if (!success) {
-      res.status(500).json({ success: false, error: 'Failed to ban character' });
-      return;
-    }
-
-    res.json({ success: true, data: { banned: true } });
+    res.jsonSuccess({ banned: true });
   },
 );
 
@@ -94,19 +89,14 @@ router.post(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid character GUID' });
+      res.jsonError('Invalid character GUID', 400);
       return;
     }
 
     const guid = parseInt(req.params.guid);
-    const success = await characterService.unbanCharacter(guid, (req as any).user?.id || 0);
+    await characterService.unbanCharacter(guid, (req as any).user?.id || 0);
 
-    if (!success) {
-      res.status(500).json({ success: false, error: 'Failed to unban character' });
-      return;
-    }
-
-    res.json({ success: true, data: { unbanned: true } });
+    res.jsonSuccess({ unbanned: true });
   },
 );
 
@@ -122,20 +112,15 @@ router.post(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      res.jsonError('Invalid request parameters', 400);
       return;
     }
 
     const guid = parseInt(req.params.guid);
     const { duration, reason } = req.body;
-    const success = await characterService.muteCharacter(guid, (req as any).user?.id || 0, duration, reason);
+    await characterService.muteCharacter(guid, (req as any).user?.id || 0, duration, reason);
 
-    if (!success) {
-      res.status(500).json({ success: false, error: 'Failed to mute character' });
-      return;
-    }
-
-    res.json({ success: true, data: { muted: true } });
+    res.jsonSuccess({ muted: true });
   },
 );
 
@@ -147,19 +132,14 @@ router.post(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid character GUID' });
+      res.jsonError('Invalid character GUID', 400);
       return;
     }
 
     const guid = parseInt(req.params.guid);
-    const success = await characterService.unmuteCharacter(guid, (req as any).user?.id || 0);
+    await characterService.unmuteCharacter(guid, (req as any).user?.id || 0);
 
-    if (!success) {
-      res.status(500).json({ success: false, error: 'Failed to unmute character' });
-      return;
-    }
-
-    res.json({ success: true, data: { unmuted: true } });
+    res.jsonSuccess({ unmuted: true });
   },
 );
 

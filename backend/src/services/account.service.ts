@@ -252,21 +252,20 @@ export class AccountService {
     }));
   }
 
-  async unbanAccount(accountId: number, operatorId: number): Promise<boolean> {
+  async unbanAccount(accountId: number, operatorId: number): Promise<void> {
     const account = await this.getAccountDetail(accountId);
     if (!account) {
       logger.error({ accountId }, 'Account not found for unban');
-      return false;
+      throw new Error('Account not found');
     }
 
     try {
       await soapService.sendCommand(`.unban account ${account.username}`);
       await cacheService.delPattern('accounts:list:*');
       logger.info({ accountId, operatorId, username: account.username }, 'Account unban command sent');
-      return true;
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to send account unban command');
-      return false;
+      throw new Error('Failed to unban account');
     }
   }
 
@@ -275,11 +274,11 @@ export class AccountService {
     operatorId: number,
     duration: string,
     reason: string,
-  ): Promise<boolean> {
+  ): Promise<void> {
     const account = await this.getAccountDetail(accountId);
     if (!account) {
       logger.error({ accountId }, 'Account not found for ban');
-      return false;
+      throw new Error('Account not found');
     }
 
     try {
@@ -289,10 +288,9 @@ export class AccountService {
         { accountId, operatorId, username: account.username, duration, reason },
         'Account ban command sent',
       );
-      return true;
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to send account ban command');
-      return false;
+      throw new Error('Failed to ban account');
     }
   }
 
@@ -354,11 +352,11 @@ export class AccountService {
     accountId: number,
     operatorId: number,
     newPassword: string,
-  ): Promise<boolean> {
+  ): Promise<void> {
     const account = await this.getAccountDetail(accountId);
     if (!account) {
       logger.error({ accountId }, 'Account not found for password change');
-      return false;
+      throw new Error('Account not found');
     }
 
     try {
@@ -367,10 +365,9 @@ export class AccountService {
         { accountId, operatorId, username: account.username },
         'Account password changed',
       );
-      return true;
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to change account password');
-      return false;
+      throw new Error('Failed to change password');
     }
   }
 }

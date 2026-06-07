@@ -1,24 +1,8 @@
 import { useState } from 'react';
 import { useIpBanList, useBanIp, useUnbanIp } from '@/features/ip-ban/hooks/useIpBan';
 import { Dialog } from '@/shared/components/Dialog';
-
-const banReasonOptions = [
-  { value: '违规', label: '违规' },
-  { value: '使用外挂/作弊', label: '使用外挂/作弊' },
-  { value: '恶意刷屏', label: '恶意刷屏' },
-  { value: '辱骂他人', label: '辱骂他人' },
-  { value: '欺诈/诈骗', label: '欺诈/诈骗' },
-  { value: '恶意利用BUG', label: '恶意利用BUG' },
-  { value: '__custom__', label: '其他（手动输入）' },
-];
-
-const durationLabels: Record<string, string> = {
-  '1h': '1小时',
-  '1d': '1天',
-  '7d': '7天',
-  '30d': '30天',
-  '-1': '永久',
-};
+import { banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
+import { toast } from '@/shared/utils/toast.util';
 
 export default function IpBanPage() {
   const [page, setPage] = useState(1);
@@ -72,10 +56,10 @@ export default function IpBanPage() {
         onSuccess: () => {
           setShowConfirmDialog(false);
           setIp('');
-          alert('IP 封禁成功');
+          toast.success('IP 封禁成功');
         },
         onError: (error: any) => {
-          alert(error?.message || '封禁失败，请检查 SOAP 服务器连接');
+          toast.error(error?.message || '封禁失败，请检查 SOAP 服务器连接');
         },
       }
     );
@@ -91,10 +75,10 @@ export default function IpBanPage() {
       onSuccess: () => {
         setShowUnbanDialog(false);
         setUnbanTarget('');
-        alert('解封成功');
+        toast.success('解封成功');
       },
       onError: (error: any) => {
-        alert(error?.message || '解封失败，请检查 SOAP 服务器连接');
+        toast.error(error?.message || '解封失败，请检查 SOAP 服务器连接');
       },
     });
   };

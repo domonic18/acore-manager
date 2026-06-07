@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useBroadcast } from '@/features/gm-tool/hooks/useGmTool';
+import { toast } from '@/shared/utils/toast.util';
 
 export default function GmToolPage() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
@@ -9,7 +10,7 @@ export default function GmToolPage() {
     if (!broadcastMessage.trim()) return;
     await broadcastMutation.mutateAsync(broadcastMessage);
     setBroadcastMessage('');
-    alert('广播发送成功');
+    toast.success('广播发送成功');
   };
 
   return (

@@ -72,25 +72,23 @@ export class IpBanService {
     reason: string,
     operatorId: number,
     _bannedBy: string = 'Admin',
-  ): Promise<boolean> {
+  ): Promise<void> {
     try {
       await soapService.sendCommand(`.ban ip ${ip} ${duration} ${reason}`);
       logger.info({ ip, operatorId, duration, reason }, 'IP ban command sent');
-      return true;
     } catch (error) {
       logger.error({ error, ip }, 'Failed to send IP ban command');
-      return false;
+      throw new Error('Failed to ban IP');
     }
   }
 
-  async unbanIp(ip: string, operatorId: number): Promise<boolean> {
+  async unbanIp(ip: string, operatorId: number): Promise<void> {
     try {
       await soapService.sendCommand(`.unban ip ${ip}`);
       logger.info({ ip, operatorId }, 'IP unban command sent');
-      return true;
     } catch (error) {
       logger.error({ error, ip }, 'Failed to send IP unban command');
-      return false;
+      throw new Error('Failed to unban IP');
     }
   }
 }

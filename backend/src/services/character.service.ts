@@ -204,21 +204,20 @@ export class CharacterService {
     };
   }
 
-  async unbanCharacter(guid: number, operatorId: number): Promise<boolean> {
+  async unbanCharacter(guid: number, operatorId: number): Promise<void> {
     const detail = await this.getCharacterDetail(guid);
     if (!detail) {
       logger.error({ guid }, 'Character not found for unban');
-      return false;
+      throw new Error('Character not found');
     }
 
     try {
       await soapService.sendCommand(`.unban character ${detail.name}`);
       await cacheService.delPattern('characters:*');
       logger.info({ guid, operatorId, name: detail.name }, 'Character unban command sent');
-      return true;
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character unban command');
-      return false;
+      throw new Error('Failed to unban character');
     }
   }
 
@@ -227,11 +226,11 @@ export class CharacterService {
     operatorId: number,
     duration: string,
     reason: string,
-  ): Promise<boolean> {
+  ): Promise<void> {
     const detail = await this.getCharacterDetail(guid);
     if (!detail) {
       logger.error({ guid }, 'Character not found for ban');
-      return false;
+      throw new Error('Character not found');
     }
 
     try {
@@ -241,10 +240,9 @@ export class CharacterService {
         { guid, operatorId, name: detail.name, duration, reason },
         'Character ban command sent',
       );
-      return true;
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character ban command');
-      return false;
+      throw new Error('Failed to ban character');
     }
   }
 
@@ -253,11 +251,11 @@ export class CharacterService {
     operatorId: number,
     duration: string,
     reason: string,
-  ): Promise<boolean> {
+  ): Promise<void> {
     const detail = await this.getCharacterDetail(guid);
     if (!detail) {
       logger.error({ guid }, 'Character not found for mute');
-      return false;
+      throw new Error('Character not found');
     }
 
     try {
@@ -267,28 +265,26 @@ export class CharacterService {
         { guid, operatorId, name: detail.name, duration, reason },
         'Character mute command sent',
       );
-      return true;
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character mute command');
-      return false;
+      throw new Error('Failed to mute character');
     }
   }
 
-  async unmuteCharacter(guid: number, operatorId: number): Promise<boolean> {
+  async unmuteCharacter(guid: number, operatorId: number): Promise<void> {
     const detail = await this.getCharacterDetail(guid);
     if (!detail) {
       logger.error({ guid }, 'Character not found for unmute');
-      return false;
+      throw new Error('Character not found');
     }
 
     try {
       await soapService.sendCommand(`.unmute ${detail.name}`);
       await cacheService.delPattern('characters:*');
       logger.info({ guid, operatorId, name: detail.name }, 'Character unmute command sent');
-      return true;
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character unmute command');
-      return false;
+      throw new Error('Failed to unmute character');
     }
   }
 }

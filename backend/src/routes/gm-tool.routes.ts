@@ -14,12 +14,12 @@ router.post(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request' });
+      res.jsonError('Invalid request', 400);
       return;
     }
 
     await gmToolService.broadcast(req.body.message);
-    res.json({ success: true, data: { success: true } });
+    res.jsonSuccess({ success: true });
   },
 );
 

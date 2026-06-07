@@ -11,7 +11,7 @@ router.get(
   requireGmLevel(1),
   async (_req, res) => {
     const data = await banlistService.listActiveBans();
-    res.json({ success: true, count: data.length, data });
+    res.jsonSuccess(data);
   },
 );
 

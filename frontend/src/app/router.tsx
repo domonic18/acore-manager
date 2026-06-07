@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { usePermission } from '@/shared/hooks/usePermission';
 import { AppLayout } from '@/shared/components/AppLayout';
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
@@ -35,6 +36,11 @@ function AuthGuard() {
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
+function GmGuard({ minLevel }: { minLevel: number }) {
+  const { hasGmLevel } = usePermission();
+  return hasGmLevel(minLevel) ? <Outlet /> : <Navigate to="/" replace />;
+}
+
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -55,11 +61,21 @@ export const router = createBrowserRouter([
           { path: 'characters/:guid', element: withSuspense(CharacterDetailPage) },
           { path: 'transactions', element: withSuspense(TransactionPage) },
           { path: 'gm-tools', element: withSuspense(GmToolPage) },
-          { path: 'gm-accounts', element: withSuspense(GmAccountPage) },
           { path: 'banlist', element: withSuspense(BanlistPage) },
           { path: 'mutes', element: withSuspense(MuteListPage) },
-          { path: 'ip-bans', element: withSuspense(IpBanPage) },
-          { path: 'audit-logs', element: withSuspense(AuditLogPage) },
+          {
+            element: <GmGuard minLevel={2} />,
+            children: [
+              { path: 'ip-bans', element: withSuspense(IpBanPage) },
+            ],
+          },
+          {
+            element: <GmGuard minLevel={3} />,
+            children: [
+              { path: 'gm-accounts', element: withSuspense(GmAccountPage) },
+              { path: 'audit-logs', element: withSuspense(AuditLogPage) },
+            ],
+          },
         ],
       },
     ],

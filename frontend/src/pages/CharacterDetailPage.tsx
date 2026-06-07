@@ -8,35 +8,7 @@ import {
   useUnmuteCharacter,
 } from '@/features/character/hooks/useCharacter';
 import { Dialog } from '@/shared/components/Dialog';
-
-const raceMap: Record<number, string> = {
-  1: '人类', 2: '兽人', 3: '矮人', 4: '暗夜精灵', 5: '亡灵',
-  6: '牛头人', 7: '侏儒', 8: '巨魔', 9: '地精', 10: '血精灵',
-  11: '德莱尼', 22: '狼人',
-};
-
-const classMap: Record<number, string> = {
-  1: '战士', 2: '圣骑士', 3: '猎人', 4: '潜行者', 5: '牧师',
-  6: '死亡骑士', 7: '萨满', 8: '法师', 9: '术士', 11: '德鲁伊',
-};
-
-const banReasonOptions = [
-  { value: '违规', label: '违规' },
-  { value: '使用外挂/作弊', label: '使用外挂/作弊' },
-  { value: '恶意刷屏', label: '恶意刷屏' },
-  { value: '辱骂他人', label: '辱骂他人' },
-  { value: '欺诈/诈骗', label: '欺诈/诈骗' },
-  { value: '恶意利用BUG', label: '恶意利用BUG' },
-  { value: '__custom__', label: '其他（手动输入）' },
-];
-
-const durationLabels: Record<string, string> = {
-  '1h': '1小时',
-  '1d': '1天',
-  '7d': '7天',
-  '30d': '30天',
-  '-1': '永久',
-};
+import { raceMap, classMap, banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
 
 export default function CharacterDetailPage() {
   const { guid } = useParams<{ guid: string }>();
@@ -58,6 +30,9 @@ export default function CharacterDetailPage() {
   const [muteDuration, setMuteDuration] = useState('1h');
   const [muteReasonType, setMuteReasonType] = useState('恶意刷屏');
   const [muteCustomReason, setMuteCustomReason] = useState('');
+
+  const [showUnbanConfirmDialog, setShowUnbanConfirmDialog] = useState(false);
+  const [showUnmuteConfirmDialog, setShowUnmuteConfirmDialog] = useState(false);
 
   const isCustomReason = banReasonType === '__custom__';
   const finalBanReason = isCustomReason ? customReason : banReasonType;
@@ -91,9 +66,14 @@ export default function CharacterDetailPage() {
     );
   };
 
-  const handleUnban = () => {
-    if (!confirm('确认解禁该角色？')) return;
-    unbanMutation.mutate(characterGuid);
+  const handleOpenUnbanConfirm = () => {
+    setShowUnbanConfirmDialog(true);
+  };
+
+  const handleExecuteUnban = () => {
+    unbanMutation.mutate(characterGuid, {
+      onSuccess: () => setShowUnbanConfirmDialog(false),
+    });
   };
 
   const handleOpenMuteDialog = () => {
@@ -115,9 +95,14 @@ export default function CharacterDetailPage() {
     );
   };
 
-  const handleUnmute = () => {
-    if (!confirm('确认解除该角色的聊天禁言？')) return;
-    unmuteMutation.mutate(characterGuid);
+  const handleOpenUnmuteConfirm = () => {
+    setShowUnmuteConfirmDialog(true);
+  };
+
+  const handleExecuteUnmute = () => {
+    unmuteMutation.mutate(characterGuid, {
+      onSuccess: () => setShowUnmuteConfirmDialog(false),
+    });
   };
 
   if (isLoading) {
@@ -158,7 +143,7 @@ export default function CharacterDetailPage() {
             禁言聊天
           </button>
           <button
-            onClick={handleUnmute}
+            onClick={handleOpenUnmuteConfirm}
             disabled={unmuteMutation.isPending}
             className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
           >
@@ -166,7 +151,7 @@ export default function CharacterDetailPage() {
           </button>
           {activeBans.length > 0 ? (
             <button
-              onClick={handleUnban}
+              onClick={handleOpenUnbanConfirm}
               disabled={unbanMutation.isPending}
               className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
@@ -450,6 +435,62 @@ export default function CharacterDetailPage() {
             />
           </div>
         )}
+      </Dialog>
+
+      {/* 解禁角色确认对话框 */}
+      <Dialog
+        open={showUnbanConfirmDialog}
+        onClose={() => setShowUnbanConfirmDialog(false)}
+        title="确认解禁角色"
+        footer={
+          <>
+            <button
+              onClick={() => setShowUnbanConfirmDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleExecuteUnban}
+              disabled={unbanMutation.isPending}
+              className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              {unbanMutation.isPending ? '处理中...' : '确认解禁'}
+            </button>
+          </>
+        }
+      >
+        <div className="text-sm text-muted-foreground">
+          确认要解禁角色 <span className="font-medium text-foreground">{character?.name}</span> 吗？
+        </div>
+      </Dialog>
+
+      {/* 解除禁言确认对话框 */}
+      <Dialog
+        open={showUnmuteConfirmDialog}
+        onClose={() => setShowUnmuteConfirmDialog(false)}
+        title="确认解除禁言"
+        footer={
+          <>
+            <button
+              onClick={() => setShowUnmuteConfirmDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleExecuteUnmute}
+              disabled={unmuteMutation.isPending}
+              className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {unmuteMutation.isPending ? '处理中...' : '确认解除'}
+            </button>
+          </>
+        }
+      >
+        <div className="text-sm text-muted-foreground">
+          确认要解除角色 <span className="font-medium text-foreground">{character?.name}</span> 的聊天禁言吗？
+        </div>
       </Dialog>
     </div>
   );

@@ -71,7 +71,11 @@ export default function MuteListPage() {
                     {mute.muteReason || '-'}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                    {new Date(mute.muteTime).toLocaleString('zh-CN')}
+                    {mute.muteTime?.startsWith('下次登录生效')
+                      ? mute.muteTime
+                      : mute.muteTime
+                        ? new Date(mute.muteTime).toLocaleString('zh-CN')
+                        : '-'}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {mute.mutedBy || '-'}

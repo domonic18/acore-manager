@@ -87,7 +87,11 @@ export default function BanlistPage() {
                     {new Date(ban.banDate).toLocaleString('zh-CN')}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                    {new Date(ban.unbanDate).toLocaleString('zh-CN')}
+                    {new Date(ban.banDate).getTime() === new Date(ban.unbanDate).getTime() ? (
+                      <span className="text-red-400">永久</span>
+                    ) : (
+                      new Date(ban.unbanDate).toLocaleString('zh-CN')
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {ban.bannedBy || '-'}

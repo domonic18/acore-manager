@@ -233,7 +233,11 @@ export default function CharacterDetailPage() {
                       {new Date(ban.banDate).toLocaleString('zh-CN')}
                     </td>
                     <td className="px-3 py-2">
-                      {new Date(ban.unbanDate).toLocaleString('zh-CN')}
+                      {new Date(ban.banDate).getTime() === new Date(ban.unbanDate).getTime() ? (
+                        <span className="text-red-400">永久</span>
+                      ) : (
+                        new Date(ban.unbanDate).toLocaleString('zh-CN')
+                      )}
                     </td>
                     <td className="px-3 py-2">{ban.bannedBy}</td>
                     <td className="px-3 py-2">{ban.banReason}</td>

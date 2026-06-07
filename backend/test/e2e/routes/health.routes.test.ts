@@ -1,5 +1,6 @@
 import request from 'supertest';
 import express, { Application } from 'express';
+import { responseFormatter } from '../../../src/middleware/response-formatter';
 import healthRoutes from '../../../src/routes/health.routes';
 
 describe('GET /api/health', () => {
@@ -7,6 +8,7 @@ describe('GET /api/health', () => {
 
   beforeEach(() => {
     app = express();
+    app.use(responseFormatter);
     app.use('/api/health', healthRoutes);
   });
 

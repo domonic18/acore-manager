@@ -1,3 +1,4 @@
+import { asyncHandler } from '../shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
@@ -11,7 +12,7 @@ router.post(
   authMiddleware,
   requireGmLevel(2),
   [body('message').notEmpty().trim()],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request', 400);
@@ -20,7 +21,7 @@ router.post(
 
     await gmToolService.broadcast(req.body.message);
     res.jsonSuccess({ success: true });
-  },
+  }),
 );
 
 export default router;

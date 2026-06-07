@@ -33,7 +33,7 @@ export default function BanlistPage() {
             ) : bans?.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
-                  暂无被封禁的账号或角色
+                  暂无被封禁的账号、角色或禁言记录
                 </td>
               </tr>
             ) : (
@@ -47,10 +47,12 @@ export default function BanlistPage() {
                       className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
                         ban.banType === 'account'
                           ? 'bg-red-500/20 text-red-400'
-                          : 'bg-orange-500/20 text-orange-400'
+                          : ban.banType === 'character'
+                            ? 'bg-orange-500/20 text-orange-400'
+                            : 'bg-amber-500/20 text-amber-400'
                       }`}
                     >
-                      {ban.banType === 'account' ? '账号' : '角色'}
+                      {ban.banType === 'account' ? '账号' : ban.banType === 'character' ? '角色' : '禁言'}
                     </span>
                   </td>
                   <td className="px-4 py-3">

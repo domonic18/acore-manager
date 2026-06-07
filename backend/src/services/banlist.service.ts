@@ -10,7 +10,7 @@ export interface BanlistItem {
   banReason: string;
   bannedBy: string;
   characterNames: string;
-  banType: 'account' | 'character';
+  banType: 'account' | 'character' | 'mute';
 }
 
 export class BanlistService {
@@ -58,7 +58,25 @@ export class BanlistService {
         AND cb.banreason != 'Failed to chanlledge Hardcore'`,
     );
 
-    const allBans = [...accountBans, ...characterBans];
+    // 禁言记录
+    const muteRecords = await authDataSource.query(
+      `SELECT
+        a.id as accountId,
+        a.username,
+        a.last_ip as lastIp,
+        NOW() as banDate,
+        FROM_UNIXTIME(a.mutetime) as unbanDate,
+        a.mutereason as banReason,
+        a.muteby as bannedBy,
+        GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ',') as characterNames,
+        'mute' as banType
+      FROM account a
+      LEFT JOIN acore_characters.characters c ON c.account = a.id AND c.name != ''
+      WHERE a.mutetime > UNIX_TIMESTAMP()
+      GROUP BY a.id, a.username, a.last_ip, a.mutetime, a.mutereason, a.muteby`,
+    );
+
+    const allBans = [...accountBans, ...characterBans, ...muteRecords];
 
     // 按封禁时间降序排列
     allBans.sort((a: any, b: any) => new Date(b.banDate).getTime() - new Date(a.banDate).getTime());

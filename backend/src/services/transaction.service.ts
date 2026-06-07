@@ -8,6 +8,12 @@ export interface TransactionRecord {
   date: Date;
   type: number;
   typeLabel: string;
+  senderLevel: number | null;
+  senderRace: number | null;
+  senderFaction: 'alliance' | 'horde' | null;
+  receiverLevel: number | null;
+  receiverRace: number | null;
+  receiverFaction: 'alliance' | 'horde' | null;
 }
 
 export interface TransactionListResult {
@@ -18,27 +24,12 @@ export interface TransactionListResult {
 }
 
 const TransactionTypeLabels: Record<number, string> = {
-  0: '拾取金币',
-  1: '邮寄',
-  2: '交易',
-  3: '货到付款',
-  4: '拍卖行',
-  5: '公会银行',
-  6: '修理装备',
-  7: '任务奖励',
-  8: '交易退款',
-  9: '拍卖出价',
-  10: '拍卖押金',
-  11: '拍卖手续费',
-  12: '拍卖出价退款',
-  13: '拍卖押金退款',
-  14: '公会银行取款',
-  15: '公会银行存款',
-  16: '商人买卖',
-  17: '法术花费',
-  18: '退款',
-  19: '日常任务奖励',
-  20: '额外邮件',
+  1: '货到付款',
+  2: '拍卖行',
+  3: '公会银行存款',
+  4: '公会银行取款',
+  5: '邮寄',
+  6: '交易',
 };
 
 export class TransactionService {
@@ -110,17 +101,32 @@ export class TransactionService {
 
     const items = await charactersDataSource.query(
       `SELECT
-        sender_name as senderName,
-        receiver_name as receiverName,
-        money as amount,
-        date,
-        type
-      FROM log_money
+        lm.sender_name as senderName,
+        lm.receiver_name as receiverName,
+        lm.money as amount,
+        lm.date,
+        lm.type,
+        s.level as senderLevel,
+        s.race as senderRace,
+        r.level as receiverLevel,
+        r.race as receiverRace
+      FROM log_money lm
+      LEFT JOIN characters s ON s.name = lm.sender_name AND s.name != ''
+      LEFT JOIN characters r ON r.name = lm.receiver_name AND r.name != ''
       ${whereClause}
-      ORDER BY date DESC
+      ORDER BY lm.date DESC
       LIMIT ? OFFSET ?`,
       [...params, pageSize, offset],
     );
+
+    const getFaction = (race: number | null): 'alliance' | 'horde' | null => {
+      if (race === null) return null;
+      // Alliance: Human(1), Dwarf(3), Night Elf(4), Gnome(7), Draenei(11)
+      if ([1, 3, 4, 7, 11].includes(race)) return 'alliance';
+      // Horde: Orc(2), Undead(5), Tauren(6), Troll(8), Blood Elf(10)
+      if ([2, 5, 6, 8, 10].includes(race)) return 'horde';
+      return null;
+    };
 
     const result: TransactionListResult = {
       items: items.map((item: any) => ({
@@ -130,6 +136,12 @@ export class TransactionService {
         date: item.date,
         type: item.type,
         typeLabel: TransactionTypeLabels[item.type] || `类型${item.type}`,
+        senderLevel: item.senderLevel ?? null,
+        senderRace: item.senderRace ?? null,
+        senderFaction: getFaction(item.senderRace ?? null),
+        receiverLevel: item.receiverLevel ?? null,
+        receiverRace: item.receiverRace ?? null,
+        receiverFaction: getFaction(item.receiverRace ?? null),
       })),
       total,
       page,

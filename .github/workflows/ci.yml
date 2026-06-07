@@ -25,6 +25,10 @@ on:
           - 'true'
 
 env:
+  # 强制 GitHub Actions 使用 Node.js 24 runtime（actions/checkout, actions/setup-node 等）
+  # 解决 "Node.js 20 actions are deprecated" 弃用警告
+  # 参考: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   NODE_VERSION: '20'
   REGISTRY: ccr.ccs.tencentyun.com
   NAMESPACE: ${{ secrets.TCR_NAMESPACE }}

@@ -1,7 +1,6 @@
-import { charactersDataSource } from '../config/database';
-import { authDataSource } from '../config/database';
 import { cacheService } from './cache.service';
 import { logger } from '../middleware/request-logger';
+import { dashboardRepository } from '../repositories/dashboard.repository';
 
 export interface DashboardStats {
   onlinePlayers: number;
@@ -18,26 +17,14 @@ export class DashboardService {
     }
 
     try {
-      const onlineResult = await charactersDataSource.query(
-        'SELECT COUNT(*) as count FROM characters WHERE online = 1',
-      );
-      const onlinePlayers = parseInt(onlineResult[0]?.count || '0', 10);
+      const onlinePlayers = await dashboardRepository.getOnlinePlayersCount();
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayStr = today.toISOString().slice(0, 10);
 
-      const newAccountsResult = await authDataSource.query(
-        'SELECT COUNT(*) as count FROM account WHERE DATE(joindate) = ?',
-        [todayStr],
-      );
-      const newAccountsToday = parseInt(newAccountsResult[0]?.count || '0', 10);
-
-      const activeAccountsResult = await authDataSource.query(
-        'SELECT COUNT(*) as count FROM account WHERE DATE(last_login) = ?',
-        [todayStr],
-      );
-      const activeAccountsToday = parseInt(activeAccountsResult[0]?.count || '0', 10);
+      const newAccountsToday = await dashboardRepository.getNewAccountsToday(todayStr);
+      const activeAccountsToday = await dashboardRepository.getActiveAccountsToday(todayStr);
 
       const stats: DashboardStats = {
         onlinePlayers,

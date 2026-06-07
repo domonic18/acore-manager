@@ -1,5 +1,5 @@
-import { authDataSource } from '../config/database';
 import { cacheService } from './cache.service';
+import { banlistRepository } from '../repositories/banlist.repository';
 
 export interface BanlistItem {
   accountId: number;
@@ -20,43 +20,10 @@ export class BanlistService {
     if (cached) return cached;
 
     // 账号封禁
-    const accountBans = await authDataSource.query(
-      `SELECT
-        ab.id as accountId,
-        a.username,
-        a.last_ip as lastIp,
-        ab.bandate as banDate,
-        ab.unbandate as unbanDate,
-        ab.banreason as banReason,
-        ab.bannedby as bannedBy,
-        GROUP_CONCAT(c.name ORDER BY c.name SEPARATOR ',') as characterNames,
-        'account' as banType
-      FROM account_banned ab
-      LEFT JOIN account a ON ab.id = a.id
-      LEFT JOIN acore_characters.characters c ON c.account = a.id AND c.name != ''
-      WHERE ab.active = 1
-        AND ab.banreason != 'Failed to chanlledge Hardcore'
-      GROUP BY ab.id, a.username, a.last_ip, ab.bandate, ab.unbandate, ab.banreason, ab.bannedby`,
-    );
+    const accountBans = await banlistRepository.listActiveAccountBans();
 
     // 角色封禁
-    const characterBans = await authDataSource.query(
-      `SELECT
-        c.account as accountId,
-        a.username,
-        a.last_ip as lastIp,
-        cb.bandate as banDate,
-        cb.unbandate as unbanDate,
-        cb.banreason as banReason,
-        cb.bannedby as bannedBy,
-        c.name as characterNames,
-        'character' as banType
-      FROM acore_characters.character_banned cb
-      LEFT JOIN acore_characters.characters c ON cb.guid = c.guid
-      LEFT JOIN account a ON c.account = a.id
-      WHERE cb.active = 1
-        AND cb.banreason != 'Failed to chanlledge Hardcore'`,
-    );
+    const characterBans = await banlistRepository.listActiveCharacterBans();
 
     const allBans = [...accountBans, ...characterBans];
 

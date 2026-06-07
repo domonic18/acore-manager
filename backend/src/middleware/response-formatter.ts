@@ -10,17 +10,17 @@ export interface ApiResponse<T> {
 declare global {
   namespace Express {
     interface Response {
-      jsonSuccess: <T>(data: T) => void;
+      jsonSuccess: <T>(data: T, count?: number) => void;
       jsonError: (message: string, status?: number) => void;
     }
   }
 }
 
 export function responseFormatter(req: Request, res: Response, next: NextFunction): void {
-  res.jsonSuccess = <T>(data: T): void => {
+  res.jsonSuccess = <T>(data: T, count?: number): void => {
     const response: ApiResponse<T> = {
       success: true,
-      count: Array.isArray(data) ? data.length : undefined,
+      count: count !== undefined ? count : Array.isArray(data) ? data.length : undefined,
       data,
     };
     res.json(response);

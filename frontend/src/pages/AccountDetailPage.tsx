@@ -9,35 +9,8 @@ import {
   useChangePassword,
 } from '@/features/account/hooks/useAccount';
 import { Dialog } from '@/shared/components/Dialog';
-
-const raceMap: Record<number, string> = {
-  1: '人类', 2: '兽人', 3: '矮人', 4: '暗夜精灵', 5: '亡灵',
-  6: '牛头人', 7: '侏儒', 8: '巨魔', 9: '地精', 10: '血精灵',
-  11: '德莱尼', 22: '狼人',
-};
-
-const classMap: Record<number, string> = {
-  1: '战士', 2: '圣骑士', 3: '猎人', 4: '潜行者', 5: '牧师',
-  6: '死亡骑士', 7: '萨满', 8: '法师', 9: '术士', 11: '德鲁伊',
-};
-
-const banReasonOptions = [
-  { value: '违规', label: '违规' },
-  { value: '使用外挂/作弊', label: '使用外挂/作弊' },
-  { value: '恶意刷屏', label: '恶意刷屏' },
-  { value: '辱骂他人', label: '辱骂他人' },
-  { value: '欺诈/诈骗', label: '欺诈/诈骗' },
-  { value: '恶意利用BUG', label: '恶意利用BUG' },
-  { value: '__custom__', label: '其他（手动输入）' },
-];
-
-const durationLabels: Record<string, string> = {
-  '1h': '1小时',
-  '1d': '1天',
-  '7d': '7天',
-  '30d': '30天',
-  '-1': '永久',
-};
+import { raceMap, classMap, banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
+import { toast } from '@/shared/utils/toast.util';
 
 function formatMuteTime(muteTime: number): string {
   if (!muteTime || muteTime <= 0) return '-';
@@ -77,6 +50,9 @@ export default function AccountDetailPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // 解封确认对话框状态
+  const [showUnbanConfirmDialog, setShowUnbanConfirmDialog] = useState(false);
+
   const isCustomReason = banReasonType === '__custom__';
   const finalBanReason = isCustomReason ? customReason : banReasonType;
   const canProceed = !isCustomReason || customReason.trim().length > 0;
@@ -101,20 +77,28 @@ export default function AccountDetailPage() {
       {
         onSuccess: () => {
           setShowConfirmDialog(false);
-          alert('封禁操作成功');
+          toast.success('封禁操作成功');
         },
-        onError: (error: any) => {
-          alert(error?.message || '封禁失败，请检查 SOAP 服务器连接');
+        onError: (error: Error) => {
+          toast.error(error.message || '封禁失败，请检查 SOAP 服务器连接');
         },
       }
     );
   };
 
-  const handleUnban = () => {
-    if (!confirm('确认解禁该账号？')) return;
+  const handleOpenUnbanConfirm = () => {
+    setShowUnbanConfirmDialog(true);
+  };
+
+  const handleExecuteUnban = () => {
     unbanMutation.mutate(accountId, {
-      onSuccess: () => alert('解禁成功'),
-      onError: (error: any) => alert(error?.message || '解禁失败，请检查 SOAP 服务器连接'),
+      onSuccess: () => {
+        setShowUnbanConfirmDialog(false);
+        toast.success('解禁成功');
+      },
+      onError: (error: Error) => {
+        toast.error(error.message || '解禁失败，请检查 SOAP 服务器连接');
+      },
     });
   };
 
@@ -127,10 +111,10 @@ export default function AccountDetailPage() {
           setShowPasswordDialog(false);
           setNewPassword('');
           setConfirmPassword('');
-          alert('密码修改成功');
+          toast.success('密码修改成功');
         },
-        onError: (error: any) => {
-          alert(error?.message || '密码修改失败，请检查 SOAP 服务器连接');
+        onError: (error: Error) => {
+          toast.error(error.message || '密码修改失败，请检查 SOAP 服务器连接');
         },
       }
     );
@@ -176,7 +160,7 @@ export default function AccountDetailPage() {
           </button>
           {activeBans.length > 0 ? (
             <button
-              onClick={handleUnban}
+              onClick={handleOpenUnbanConfirm}
               disabled={unbanMutation.isPending}
               className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
@@ -521,6 +505,34 @@ export default function AccountDetailPage() {
           {confirmPassword && newPassword !== confirmPassword && (
             <p className="text-xs text-red-400 mt-1">两次输入的密码不一致</p>
           )}
+        </div>
+      </Dialog>
+
+      {/* 解禁确认对话框 */}
+      <Dialog
+        open={showUnbanConfirmDialog}
+        onClose={() => setShowUnbanConfirmDialog(false)}
+        title="确认解禁"
+        footer={
+          <>
+            <button
+              onClick={() => setShowUnbanConfirmDialog(false)}
+              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleExecuteUnban}
+              disabled={unbanMutation.isPending}
+              className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              {unbanMutation.isPending ? '处理中...' : '确认解禁'}
+            </button>
+          </>
+        }
+      >
+        <div className="text-sm text-muted-foreground mb-4">
+          确认要解禁账号 <span className="font-medium text-foreground">{account?.username}</span> 吗？
         </div>
       </Dialog>
     </div>

@@ -14,7 +14,7 @@ router.post(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request' });
+      res.jsonError('Invalid request', 400);
       return;
     }
 
@@ -22,16 +22,16 @@ router.post(
     const result = await authService.login(username, password);
 
     if (!result) {
-      res.status(401).json({ success: false, error: 'Invalid username or password' });
+      res.jsonError('Invalid username or password', 401);
       return;
     }
 
-    res.json({ success: true, data: result });
+    res.jsonSuccess(result);
   },
 );
 
 router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
-  res.json({ success: true, data: req.user });
+  res.jsonSuccess(req.user);
 });
 
 export default router;

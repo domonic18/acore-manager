@@ -21,7 +21,7 @@ router.get(
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      res.jsonError('Invalid request parameters', 400);
       return;
     }
 
@@ -35,7 +35,7 @@ router.get(
       endDate: req.query.endDate as string | undefined,
     });
 
-    res.json({ success: true, count: result.items.length, data: result });
+    res.jsonSuccess(result, result.items.length);
   },
 );
 

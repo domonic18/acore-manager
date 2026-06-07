@@ -62,6 +62,11 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      - name: Test / 运行测试
+        if: github.event.inputs.skip_test != 'true'
+        working-directory: frontend
+        run: npm test
+
       - name: Build / 构建
         working-directory: frontend
         run: npm run build

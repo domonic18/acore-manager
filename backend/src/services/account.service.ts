@@ -40,6 +40,7 @@ export interface AccountDetail {
   muteTime: number;
   muteReason: string;
   totalTime: number;
+  characterCount: number;
 }
 
 export interface BanRecord {
@@ -162,9 +163,16 @@ export class AccountService {
         a.failed_logins as failedLogins,
         a.mutetime as muteTime,
         a.mutereason as muteReason,
-        a.totaltime as totalTime
+        a.totaltime as totalTime,
+        COALESCE(ch.char_count, 0) as characterCount
       FROM account a
       LEFT JOIN account_access aa ON a.id = aa.id
+      LEFT JOIN (
+        SELECT account, COUNT(*) as char_count
+        FROM acore_characters.characters
+        WHERE name != ''
+        GROUP BY account
+      ) ch ON a.id = ch.account
       WHERE a.id = ?`,
       [accountId],
     );
@@ -188,6 +196,7 @@ export class AccountService {
       muteTime: item.muteTime,
       muteReason: item.muteReason,
       totalTime: item.totalTime,
+      characterCount: parseInt(item.characterCount || '0', 10),
     };
   }
 
@@ -206,8 +215,8 @@ export class AccountService {
     );
 
     return result.map((item: any) => ({
-      banDate: item.banDate,
-      unbanDate: item.unbanDate,
+      banDate: new Date(item.banDate * 1000),
+      unbanDate: new Date(item.unbanDate * 1000),
       bannedBy: item.bannedBy,
       banReason: item.banReason,
       active: item.active,

@@ -55,8 +55,8 @@ export class IpBanService {
     return {
       items: items.map((item: any) => ({
         ip: item.ip,
-        banDate: item.banDate,
-        unbanDate: item.unbanDate,
+        banDate: new Date(item.banDate * 1000),
+        unbanDate: new Date(item.unbanDate * 1000),
         bannedBy: item.bannedBy,
         banReason: item.banReason,
       })),

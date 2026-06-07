@@ -5,8 +5,8 @@ export interface BanlistItem {
   accountId: number;
   username: string;
   lastIp: string;
-  banDate: string;
-  unbanDate: string;
+  banDate: Date;
+  unbanDate: Date;
   banReason: string;
   bannedBy: string;
   characterNames: string;
@@ -61,14 +61,14 @@ export class BanlistService {
     const allBans = [...accountBans, ...characterBans];
 
     // 按封禁时间降序排列
-    allBans.sort((a: any, b: any) => new Date(b.banDate).getTime() - new Date(a.banDate).getTime());
+    allBans.sort((a: any, b: any) => b.banDate - a.banDate);
 
     const items: BanlistItem[] = allBans.slice(0, 500).map((item: any) => ({
       accountId: item.accountId,
       username: item.username,
       lastIp: item.lastIp,
-      banDate: item.banDate,
-      unbanDate: item.unbanDate,
+      banDate: new Date(item.banDate * 1000),
+      unbanDate: new Date(item.unbanDate * 1000),
       banReason: item.banReason,
       bannedBy: item.bannedBy,
       characterNames: item.characterNames || '',

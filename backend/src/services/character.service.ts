@@ -135,8 +135,8 @@ export class CharacterService {
     );
 
     return result.map((item: any) => ({
-      banDate: item.banDate,
-      unbanDate: item.unbanDate,
+      banDate: new Date(item.banDate * 1000),
+      unbanDate: new Date(item.unbanDate * 1000),
       bannedBy: item.bannedBy,
       banReason: item.banReason,
       active: item.active,
@@ -261,7 +261,7 @@ export class CharacterService {
     }
 
     try {
-      await soapService.sendCommand(`.mute ${detail.name} ${duration}`);
+      await soapService.sendCommand(`.mute ${detail.name} ${duration} ${reason}`);
       await cacheService.delPattern('characters:*');
       logger.info(
         { guid, operatorId, name: detail.name, duration, reason },

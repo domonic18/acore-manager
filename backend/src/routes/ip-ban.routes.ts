@@ -36,14 +36,15 @@ router.post(
   authMiddleware,
   requireGmLevel(2),
   [
-    body('ip').isIP().withMessage('Invalid IP address'),
+    body('ip').trim().isIP().withMessage('无效的 IP 地址'),
     body('duration').notEmpty().trim(),
     body('reason').notEmpty().trim(),
   ],
   async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      res.status(400).json({ success: false, error: 'Invalid request parameters' });
+      const messages = errors.array().map((e) => e.msg).join('; ');
+      res.status(400).json({ success: false, error: messages });
       return;
     }
 

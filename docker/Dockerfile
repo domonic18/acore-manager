@@ -1,5 +1,6 @@
 # Stage 1: Frontend build
-FROM node:20-alpine AS frontend-builder
+# Use Debian-based image because rolldown (Vite 8 bundler) lacks musl native bindings
+FROM node:20 AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci --legacy-peer-deps

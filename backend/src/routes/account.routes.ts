@@ -15,6 +15,8 @@ router.get(
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('search').optional().trim(),
+    query('sortBy').optional().isIn(['lastLogin', 'characterCount']).trim(),
+    query('sortOrder').optional().isIn(['ASC', 'DESC']).trim(),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -26,8 +28,10 @@ router.get(
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.pageSize as string) || 20;
     const search = req.query.search as string | undefined;
+    const sortBy = req.query.sortBy as string | undefined;
+    const sortOrder = req.query.sortOrder as string | undefined;
 
-    const result = await accountService.listAccounts(page, pageSize, search);
+    const result = await accountService.listAccounts(page, pageSize, search, sortBy, sortOrder);
     res.jsonSuccess(result, result.items.length);
   }),
 );

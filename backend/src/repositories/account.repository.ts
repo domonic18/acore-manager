@@ -23,6 +23,8 @@ class AccountRepository extends BaseRepository<Account> {
     offset: number,
     pageSize: number,
     search?: string,
+    sortBy?: string,
+    sortOrder?: string,
   ): Promise<{ items: any[]; total: number }> {
     let whereClause = '';
     let params: any[] = [];
@@ -37,6 +39,16 @@ class AccountRepository extends BaseRepository<Account> {
       params,
     );
     const total = parseInt(countResult[0]?.total || '0', 10);
+
+    const allowedSortFields: Record<string, string> = {
+      lastLogin: 'a.last_login',
+      characterCount: 'characterCount',
+    };
+    const allowedOrders = ['ASC', 'DESC'];
+
+    const orderField = allowedSortFields[sortBy || ''];
+    const orderDir = allowedOrders.includes(sortOrder || '') ? sortOrder : undefined;
+    const orderBy = orderField && orderDir ? `ORDER BY ${orderField} ${orderDir}, a.id DESC` : 'ORDER BY a.id DESC';
 
     const items = await authDataSource.query(
       `SELECT
@@ -58,7 +70,7 @@ class AccountRepository extends BaseRepository<Account> {
         GROUP BY account
       ) ch ON a.id = ch.account
       ${whereClause}
-      ORDER BY a.id DESC
+      ${orderBy}
       LIMIT ? OFFSET ?`,
       [...params, pageSize, offset],
     );

@@ -63,9 +63,9 @@ describe('AccountService', () => {
         username: 'admin',
         characterCount: 2,
       });
-      expect(accountRepository.listAccounts).toHaveBeenCalledWith(0, 20, undefined);
+      expect(accountRepository.listAccounts).toHaveBeenCalledWith(0, 20, undefined, undefined, undefined);
       expect(cacheService.set).toHaveBeenCalledWith(
-        'accounts:list:1:20:',
+        'accounts:list:1:20:::',
         expect.any(Object),
         60,
       );
@@ -77,7 +77,7 @@ describe('AccountService', () => {
 
       await accountService.listAccounts(2, 10, 'test');
 
-      expect(accountRepository.listAccounts).toHaveBeenCalledWith(10, 10, 'test');
+      expect(accountRepository.listAccounts).toHaveBeenCalledWith(10, 10, 'test', undefined, undefined);
     });
   });
 

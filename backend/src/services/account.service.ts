@@ -80,15 +80,17 @@ export class AccountService {
     page: number = 1,
     pageSize: number = 20,
     search?: string,
+    sortBy?: string,
+    sortOrder?: string,
   ): Promise<AccountListResult> {
-    const cacheKey = `accounts:list:${page}:${pageSize}:${search || ''}`;
+    const cacheKey = `accounts:list:${page}:${pageSize}:${search || ''}:${sortBy || ''}:${sortOrder || ''}`;
     const cached = await cacheService.get<AccountListResult>(cacheKey);
     if (cached) {
       return cached;
     }
 
     const offset = (page - 1) * pageSize;
-    const { items, total } = await accountRepository.listAccounts(offset, pageSize, search);
+    const { items, total } = await accountRepository.listAccounts(offset, pageSize, search, sortBy, sortOrder);
 
     const result: AccountListResult = {
       items: items.map((item: any) => ({

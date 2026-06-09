@@ -58,8 +58,8 @@ export interface GmAccountItem {
 }
 
 export const accountApi = {
-  list: (params: { page?: number; pageSize?: number; search?: string }) =>
-    apiClient.get<AccountListResult>(`/api/accounts?page=${params.page || 1}&pageSize=${params.pageSize || 20}${params.search ? `&search=${encodeURIComponent(params.search)}` : ''}`),
+  list: (params: { page?: number; pageSize?: number; search?: string; sortBy?: string; sortOrder?: string }) =>
+    apiClient.get<AccountListResult>(`/api/accounts?page=${params.page || 1}&pageSize=${params.pageSize || 20}${params.search ? `&search=${encodeURIComponent(params.search)}` : ''}${params.sortBy ? `&sortBy=${params.sortBy}` : ''}${params.sortOrder ? `&sortOrder=${params.sortOrder}` : ''}`),
 
   detail: (id: number) =>
     apiClient.get<AccountDetail>(`/api/accounts/${id}`),

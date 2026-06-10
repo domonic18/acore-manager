@@ -1,3 +1,4 @@
+import { asyncHandler } from '../shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { query, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
@@ -21,7 +22,7 @@ router.get(
     query('startDate').optional().isISO8601(),
     query('endDate').optional().isISO8601(),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request parameters', 400);
@@ -42,7 +43,7 @@ router.get(
     });
 
     res.jsonSuccess(result, result.items.length);
-  },
+  }),
 );
 
 export default router;

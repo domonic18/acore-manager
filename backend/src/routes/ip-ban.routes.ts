@@ -1,3 +1,4 @@
+import { asyncHandler } from '../shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
 import { authMiddleware } from '../middleware/auth';
@@ -15,7 +16,7 @@ router.get(
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('search').optional().trim(),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request parameters', 400);
@@ -28,7 +29,7 @@ router.get(
 
     const result = await ipBanService.listIpBans(page, pageSize, search);
     res.jsonSuccess(result, result.items.length);
-  },
+  }),
 );
 
 router.post(
@@ -40,7 +41,7 @@ router.post(
     body('duration').notEmpty().trim(),
     body('reason').notEmpty().trim(),
   ],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       const messages = errors.array().map((e) => e.msg).join('; ');
@@ -57,7 +58,7 @@ router.post(
     );
 
     res.jsonSuccess({ success: true });
-  },
+  }),
 );
 
 router.delete(
@@ -65,7 +66,7 @@ router.delete(
   authMiddleware,
   requireGmLevel(2),
   [param('ip').isIP().withMessage('Invalid IP address')],
-  async (req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid IP address', 400);
@@ -76,7 +77,7 @@ router.delete(
     await ipBanService.unbanIp(ip, (req as any).user?.id || 0);
 
     res.jsonSuccess({ success: true });
-  },
+  }),
 );
 
 export default router;

@@ -64,6 +64,13 @@ describe('DashboardService', () => {
       (dashboardRepository.getMaxCharactersPerAccount as jest.Mock).mockResolvedValue(10);
       (dashboardRepository.getMinCharactersPerAccount as jest.Mock).mockResolvedValue(1);
       (dashboardRepository.getAccountsWithoutCharacters as jest.Mock).mockResolvedValue(5);
+      (dashboardRepository.getFriendDistribution as jest.Mock).mockResolvedValue([
+        { key: 0, count: 10 },
+        { key: 1, count: 5 },
+      ]);
+      (dashboardRepository.getTopCharactersByFriends as jest.Mock).mockResolvedValue([
+        { guid: 1, name: 'Alice', friendCount: 20 },
+      ]);
       (cacheService.set as jest.Mock).mockResolvedValue(undefined);
 
       const result = await dashboardService.getStats();
@@ -92,6 +99,13 @@ describe('DashboardService', () => {
           minPerAccount: 1,
           accountsWithoutCharacters: 5,
         },
+        friends: {
+          distribution: [
+            { key: 0, count: 10 },
+            { key: 1, count: 5 },
+          ],
+          topCharacters: [{ guid: 1, name: 'Alice', friendCount: 20 }],
+        },
       });
       expect(cacheService.set).toHaveBeenCalledWith('dashboard:stats', expect.any(Object), 60);
     });
@@ -116,6 +130,10 @@ describe('DashboardService', () => {
           maxPerAccount: 0,
           minPerAccount: 0,
           accountsWithoutCharacters: 0,
+        },
+        friends: {
+          distribution: [],
+          topCharacters: [],
         },
       });
       expect(logger.error).toHaveBeenCalled();

@@ -5,6 +5,12 @@ export interface DistributionItem {
   count: number;
 }
 
+export interface FriendTopCharacter {
+  guid: number;
+  name: string;
+  friendCount: number;
+}
+
 export interface DashboardStats {
   onlinePlayers: number;
   newAccountsToday: number;
@@ -19,6 +25,10 @@ export interface DashboardStats {
     maxPerAccount: number;
     minPerAccount: number;
     accountsWithoutCharacters: number;
+  };
+  friends: {
+    distribution: DistributionItem[];
+    topCharacters: FriendTopCharacter[];
   };
 }
 

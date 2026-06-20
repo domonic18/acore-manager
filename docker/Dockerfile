@@ -18,6 +18,8 @@ RUN npm run build
 # Stage 3: Production
 FROM node:20-alpine AS production
 WORKDIR /app
+# Install fonts required by svg-captcha on Alpine Linux
+RUN apk add --no-cache fontconfig ttf-dejavu
 COPY backend/package*.json ./
 RUN npm ci --legacy-peer-deps --omit=dev && npm cache clean --force
 COPY --from=backend-builder /app/backend/dist ./dist

@@ -122,6 +122,15 @@ export const env = {
   JWT_SECRET: getEnv('JWT_SECRET', 'change-me-in-production'),
   JWT_EXPIRES_IN: getEnv('JWT_EXPIRES_IN', '8h'),
 
+  // Login brute-force protection
+  LOGIN_BRUTE_FORCE_ENABLED: getEnv('LOGIN_BRUTE_FORCE_ENABLED', 'true') === 'true',
+  LOGIN_MAX_ATTEMPTS: getEnvInt('LOGIN_MAX_ATTEMPTS', 5),
+  LOGIN_LOCKOUT_MINUTES: getEnvInt('LOGIN_LOCKOUT_MINUTES', 15),
+
+  // Self-hosted captcha (SVG image based)
+  LOGIN_CAPTCHA_ENABLED: getEnv('LOGIN_CAPTCHA_ENABLED', 'false') === 'true',
+  LOGIN_CAPTCHA_TTL_SECONDS: getEnvInt('LOGIN_CAPTCHA_TTL_SECONDS', 300),
+
   // CORS
   ALLOWED_ORIGINS: getEnv('ALLOWED_ORIGINS', '*'),
 } as const;

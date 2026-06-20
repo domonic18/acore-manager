@@ -5,9 +5,9 @@ export interface DistributionItem {
   count: number;
 }
 
-export interface FriendTopAccount {
-  accountId: number;
-  username: string;
+export interface FriendTopCharacter {
+  guid: number;
+  name: string;
   friendCount: number;
 }
 
@@ -28,7 +28,7 @@ export interface DashboardStats {
   };
   friends: {
     distribution: DistributionItem[];
-    topAccounts: FriendTopAccount[];
+    topCharacters: FriendTopCharacter[];
   };
 }
 

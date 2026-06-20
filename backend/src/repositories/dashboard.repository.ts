@@ -109,21 +109,20 @@ class DashboardRepository {
     }));
   }
 
-  async getTopAccountsByFriends(limit: number = 5): Promise<{ accountId: number; username: string; friendCount: number }[]> {
-    const result = await authDataSource.query(
-      `SELECT a.id as accountId, a.username, COUNT(cs.friend) as friendCount
-      FROM account a
-      JOIN \`${env.DB_CHARACTERS}\`.characters c ON a.id = c.account
-      JOIN \`${env.DB_CHARACTERS}\`.\`character_social\` cs ON c.guid = cs.guid AND cs.flags = 1
+  async getTopCharactersByFriends(limit: number = 5): Promise<{ guid: number; name: string; friendCount: number }[]> {
+    const result = await charactersDataSource.query(
+      `SELECT c.guid, c.name, COUNT(cs.friend) as friendCount
+      FROM characters c
+      JOIN \`character_social\` cs ON c.guid = cs.guid AND cs.flags = 1
       WHERE c.account != 0
-      GROUP BY a.id, a.username
+      GROUP BY c.guid, c.name
       ORDER BY friendCount DESC
       LIMIT ?`,
       [limit],
     );
-    return result.map((row: { accountId: number; username: string; friendCount: string }) => ({
-      accountId: row.accountId,
-      username: row.username,
+    return result.map((row: { guid: number; name: string; friendCount: string }) => ({
+      guid: row.guid,
+      name: row.name,
       friendCount: parseInt(row.friendCount, 10),
     }));
   }

@@ -1,6 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
-import type { DistributionItem, FriendTopAccount } from '../api/dashboard.api';
+import type { DistributionItem, FriendTopCharacter } from '../api/dashboard.api';
 
 const FRIEND_BUCKET_LABELS: Record<number, string> = {
   0: '0',
@@ -33,11 +33,11 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Toolti
 
 interface FriendStatsProps {
   distribution: DistributionItem[];
-  topAccounts: FriendTopAccount[];
+  topCharacters: FriendTopCharacter[];
   loading?: boolean;
 }
 
-export default function FriendStats({ distribution, topAccounts, loading = false }: FriendStatsProps) {
+export default function FriendStats({ distribution, topCharacters, loading = false }: FriendStatsProps) {
   const navigate = useNavigate();
 
   if (loading) {
@@ -88,18 +88,18 @@ export default function FriendStats({ distribution, topAccounts, loading = false
         </div>
       </div>
 
-      {/* Top 5 Accounts by Friends */}
+      {/* Top 5 Characters by Friends */}
       <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="text-sm font-medium mb-4">好友数量 Top 5 账号</h3>
+        <h3 className="text-sm font-medium mb-4">好友数量 Top 5 角色</h3>
         <div className="space-y-3">
-          {topAccounts.length === 0 ? (
+          {topCharacters.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-12">暂无数据</p>
           ) : (
-            topAccounts.map((account, index) => (
+            topCharacters.map((character, index) => (
               <div
-                key={account.accountId}
+                key={character.guid}
                 className="flex items-center justify-between rounded-md bg-muted/50 px-4 py-3 cursor-pointer hover:bg-muted transition-colors"
-                onClick={() => navigate(`/accounts/${account.accountId}`)}
+                onClick={() => navigate(`/characters/${character.guid}`)}
               >
                 <div className="flex items-center gap-3">
                   <span
@@ -111,10 +111,10 @@ export default function FriendStats({ distribution, topAccounts, loading = false
                   >
                     {index + 1}
                   </span>
-                  <span className="text-sm font-medium">{account.username}</span>
+                  <span className="text-sm font-medium">{character.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-lg font-bold">{account.friendCount}</span>
+                  <span className="text-lg font-bold">{character.friendCount}</span>
                   <span className="text-xs text-muted-foreground">好友</span>
                 </div>
               </div>

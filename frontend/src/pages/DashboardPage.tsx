@@ -63,7 +63,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold mb-4">好友统计</h2>
         <FriendStats
           distribution={stats?.friends?.distribution ?? []}
-          topAccounts={stats?.friends?.topAccounts ?? []}
+          topCharacters={stats?.friends?.topCharacters ?? []}
           loading={isLoading}
         />
       </div>

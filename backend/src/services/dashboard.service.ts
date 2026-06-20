@@ -2,9 +2,9 @@ import { cacheService } from './cache.service';
 import { logger } from '../middleware/request-logger';
 import { dashboardRepository, type DistributionItem } from '../repositories/dashboard.repository';
 
-export interface FriendTopAccount {
-  accountId: number;
-  username: string;
+export interface FriendTopCharacter {
+  guid: number;
+  name: string;
   friendCount: number;
 }
 
@@ -25,7 +25,7 @@ export interface DashboardStats {
   };
   friends: {
     distribution: DistributionItem[];
-    topAccounts: FriendTopAccount[];
+    topCharacters: FriendTopCharacter[];
   };
 }
 
@@ -61,9 +61,9 @@ export class DashboardService {
         dashboardRepository.getAccountsWithoutCharacters(),
       ]);
 
-      const [friendDistribution, topAccountsByFriends] = await Promise.all([
+      const [friendDistribution, topCharactersByFriends] = await Promise.all([
         dashboardRepository.getFriendDistribution(),
-        dashboardRepository.getTopAccountsByFriends(5),
+        dashboardRepository.getTopCharactersByFriends(5),
       ]);
 
       const stats: DashboardStats = {
@@ -83,7 +83,7 @@ export class DashboardService {
         },
         friends: {
           distribution: friendDistribution,
-          topAccounts: topAccountsByFriends,
+          topCharacters: topCharactersByFriends,
         },
       };
 
@@ -108,7 +108,7 @@ export class DashboardService {
         },
         friends: {
           distribution: [],
-          topAccounts: [],
+          topCharacters: [],
         },
       };
     }

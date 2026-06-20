@@ -17,6 +17,7 @@ import healthRoutes from './routes/health.routes';
 import ipBanRoutes from './routes/ip-ban.routes';
 import banlistRoutes from './routes/banlist.routes';
 import muteRoutes from './routes/mute.routes';
+import rbacRoutes from './routes/rbac.routes';
 import { areDataSourcesReady } from './config/database';
 
 export function createApp(): Application {
@@ -63,6 +64,7 @@ export function createApp(): Application {
   app.use('/api/mutes', muteRoutes);
   app.use('/api/audit', auditLogRoutes);
   app.use('/api/dashboard', dashboardRoutes);
+  app.use('/api/rbac', rbacRoutes);
   app.use('/api/health', healthRoutes);
 
   const publicPath = path.join(__dirname, 'public');

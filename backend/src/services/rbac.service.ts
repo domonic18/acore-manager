@@ -3,6 +3,7 @@ import { soapService } from './soap.service';
 import { rbacRepository, RbacRole } from '../repositories/rbac.repository';
 import { RbacPermission } from '../entities/auth/rbac-permissions.entity';
 import { authDataSource } from '../config/database';
+import { logger } from '../middleware/request-logger';
 
 export const RBAC_PERMISSION_LABELS: Record<number, { label: string; desc: string; category: string }> = {
   24: { label: '双阵营角色创建', desc: '允许同一账号创建联盟和部落角色', category: '账号' },
@@ -94,7 +95,11 @@ export class RbacService {
       await queryRunner.release();
     }
 
-    await soapService.sendCommand('.reload rbac');
+    try {
+      await soapService.sendCommand('.reload rbac');
+    } catch (error) {
+      logger.warn(error, 'Failed to reload RBAC via SOAP, database changes are saved / 通过 SOAP 热加载 RBAC 失败，数据库变更已保存');
+    }
 
     await auditLogService.record({
       operatorId,

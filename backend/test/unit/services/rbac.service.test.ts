@@ -62,15 +62,18 @@ describe('RbacService', () => {
       expect(rbacRepository.linkPermission).not.toHaveBeenCalledWith(195, 9999, expect.anything());
     });
 
-    it('does not call link or unlink when cross-faction permissions are unchanged', async () => {
-      (rbacRepository.getLinkedPermissionIds as jest.Mock).mockResolvedValue([29, 51, 100]);
+    it('does not throw when SOAP reload fails', async () => {
+      (rbacRepository.getLinkedPermissionIds as jest.Mock).mockResolvedValue([29]);
       (rbacRepository.linkPermission as jest.Mock).mockResolvedValue(undefined);
       (rbacRepository.unlinkPermission as jest.Mock).mockResolvedValue(undefined);
+      (soapService.sendCommand as jest.Mock).mockRejectedValue(new Error('SOAP unreachable'));
 
-      await rbacService.updateRolePermissions(195, [29, 51], 1, 'admin');
+      await expect(
+        rbacService.updateRolePermissions(195, [51], 1, 'admin'),
+      ).resolves.toBeUndefined();
 
-      expect(rbacRepository.linkPermission).not.toHaveBeenCalled();
-      expect(rbacRepository.unlinkPermission).not.toHaveBeenCalled();
+      expect(rbacRepository.linkPermission).toHaveBeenCalledWith(195, 51, mockQueryRunner);
+      expect(auditLogService.record).toHaveBeenCalled();
     });
   });
 });

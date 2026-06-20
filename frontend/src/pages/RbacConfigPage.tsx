@@ -8,8 +8,11 @@ import {
 import { RbacPermission } from '@/features/rbac/api/rbac.api';
 import { Dialog } from '@/shared/components/Dialog';
 import { toast } from '@/shared/utils/toast.util';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const DEFAULT_ROLE_ID = 195;
+
+const FOCUSED_PERMISSION_IDS = [24, 25, 26, 27, 28, 29, 51];
 
 interface ConfirmDialogState {
   open: boolean;
@@ -20,6 +23,7 @@ interface ConfirmDialogState {
 export default function RbacConfigPage() {
   const [selectedRoleId, setSelectedRoleId] = useState<number>(DEFAULT_ROLE_ID);
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<number>>(new Set());
+  const [othersExpanded, setOthersExpanded] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
     open: false,
     permission: null,
@@ -37,21 +41,28 @@ export default function RbacConfigPage() {
     }
   }, [rolePermissionsQuery.data]);
 
-  const focusedByCategory = useMemo(() => {
+  const { focusedByCategory, others } = useMemo(() => {
     const focusedMap = new Map<string, RbacPermission[]>();
+    const othersList: RbacPermission[] = [];
     const permissions = permissionsQuery.data || [];
 
     for (const permission of permissions) {
-      const category = permission.category || '其他';
-      if (!focusedMap.has(category)) {
-        focusedMap.set(category, []);
+      if (FOCUSED_PERMISSION_IDS.includes(permission.id)) {
+        const category = permission.category || '其他';
+        if (!focusedMap.has(category)) {
+          focusedMap.set(category, []);
+        }
+        focusedMap.get(category)!.push(permission);
+      } else {
+        othersList.push(permission);
       }
-      focusedMap.get(category)!.push(permission);
     }
 
-    return Array.from(focusedMap.entries()).sort(([a], [b]) =>
+    const focusedByCategorySorted = Array.from(focusedMap.entries()).sort(([a], [b]) =>
       a.localeCompare(b, 'zh-CN'),
     );
+
+    return { focusedByCategory: focusedByCategorySorted, others: othersList };
   }, [permissionsQuery.data]);
 
   const applyToggle = (permissionId: number) => {
@@ -67,6 +78,10 @@ export default function RbacConfigPage() {
   };
 
   const handleToggle = (permission: RbacPermission) => {
+    if (!permission.editable) {
+      return;
+    }
+
     setConfirmDialog({
       open: true,
       permission,
@@ -89,7 +104,9 @@ export default function RbacConfigPage() {
     try {
       await updateMutation.mutateAsync({
         roleId: selectedRoleId,
-        permissionIds: Array.from(selectedPermissionIds),
+        permissionIds: Array.from(selectedPermissionIds).filter((id) =>
+          FOCUSED_PERMISSION_IDS.includes(id),
+        ),
       });
       toast.success('RBAC 权限已保存并已热加载');
     } catch (error) {
@@ -104,9 +121,9 @@ export default function RbacConfigPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">跨阵营交互配置</h1>
+          <h1 className="text-2xl font-bold">RBAC 权限配置</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            管理玩家默认角色的跨阵营交互权限，保存后会自动执行 .reload rbac 热加载。
+            跨阵营权限可直接设置，其他权限仅可查看，避免误操作。
           </p>
         </div>
 
@@ -153,6 +170,37 @@ export default function RbacConfigPage() {
                 </div>
               </div>
             ))}
+
+            {others.length > 0 && (
+              <div className="rounded-lg border border-border bg-card">
+                <button
+                  onClick={() => setOthersExpanded((prev) => !prev)}
+                  className="flex items-center justify-between w-full p-5 text-left"
+                >
+                  <span className="text-lg font-semibold">其他权限 ({others.length})</span>
+                  <span className="text-muted-foreground">
+                    {othersExpanded ? (
+                      <ChevronUp className="w-5 h-5" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5" />
+                    )}
+                  </span>
+                </button>
+
+                {othersExpanded && (
+                  <div className="px-5 pb-5 space-y-3 border-t border-border pt-4">
+                    {others.map((permission) => (
+                      <PermissionRow
+                        key={permission.id}
+                        permission={permission}
+                        checked={selectedPermissionIds.has(permission.id)}
+                        onToggle={() => handleToggle(permission)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between pt-4">
@@ -223,13 +271,23 @@ function PermissionRow({
   checked: boolean;
   onToggle: () => void;
 }) {
+  const disabled = !permission.editable;
+
   return (
-    <label className="flex items-start gap-3 p-3 rounded-md hover:bg-accent/50 cursor-pointer transition-colors">
+    <label
+      className={`flex items-start gap-3 p-3 rounded-md transition-colors ${
+        disabled
+          ? 'cursor-not-allowed opacity-70'
+          : 'hover:bg-accent/50 cursor-pointer'
+      }`}
+      title={disabled ? '该权限仅可查看，不可修改' : undefined}
+    >
       <input
         type="checkbox"
         checked={checked}
         onChange={onToggle}
-        className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-ring"
+        disabled={disabled}
+        className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed"
       />
       <div className="flex-1">
         <div className="flex items-center gap-2">
@@ -237,6 +295,11 @@ function PermissionRow({
           <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
             ID: {permission.id}
           </span>
+          {disabled && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+              只读
+            </span>
+          )}
         </div>
         {permission.desc && (
           <p className="text-sm text-muted-foreground mt-0.5">{permission.desc}</p>

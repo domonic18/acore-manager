@@ -20,6 +20,7 @@ export interface RbacPermissionView extends RbacPermission {
   label?: string;
   desc?: string;
   category?: string;
+  editable: boolean;
 }
 
 export class RbacService {
@@ -29,17 +30,16 @@ export class RbacService {
 
   async listPermissions(): Promise<RbacPermissionView[]> {
     const permissions = await rbacRepository.getPermissions();
-    return permissions
-      .filter((permission) => ALLOWED_PERMISSION_IDS.has(permission.id))
-      .map((permission) => {
-        const meta = RBAC_PERMISSION_LABELS[permission.id];
-        return {
-          ...permission,
-          label: meta?.label,
-          desc: meta?.desc,
-          category: meta?.category,
-        };
-      });
+    return permissions.map((permission) => {
+      const meta = RBAC_PERMISSION_LABELS[permission.id];
+      return {
+        ...permission,
+        label: meta?.label,
+        desc: meta?.desc,
+        category: meta?.category,
+        editable: ALLOWED_PERMISSION_IDS.has(permission.id),
+      };
+    });
   }
 
   async getRolePermissions(roleId: number): Promise<number[]> {
@@ -53,18 +53,21 @@ export class RbacService {
     operatorName: string,
   ): Promise<void> {
     const wanted = new Set(wantedPermissionIds.filter((id) => ALLOWED_PERMISSION_IDS.has(id)));
-    const current = new Set(await rbacRepository.getLinkedPermissionIds(roleId));
+    const currentAll = new Set(await rbacRepository.getLinkedPermissionIds(roleId));
+    const currentEditable = new Set(
+      [...currentAll].filter((id) => ALLOWED_PERMISSION_IDS.has(id)),
+    );
 
     const added: number[] = [];
     const removed: number[] = [];
 
     for (const id of wanted) {
-      if (!current.has(id)) {
+      if (!currentAll.has(id)) {
         added.push(id);
       }
     }
 
-    for (const id of current) {
+    for (const id of currentEditable) {
       if (!wanted.has(id)) {
         removed.push(id);
       }

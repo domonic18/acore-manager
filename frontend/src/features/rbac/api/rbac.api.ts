@@ -12,6 +12,7 @@ export interface RbacPermission {
   label?: string;
   desc?: string;
   category?: string;
+  editable: boolean;
 }
 
 export const rbacApi = {

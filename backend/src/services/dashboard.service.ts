@@ -2,6 +2,12 @@ import { cacheService } from './cache.service';
 import { logger } from '../middleware/request-logger';
 import { dashboardRepository, type DistributionItem } from '../repositories/dashboard.repository';
 
+export interface FriendTopCharacter {
+  guid: number;
+  name: string;
+  friendCount: number;
+}
+
 export interface DashboardStats {
   onlinePlayers: number;
   newAccountsToday: number;
@@ -16,6 +22,10 @@ export interface DashboardStats {
     maxPerAccount: number;
     minPerAccount: number;
     accountsWithoutCharacters: number;
+  };
+  friends: {
+    distribution: DistributionItem[];
+    topCharacters: FriendTopCharacter[];
   };
 }
 
@@ -51,6 +61,11 @@ export class DashboardService {
         dashboardRepository.getAccountsWithoutCharacters(),
       ]);
 
+      const [friendDistribution, topCharactersByFriends] = await Promise.all([
+        dashboardRepository.getFriendDistribution(),
+        dashboardRepository.getTopCharactersByFriends(5),
+      ]);
+
       const stats: DashboardStats = {
         onlinePlayers,
         newAccountsToday,
@@ -65,6 +80,10 @@ export class DashboardService {
           maxPerAccount,
           minPerAccount,
           accountsWithoutCharacters,
+        },
+        friends: {
+          distribution: friendDistribution,
+          topCharacters: topCharactersByFriends,
         },
       };
 
@@ -86,6 +105,10 @@ export class DashboardService {
           maxPerAccount: 0,
           minPerAccount: 0,
           accountsWithoutCharacters: 0,
+        },
+        friends: {
+          distribution: [],
+          topCharacters: [],
         },
       };
     }

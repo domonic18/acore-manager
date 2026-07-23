@@ -57,6 +57,12 @@ jobs:
         working-directory: frontend
         run: npm ci --legacy-peer-deps
 
+      - name: Generate app version / 生成应用版本号
+        id: version
+        run: |
+          APP_VERSION=$(cat VERSION)
+          echo "app_version=${APP_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
       - name: Lint / 代码检查
         if: github.event.inputs.skip_lint != 'true'
         working-directory: frontend
@@ -69,6 +75,8 @@ jobs:
 
       - name: Build / 构建
         working-directory: frontend
+        env:
+          VITE_APP_VERSION: ${{ steps.version.outputs.app_version }}
         run: npm run build
 
   # ============================================================
@@ -146,10 +154,12 @@ jobs:
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
           BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          APP_VERSION=$(cat VERSION)
           echo "sha_short=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "latest_tag=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:latest" >> "$GITHUB_OUTPUT"
+          echo "app_version=${APP_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push / 构建并推送
         uses: docker/build-push-action@v7
@@ -160,6 +170,8 @@ jobs:
           tags: |
             ${{ steps.vars.outputs.image_tag }}
             ${{ steps.vars.outputs.latest_tag }}
+          build-args: |
+            VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

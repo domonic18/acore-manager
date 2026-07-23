@@ -4,4 +4,4 @@
 
 export const APP_VERSION: string = import.meta.env.VITE_APP_VERSION || "0.1.0";
 
-export const SHORT_VERSION: string = `v${APP_VERSION.split(".").slice(0, 3).join(".")}`;
+export const SHORT_VERSION: string = `v${APP_VERSION.split(".").slice(0, 4).join(".")}`;

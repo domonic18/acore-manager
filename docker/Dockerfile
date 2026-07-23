@@ -2,6 +2,10 @@
 # Use Debian-based image because rolldown (Vite 8 bundler) lacks musl native bindings
 FROM node:20 AS frontend-builder
 WORKDIR /app/frontend
+
+ARG VITE_APP_VERSION
+ENV VITE_APP_VERSION=${VITE_APP_VERSION}
+
 COPY frontend/package*.json ./
 RUN npm ci --legacy-peer-deps
 COPY frontend/ ./

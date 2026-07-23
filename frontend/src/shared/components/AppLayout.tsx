@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { LogoIcon } from '@/shared/components/ui/LogoIcon';
+import { SHORT_VERSION } from '@/shared/config/version';
 import {
   LayoutDashboard,
   Users,
@@ -55,9 +57,17 @@ export function AppLayout() {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-border">
-            <div>
-              <h1 className="text-lg font-bold text-primary">ACM</h1>
-              <p className="text-xs text-muted-foreground">AzerothCore Manager</p>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center">
+                <LogoIcon className="h-8 w-8" />
+              </div>
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <h1 className="text-lg font-bold text-primary">守望者要塞</h1>
+                  <span className="text-[10px] text-muted-foreground">{SHORT_VERSION}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">GM 指挥与运维中枢</p>
+              </div>
             </div>
             <button
               className="md:hidden text-muted-foreground"

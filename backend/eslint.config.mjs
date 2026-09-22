@@ -3,10 +3,14 @@ import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import globals from 'globals';
 
+// flat config：全局 ignores 必须是独立的仅含 ignores 的配置对象（官方推荐置顶）
 export default [
+  {
+    ignores: ['dist/', 'node_modules/', 'poc/'],
+  },
   js.configs.recommended,
   {
-    files: ['**/*.ts'],
+    files: ['src/**/*.ts', 'test/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -23,18 +27,25 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      // TS 项目的未定义标识符由编译器检查，no-undef 在 TS 下会产生大量误报（jest globals 等）
+      'no-undef': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
   {
-    files: ['**/*.d.ts', '**/middleware/*.ts'],
+    files: ['src/**/*.d.ts', 'src/middleware/*.ts'],
     rules: {
       '@typescript-eslint/no-namespace': 'off',
     },
   },
   {
-    ignores: ['dist/', 'node_modules/', '**/*.test.ts', '**/*.spec.ts'],
+    files: ['*.config.js', '*.config.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
   },
 ];

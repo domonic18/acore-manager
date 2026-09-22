@@ -82,7 +82,7 @@ async function startRound(req: AuthRequest, res: Response, sessionId: number, me
   };
 
   let reply = '';
-  let tokens = { prompt: 0, completion: 0, total: 0 };
+  let tokens: { prompt: number; completion: number; total: number };
   for await (const ev of streamAgentEvents(agent, input, config)) {
     if (res.writableEnded) return;
     switch (ev.event) {
@@ -99,7 +99,7 @@ async function startRound(req: AuthRequest, res: Response, sessionId: number, me
         send('error', ev.data);
         res.end();
         return;
-      case 'done':
+      case 'done': {
         tokens = roundTokens(ev);
         let messageId: number | null = null;
         try {
@@ -110,6 +110,7 @@ async function startRound(req: AuthRequest, res: Response, sessionId: number, me
         void recordUsage(cfg.modelName, session.threadId, tokens, startedAt);
         send('done', { sessionId: session.id, messageId, tokens });
         break;
+      }
       default:
         break;
     }

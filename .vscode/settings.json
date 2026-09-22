@@ -1,0 +1,24 @@
+{
+  "DockerRun.DisableDockerrc": true,
+  "editor.tabSize": 2,
+  "editor.formatOnSave": false,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "eslint.useFlatConfig": true,
+  "eslint.workingDirectories": [
+    { "pattern": "backend/" },
+    { "pattern": "frontend/" }
+  ],
+  "eslint.validate": [
+    "javascript",
+    "typescript",
+    "typescriptreact"
+  ],
+  "typescript.preferences.importModuleSpecifier": "non-relative",
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/coverage": true
+  }
+}

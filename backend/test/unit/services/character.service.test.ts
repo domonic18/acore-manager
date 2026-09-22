@@ -2,7 +2,6 @@ import { characterService } from '@/services/character.service';
 import { characterRepository } from '@/repositories/character.repository';
 import { cacheService } from '@/services/cache.service';
 import { soapService } from '@/services/soap.service';
-import { logger } from '@/middleware/request-logger';
 
 jest.mock('@/repositories/character.repository');
 jest.mock('@/services/cache.service');

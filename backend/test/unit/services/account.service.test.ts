@@ -2,7 +2,6 @@ import { accountService } from '@/services/account.service';
 import { accountRepository } from '@/repositories/account.repository';
 import { cacheService } from '@/services/cache.service';
 import { soapService } from '@/services/soap.service';
-import { logger } from '@/middleware/request-logger';
 
 jest.mock('@/repositories/account.repository');
 jest.mock('@/services/cache.service');

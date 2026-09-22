@@ -21,9 +21,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# IDE
+# IDE（.vscode 仅忽略个人配置，团队共享 settings/extensions 纳入版本控制）
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 *.swp
 *.swo
 *~

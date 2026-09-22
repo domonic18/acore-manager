@@ -2,7 +2,6 @@ import jwt from 'jsonwebtoken';
 import { authService } from '@/services/auth.service';
 import { accountRepository } from '@/repositories/account.repository';
 import { verifySRP6Password } from '@/shared/utils/password.util';
-import { logger } from '@/middleware/request-logger';
 
 jest.mock('@/repositories/account.repository');
 jest.mock('@/shared/utils/password.util');

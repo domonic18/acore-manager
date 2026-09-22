@@ -11,10 +11,11 @@ jest.mock('@/shared/utils/cos.util', () => ({
 }));
 
 import { execSync } from 'child_process';
-import { existsSync, mkdtempSync, writeFileSync } from 'fs';
+import { existsSync, mkdtempSync, promises as fsp, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { cosGetObjectBuffer, cosGetObjectJson } from '@/shared/utils/cos.util';
+import { acmDataSource, charactersDataSource } from '@/config/database';
 import { clearTools, exportTools } from '@/agent/tools/registry';
 import { clearWorkspace, manifestKey, workspaceDir } from '@/agent/tools/log-tools/log-workspace';
 import { registerAllTools } from '@/agent/tools';
@@ -42,7 +43,7 @@ async function seedWorkspaceViaFetch(): Promise<void> {
   writeFileSync(join(fixtureDir, `anticheat_${DATE}.log`), SAMPLE_LINES.join('\n') + '\n');
   const archive = join(fixtureDir, 'out.tar.gz');
   execSync(`tar -czf ${archive} -C ${fixtureDir} anticheat_${DATE}.log`);
-  bufferMock.mockResolvedValueOnce(await import('fs').then((m) => m.promises.readFile(archive)));
+  bufferMock.mockResolvedValueOnce(await fsp.readFile(archive));
   await toolFn('fetch_log_archive').invoke({ date: DATE, type: 'anticheat', realm: REALM });
 }
 
@@ -131,9 +132,7 @@ describe('log-tools', () => {
 
   it('parse_anticheat_violations explain annotates aura/exemption signals', async () => {
     await seedWorkspaceViaFetch();
-    const charactersDataSource = (await import('@/config/database')).charactersDataSource;
     (charactersDataSource.query as jest.Mock).mockResolvedValueOnce([{ guid: 2587, spell: 546 }]);
-    const acmDataSource = (await import('@/config/database')).acmDataSource;
     (acmDataSource.getRepository as jest.Mock).mockReset().mockImplementation((entity: { name: string }) =>
       entity.name === 'AiAnticheatExemption'
         ? {

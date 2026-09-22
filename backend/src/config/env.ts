@@ -149,6 +149,15 @@ export const env = {
   // LLM api_key encryption (infra-level secret only; LLM connection config lives in acm DB)
   LLM_AES_KEY: getEnv('LLM_AES_KEY', 'dev-only-llm-aes-key'),
 
+  // AI notifications & budget (Feishu webhook; empty = log only, never blocks the main flow)
+  FEISHU_WEBHOOK_URL: getEnv('FEISHU_WEBHOOK_URL', ''),
+  AI_DAILY_TOKEN_BUDGET: getEnvInt('AI_DAILY_TOKEN_BUDGET', 5_000_000),
+
+  // Agent runtime (arch 3.2.2 / 3.3.1)
+  AI_AGENT_CACHE_SIZE: getEnvInt('AI_AGENT_CACHE_SIZE', 4),
+  AI_TOOL_CALL_BUDGET: getEnvInt('AI_TOOL_CALL_BUDGET', 20),
+  AI_TOOL_TIMEOUT_MS: getEnvInt('AI_TOOL_TIMEOUT_MS', 5000),
+
   // Redis (connection via REDIS_URL)
   REDIS_EXPIRE_TIME: getEnvInt('REDIS_EXPIRE_TIME', 300),
 

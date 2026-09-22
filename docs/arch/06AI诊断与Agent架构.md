@@ -142,12 +142,15 @@ backend/src/
 ```
 createDeepAgent({
   model:        buildModelClient(cfg)   // 按协议分派：openai→ChatOpenAI(baseURL) / anthropic→ChatAnthropic(anthropicApiUrl)
-  tools:        registry.export(),          // 14 个白名单工具
-  systemPrompt: loadYaml('inspection' | 'assistant'),
-  middleware:   [TodoListMiddleware],
-  skills:       [skills 目录],               // grep-first 方法论
-  backend:      CompositeBackend(State + Filesystem(/skills/ 只读路由)),
-  permissions:  [deny write /skills/**],
+  tools:        exportTools(),              // 白名单工具注册表
+  systemPrompt: loadPrompt('inspection' | 'assistant'),
+  skills:       ['/skills/'],               // grep-first 方法论，按需加载
+  backend:      CompositeBackend(           // 按路径前缀路由（双 FilesystemBackend，virtualMode）
+                  default: Filesystem(/tmp/ai-workspace),      // 日志工作区：fetch 解压产物，grep/read 检索
+                  '/skills/': Filesystem(/tmp/acm-skills),     // dist 随包 skills 同步副本（syncSkills），
+                                                               // 独立目录规避 clearWorkspace 整删
+                ),
+  permissions:  [deny write /**],           // 全域只读取证：写操作一律走平台由 GM 执行
   checkpointer: postgresSaver 单例,          // acm PG 库（PostgresSaver）
 })
 ```

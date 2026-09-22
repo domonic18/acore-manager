@@ -158,6 +158,13 @@ export const env = {
   AI_TOOL_CALL_BUDGET: getEnvInt('AI_TOOL_CALL_BUDGET', 20),
   AI_TOOL_TIMEOUT_MS: getEnvInt('AI_TOOL_TIMEOUT_MS', 5000),
 
+  // Tencent COS (log archive / AI report archive bucket, private-read; credentials are infra-level config)
+  COS_SECRET_ID: getEnv('COS_SECRET_ID', ''),
+  COS_SECRET_KEY: getEnv('COS_SECRET_KEY', ''),
+  COS_BUCKET: getEnv('COS_BUCKET', ''),
+  COS_REGION: getEnv('COS_REGION', ''),
+
+
   // Redis (connection via REDIS_URL)
   REDIS_EXPIRE_TIME: getEnvInt('REDIS_EXPIRE_TIME', 300),
 

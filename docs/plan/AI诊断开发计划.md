@@ -63,7 +63,7 @@ M4 处置                                  │──────────×�
 | T2.4 | agent runtime：agent-factory（指纹 LRU + 闲置淘汰）、checkpointer 单例、budget-guard | `agent/runtime/` | T0.3, T2.2 | 1 天 |
 | T2.5 | DB 白名单工具 10 个：repository 只读查询（SQL 写死 + 参数化 + 行数/超时护栏）、zod schema、审计包装、单测（含空表降级） | `agent/tools/db-tools/` + 测试 | T2.1 | 1.5 天 |
 | T2.6 | 日志工具 3 个：cos.service、get_log_manifest、fetch_log_archive（/tmp 工作区 + 清理）、parse_anticheat_violations（正则 + 聚合 + explain 挂点） | `agent/tools/log-tools/` | T2.1 | 1 天 |
-| T2.7 | 误报引擎：aura-rules.ts（T0.5 输入定稿）、explain 解释器、ai_anticheat_exemption.service 与标注 API | `agent/false-positive/` | T0.5, T2.6 | 1 天 |
+| T2.7 | 误报引擎：aura-rules.ts（T0.5 输入定稿）、explain 解释器、ai_anticheat_exemption.service 与标注 API | `agent/tools/false-positive/` | T0.5, T2.6 | 1 天 |
 | T2.8 | assistant 路由：SSE 流式 + 事件协议（arch 5.2）+ 非流式降级、会话管理（PG 正本 + deleteThread 清理 checkpoint） | `routes/ai-assistant.routes.ts` | T2.4 | 1 天 |
 | T2.9 | 前端 ai-assistant：assistant-ui 集成、SSE runtime 适配、会话列表/历史、工具调用过程展示 | `features/ai-assistant/` | T2.8 | 1-1.5 天 |
 

@@ -98,22 +98,22 @@ backend/src/
 │   │   ├── registry.ts             # 工具注册表（name/schema/handler/审计包装）
 │   │   ├── db-tools/               # 10 个数据库白名单工具（SQL 写死）
 │   │   ├── log-tools/              # manifest / fetch / anticheat 解析(explain)
+│   │   ├── false-positive/         # 误报研判知识（工具富化用，非运行时机制）
+│   │   │   ├── aura-rules.ts       # 移动类光环对照表（代码内置初稿）
+│   │   │   └── explain.ts          # 误报解释引擎（aura/地图/延迟/白名单）
 │   │   └── inspection-tools.ts     # 触发巡检（对话场景）
 │   ├── prompts/                    # 系统提示词（YAML）：assistant / inspection / analysis
-│   ├── skills/                     # grep-first 日志检索方法论（对 agent 只读）
-│   └── false-positive/
-│       ├── aura-rules.ts           # 移动类光环对照表（代码内置初稿）
-│       └── explain.ts              # 误报解释引擎（aura/地图/延迟/白名单）
+│   └── skills/                     # grep-first 日志检索方法论（对 agent 只读）
 ├── services/ai/                    # AI 域业务编排（域分组）
 │   ├── inspection.service.ts       # 巡检编排（触发/重试/落库/推送）
 │   ├── targeted-analysis.service.ts # 定向分析编排（账号申诉分析，SSE）
 │   ├── ai-report.service.ts        # 报告查询 / 幂等 upsert / 管理
 │   ├── llm-config.service.ts       # 模型出口配置（加密存取/指纹/测试连接）✅ 已建
-│   ├── chat-session.service.ts     # 会话与消息正本
+│   ├── chat-session.service.ts     # 会话与消息正本 ✅ 已建
 │   ├── token-usage.service.ts      # Token 计量与日预算告警 ✅ 已建
 │   ├── feishu-notify.service.ts    # 飞书群机器人告警出口（预算/巡检失败/断传）✅ 已建
-│   ├── cos.service.ts              # COS 读写（日志包 / 报告归档）
-│   └── anticheat-exemption.service.ts  # 误报白名单 CRUD
+│   ├── cos.service.ts              # COS 读写（日志包 / 报告归档）→ 实现调整：跨层基础设施，实为 shared/utils/cos.util.ts（agent 禁 import services）
+│   └── anticheat-exemption.service.ts  # 误报白名单 CRUD ✅ 已建
 ├── entities/acm/                   # acm 库 TypeORM 实体（新增数据源）
 │   ├── ai-report.entity.ts
 │   ├── ai-model-config.entity.ts   # ✅ 已建
@@ -247,7 +247,7 @@ runInspection({ realm, date, trigger: 'cron'|'manual'|'chat' }):
 - 失败重试：SCF 定时触发器配置重试 + 服务内退避重试（≥3 次），最终失败飞书告警，不阻塞次日
 - 幂等：手动 / 对话重跑同日报告直接覆盖（upsert），报告页保留 updated_at
 
-### 3.5 误报防控实现（false-positive/）
+### 3.5 误报防控实现（agent/tools/false-positive/）
 
 #### 3.5.1 移动类光环对照表（代码内置初稿）
 

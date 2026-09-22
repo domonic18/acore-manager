@@ -6,6 +6,7 @@ import { streamAgentEvents } from '@/agent/runtime/wire';
 import { getAgent } from '@/agent/runtime/agent-factory';
 import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { LOG_TYPES, clearWorkspace, manifestKey } from '@/agent/tools/log-tools/log-workspace';
+import { setInspectionRunner } from '@/agent/tools/inspection-tools';
 import { cosGetObjectJson, cosPutObjectBuffer } from '@/shared/utils/cos.util';
 import { cacheService } from '@/services/cache.service';
 import { llmConfigService } from './llm-config.service';
@@ -409,3 +410,7 @@ function extractJson(text: string): unknown | null {
 }
 
 export const inspectionService = new InspectionService();
+
+// 对话触发工具的执行体注入（依赖方向 services → agent）：工具壳在 agent/tools/inspection-tools，
+// 本服务提供真实编排；模块加载即注入，chat 会话构建 agent 前必经本模块。
+setInspectionRunner((input) => inspectionService.run(input));

@@ -5,9 +5,10 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && tsc-alias && cp -r src/agent/prompts dist/agent/",
+    "build": "tsc && tsc-alias && cp -r src/agent/prompts dist/agent/ && cp -r src/agent/skills dist/agent/",
     "start": "node dist/server.js",
-    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "jest",
     "test:e2e": "jest --testPathPattern=e2e",
     "db:migrate": "tsx src/scripts/acm-migrate.ts up",
@@ -60,6 +61,6 @@
     "typescript": "^5.6.2"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   }
 }

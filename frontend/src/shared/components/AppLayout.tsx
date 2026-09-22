@@ -19,6 +19,7 @@ import {
   Crown,
   MessageSquareOff,
   SlidersHorizontal,
+  Bot,
 } from 'lucide-react';
 
 const menuItems = [
@@ -33,6 +34,7 @@ const menuItems = [
   { path: '/mutes', label: '禁言列表', icon: MessageSquareOff },
   { path: '/ip-bans', label: 'IP 封禁', icon: Ban },
   { path: '/audit-logs', label: '日志审计', icon: ScrollText },
+  { path: '/model-config', label: 'AI 模型配置', icon: Bot },
 ];
 
 export function AppLayout() {

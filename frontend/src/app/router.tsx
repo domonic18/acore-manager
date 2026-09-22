@@ -18,6 +18,7 @@ const BanlistPage = lazy(() => import('@/pages/BanlistPage'));
 const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
 const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
 const RbacConfigPage = lazy(() => import('@/pages/RbacConfigPage'));
+const ModelConfigPage = lazy(() => import('@/pages/ModelConfigPage'));
 
 function withSuspense(Component: React.ComponentType) {
   return (
@@ -76,6 +77,12 @@ export const router = createBrowserRouter([
               { path: 'gm-accounts', element: withSuspense(GmAccountPage) },
               { path: 'audit-logs', element: withSuspense(AuditLogPage) },
               { path: 'rbac-config', element: withSuspense(RbacConfigPage) },
+            ],
+          },
+          {
+            element: <GmGuard minLevel={3} />,
+            children: [
+              { path: 'model-config', element: withSuspense(ModelConfigPage) },
             ],
           },
         ],

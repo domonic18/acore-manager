@@ -7,6 +7,7 @@ export interface ChatUiTool {
   args?: unknown;
   rowCount?: number | null;
   durationMs?: number | null;
+  error?: string | null;
   status: 'running' | 'done';
 }
 
@@ -99,7 +100,7 @@ export function useChatStream(sessionId: number | null) {
             onDelta: (t) => patchLast((m) => ({ ...m, content: m.content + t })),
             onToolCall: (d: ToolCallEvent) =>
               patchLast((m) => ({ ...m, tools: [...m.tools, { name: d.name, args: d.args, status: 'running' as const }] })),
-            onToolResult: (d: ToolResultEvent) => patchTool(d.name, { rowCount: d.rowCount, durationMs: d.durationMs }),
+            onToolResult: (d: ToolResultEvent) => patchTool(d.name, { rowCount: d.rowCount, durationMs: d.durationMs, error: d.error ?? null }),
             onDone: () => patchLast((m) => ({ ...m, streaming: false })),
             onError: (d) => patchLast((m) => ({ ...m, streaming: false, error: d.message })),
           },

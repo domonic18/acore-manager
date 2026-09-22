@@ -35,6 +35,7 @@ export interface ToolResultEvent {
   name: string;
   rowCount: number | null;
   durationMs: number | null;
+  error?: string | null;
 }
 
 export interface DoneEvent {

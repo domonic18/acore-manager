@@ -114,20 +114,35 @@ function ToolRow({ tool }: { tool: ChatUiMessage['tools'][number] }) {
   return (
     <details className="overflow-hidden rounded-lg border border-border/60 bg-muted/40">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-xs [&::-webkit-details-marker]:hidden">
-        {running ? <Loader2 className="h-3 w-3 animate-spin text-primary" /> : <Wrench className="h-3 w-3 text-primary" />}
+        {running ? (
+          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+        ) : tool.error ? (
+          <AlertCircle className="h-3 w-3 text-destructive" />
+        ) : (
+          <Wrench className="h-3 w-3 text-primary" />
+        )}
         <span className="font-mono text-foreground/80">{tool.name}</span>
         <span className="ml-auto flex items-center gap-1 text-muted-foreground">
           {running ? (
             '运行中…'
           ) : (
             <>
-              {tool.rowCount != null ? `${tool.rowCount} 行` : '已完成'}
-              {tool.durationMs != null ? ` · ${tool.durationMs}ms` : ''}
+              {tool.error ? (
+                <span className="text-destructive">失败</span>
+              ) : (
+                <>
+                  {tool.rowCount != null ? `${tool.rowCount} 行` : '已完成'}
+                  {tool.durationMs != null ? ` · ${tool.durationMs}ms` : ''}
+                </>
+              )}
               <ChevronDown className="h-3 w-3" />
             </>
           )}
         </span>
       </summary>
+      {tool.error && !running && (
+        <div className="border-t border-destructive/20 px-2.5 py-1.5 text-xs text-destructive">{tool.error}</div>
+      )}
       {tool.args != null && !running && (
         <pre className="max-h-40 overflow-auto border-t border-border/40 px-2.5 py-1.5 text-xs text-muted-foreground">{JSON.stringify(tool.args, null, 2)}</pre>
       )}

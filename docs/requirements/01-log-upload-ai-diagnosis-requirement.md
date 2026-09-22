@@ -1,7 +1,8 @@
 # 日志上传与 AI 诊断 需求文档
 
-> 版本：v2.4（2026-09-21）
-> 变更：v2.4 新增**报告管理（增删改查）**（3.11）：每日巡检报告与定向分析结论统一管理——查 / 增沿袭现有能力，改支持 GM 处置备注（定向分析另可润色 Markdown，AI 结构化结论不可改）、删需二次确认；改 / 删 gmlevel=4 且全量审计；`ai_report` / `ai_targeted_analysis` 新增处置备注字段
+> 版本：v2.5（2026-09-22）
+> 变更：v2.5 **acm 库迁移 PostgreSQL**（T0.3 Spike 结论驱动）：T0.3 实测 `RedisSaver` 硬依赖 RedisJSON / RediSearch 模块（本地 redis:7-alpine 与生产共享 Redis 均无），acm 自有库由 MySQL 改为独立 PostgreSQL 实例（compose 服务 `acm-postgres`，生产用腾讯云托管 PG），checkpointer 改官方 `@langchain/langgraph-checkpoint-postgres`，checkpoint 与对话正本同库、无 TTL 语义改定期 deleteThread 清理；模型客户端按配置协议分派（openai → ChatOpenAI / anthropic → ChatAnthropic）；镜像基座 node:20 → node:22（openai@7 引擎要求 + npm 10.8 安装损坏 bug）；全局 "MySQL acm 库" 表述改为 "acm 库（PostgreSQL）"
+> 变更：v2.4 新增**报告管理（增删改查）**（3.11）：每日巡检报告与定向分析结论统一管理——查 / 增沿袭现有能力，改支持 GM 处置备注（定向分析另可润色 Markdown，AI 结构化结论不可改）、删需二次确认；改 / 删 gmlevel=3 且全量审计；`ai_report` / `ai_targeted_analysis` 新增处置备注字段
 > 变更：v2.3 新增**定向分析（账号申诉分析）**（3.8）：提供玩家昵称 / 账号 + 时间范围，Agent 复用反作弊核查链路工具做定向取证分析，输出结构化结论与 Markdown 并落库（acm 库 `ai_targeted_analysis`，追加式），结论可一键复制粘贴论坛回帖；原 3.8 / 3.9 顺延为 3.9 / 3.10
 > 变更：v2.2 新增**误报防控设计**（3.5）：新增 `get_character_auras` 光环解释工具与代码内置误报规则表、解析器 explain 模式（地图聚合 / 延迟降权）、误报白名单表与 GM 标注闭环、报告 `falsePositiveSignals` 字段、ban 建议门槛（3.7）；工具集扩至 14 个
 > 变更：v2.1 基于本地日志目录与 acore-mysql 三库实地勘察完善 AI 工具集（3.5）：数据库白名单工具扩至 10 个、日志工具新增 anticheat 结构化解析，按反作弊核查链路分组，附工具串联示例与数据边界备注；Redis AOF 决策为不开启（3.3 / 开放问题 4）
@@ -47,8 +48,8 @@ SCF Job 函数（定时触发器，每日 06:00）
 AzerothCore DB（auth / characters / world，账号仅 SELECT）
    │ ⑤报告落库（按 realm+日期幂等 upsert）
    ▼
-acm 库（MySQL 现有实例新建，ACM 自有可写库）
-（ai_report / 会话 / 模型配置 / Token 用量 / 工具审计）
+acm 库（PostgreSQL 新建实例，ACM 自有可写库，与游戏 MySQL 隔离）
+（ai_report / 会话 / 模型配置 / Token 用量 / 工具审计 / LangGraph checkpoint）
  + COS 报告归档（.json / .md）+ Redis 最新报告缓存
    │                    ⑥日报摘要 / 断传 / 失败 / Token 预算告警
    │                    ──────────────────▶ 飞书机器人
@@ -146,9 +147,9 @@ ACM 前端
 - **运行时组装**（参考 ai-invest-assisstant 项目模式）：
   - `deepagents` 的 `createDeepAgent` 组装：模型（后台配置，见 3.6）、系统提示词（YAML 管理）、白名单工具（3.5）、日志工具（3.4）、TodoList 中间件、skills 目录（grep-first 日志检索方法论，对 agent **只读**，禁止写入）
   - agent 实例按**模型出口指纹**（protocol | base_url | model | api_key 哈希的 SHA256）LRU 缓存 + 闲置淘汰；后台修改模型配置后指纹变化自动重建实例，无需重启服务
-  - 会话状态（LangGraph checkpoint）存 **Redis**（`@langchain/langgraph-checkpoint-redis`；LangGraph.js 无官方 MySQL saver；ACM 已有 ioredis）
-  - **持久化决策**：会话 Redis 与 ranking 等其他服务共享实例，**不开启 AOF**——AOF 为实例级配置，开启后其他服务的高频缓存写入（含过期删除）会导致持久化文件膨胀与 rewrite 抖动，殃及全部共享服务。已接受的降级：Redis 重启后进行中会话状态作废，重开会话即可（当前仅单管理员使用、任务用完即止、后续多为新建任务）；对话正本在 MySQL acm 库不受影响。checkpoint key 设 TTL 自动清理，避免共享实例内存无限积累
-  - 对话正本（会话与消息）落 MySQL acm 库，前端会话列表 / 历史以 MySQL 为准，Redis 仅承载运行时状态
+  - 会话状态（LangGraph checkpoint）存 **acm PostgreSQL**（`@langchain/langgraph-checkpoint-postgres`。v2.4 原方案为 RedisSaver，T0.3 实测其硬依赖 RedisJSON / RediSearch 模块——本地 redis:7-alpine 与生产共享 Redis 均无模块，故随 acm 库迁 PostgreSQL 一并解决，无模块依赖）
+  - **持久化决策**：checkpoint 与对话正本同库（acm PG），持久化由 PG 自身保障，不再依赖 Redis AOF。Redis 仅承载热点缓存（ranking 共享实例维持现状）。checkpoint 无自动 TTL，会话清理由后端定期 `deleteThread` 任务实现（M2 会话管理范围），历史会话按保留策略删除
+  - 对话正本（会话与消息）落 acm 库，前端会话列表 / 历史以 acm 库为准
 - **可观测**：每次对话记录 Token 消耗（3.6）；工具调用全量审计（3.5）
 
 ### 3.4 AI 每日巡检（Job 函数 + 全 agentic 分析）
@@ -175,7 +176,7 @@ ACM 前端
     - 数据库行为指标：快速升级、在线时长异常（bot 特征）、金币异常流动、同 IP 多账号
   - **输出结论**：每项异常附**证据片段**（原始日志摘录），给出严重级别（high / medium / low）与处置建议
 - **报告落库**（本版新增，主存储由 COS 调整为数据库）：
-  - 主存储：MySQL acm 库 `ai_report` 表（结构化 JSON + Markdown 全文），按 `(realm, report_date)` **幂等 upsert**，重跑覆盖并更新时间戳
+  - 主存储：acm 库（PostgreSQL）`ai_report` 表（结构化 JSON + Markdown 全文），按 `(realm, report_date)` **幂等 upsert**，重跑覆盖并更新时间戳
   - 归档：COS `{bucket}/acore-ai-reports/realm3/{yyyy-mm-dd}.json|.md`（报告保留 1 年）
   - 缓存：最新报告摘要写 Redis 供列表页快速读取
 - **报告核心结构**（JSON 约定，`schemaVersion` 版本化）：
@@ -317,7 +318,7 @@ ACM 前端
 
 **系统库边界（新增）**：
 
-- MySQL 现有实例新建 **`acm` 库**，为 ACM 自有的**可写**库：ai_report、会话 / 消息、模型配置、Token 用量、工具审计、ai_anticheat_exemption（误报白名单）等表
+- 新建 **`acm` 库（PostgreSQL 独立实例，compose 服务 `acm-postgres`）**，为 ACM 自有的**可写**库：ai_report、会话 / 消息、模型配置、Token 用量、工具审计、ai_anticheat_exemption（误报白名单）及 LangGraph checkpoint 等表；生产使用腾讯云托管 PostgreSQL
 - AzerothCore 三库（auth / characters / world）保持**只读**不变；agent 不持有任何数据库连接，acm 库写入一律由 ACM 后端代码完成
 
 **目标库与降级**：agent 在线查询复用 ACM 现有主库连接，靠超时 / 行数上限 / 调用预算控制对线上查询的影响；预留只读从库切换能力（环境变量指定专用数据源），运维确认从库可用后切换即可
@@ -460,7 +461,7 @@ ACM 前端
 
 - **安全**：COS 桶私有读写；ACM 使用只读凭证读日志、读写凭证写报告（分离）；报告页与对话页受 JWT + GM 等级守卫保护；日志与报告不对外暴露；LLM api_key 加密存储；AI 巡检与对话遵循 3.5 隔离设计（游戏库账号仅 SELECT、白名单工具、调用全量审计）
 - **成本**：日志 tar.gz 压缩上传；COS 生命周期规则自动清理——原始日志保留 **90 天**（已确认），AI 报告保留 1 年（均可配置）；LLM Token 日预算告警
-- **可靠性**：上传失败重试、巡检失败重试，均落地为飞书告警而非静默失败；报告按 realm+日期幂等 upsert；单日分析失败不影响历史报告；会话 Redis 与其他服务共享且不开启 AOF，"重启后进行中会话作废"为已接受降级（对话正本在 MySQL 不丢）
+- **可靠性**：上传失败重试、巡检失败重试，均落地为飞书告警而非静默失败；报告按 realm+日期幂等 upsert；单日分析失败不影响历史报告；checkpoint 与对话正本同落 acm PG 库，持久化由数据库保障
 - **性能**：全 agentic 分析受工具行数上限与调用预算约束；Job 函数的时长 / 内存 / 临时磁盘上限开发前实测（见开放问题 3）
 - **可扩展**：目录与数据结构按 realm 隔离，为多 realm 预留；报告 schema 版本化（`schemaVersion` 字段）；agent 工具集采用统一注册机制，便于后续扩展新工具
 
@@ -468,44 +469,44 @@ ACM 前端
 
 - **游戏服侧**：Shell 脚本 + 腾讯云 COSCLI（coscli），系统 crontab 调度；Appender 配置改造（a 模式 + 时间戳 flags）+ copytruncate 轮转；崩溃数据经 docker CLI 按天导出；脚本与配置模板纳入仓库 `ops/` 目录（凭证不入库）
 - **Agent 运行时（Node.js，与 ACM 后端同栈）**：
-  - `deepagents`（JS 版，npm 包 `deepagents`）+ `@langchain/openai`（ChatOpenAI 指向 GLM 的 OpenAI 兼容 baseURL）；模型 / 温度 / max tokens 来自后台配置（3.6）
+  - `deepagents`（JS 版，npm 包 `deepagents`）+ 按配置协议分派模型客户端：`openai` 协议 → `@langchain/openai`（ChatOpenAI），`anthropic` 协议 → `@langchain/anthropic`（ChatAnthropic 指向兼容 baseURL）；模型 / 温度 / max tokens 来自后台配置（3.6）
   - agent 实例按模型出口指纹 LRU 缓存 + 闲置淘汰（参考 ai-invest-assisstant 模式）
-  - checkpointer：`@langchain/langgraph-checkpoint-redis`（LangGraph.js 官方无 MySQL saver；ACM 已有 ioredis）；对话正本落 MySQL acm 库
+  - checkpointer：`@langchain/langgraph-checkpoint-postgres`（acm PG 库；原 RedisSaver 方案因硬依赖 RedisJSON / RediSearch 模块弃用，见 3.3 持久化决策）；对话正本落 acm 库
   - 系统提示词 YAML 管理；skills 目录提供 grep-first 日志检索方法论，对 agent 只读（FilesystemPermission 禁写）
 - **SCF 部署形态**：
   - Web 函数：承载 ACM 单体（API + 静态资源）+ deepagents 对话运行时（SSE）
   - Job 函数：定时触发器（每日 06:00）拉起，与 Web 函数共用同一份 agent 代码包执行巡检；进程内不跑定时任务
-- **acm 库新增表**：`ai_model_config`（模型出口配置）、`ai_token_usage`（Token 计量）、`ai_chat_session` / `ai_chat_message`（对话正本）、`ai_tool_audit`（工具调用审计）、`ai_report`（诊断报告，含 Markdown 全文）、`ai_targeted_analysis`（定向分析结论，含 Markdown 全文，追加式）
+- **acm 库（PostgreSQL）新增表**：`ai_model_config`（模型出口配置）、`ai_token_usage`（Token 计量）、`ai_chat_session` / `ai_chat_message`（对话正本）、`ai_tool_audit`（工具调用审计）、`ai_report`（诊断报告，含 Markdown 全文）、`ai_targeted_analysis`（定向分析结论，含 Markdown 全文，追加式）；另含 PostgresSaver 自管的 checkpoint 表（checkpoints / checkpoint_blobs / checkpoint_writes）
 - **前端**：`@assistant-ui/react` + `@assistant-ui/react-langgraph`（React 18 兼容）构建对话页；报告页"复制 Markdown"基于剪贴板 API 写入原始 .md 全文
 - **违规提醒邮件**：扩展 `gm-tool` 路由与服务，基于现有 `soap.service.ts` 实现 `.send mail` 封装；注意命令中中文与换行的转义；警告模板存于配置文件（不入库）
 - **新增依赖**：
-  - 后端：`deepagents`、`@langchain/openai`、`@langchain/langgraph`、`@langchain/langgraph-checkpoint-redis`、`cos-nodejs-sdk-v5`（ioredis 已有）
+  - 后端：`deepagents`、`@langchain/openai`、`@langchain/anthropic`、`@langchain/langgraph`、`@langchain/langgraph-checkpoint-postgres`、`pg`、`cos-nodejs-sdk-v5`（ioredis 已有，用于缓存）
   - 前端：`@assistant-ui/react`、`@assistant-ui/react-langgraph`、`@assistant-ui/react-markdown`
 - **新增后端模块**：
   - `services/ai-agent/`（运行时组装、工具注册、skills 加载、指纹 LRU 缓存）
   - `services/ai-inspection.service.ts`（巡检编排）、`services/ai-targeted-analysis.service.ts`（定向分析编排）、`services/cos.service.ts`（COS 读写）、`services/llm-config.service.ts`、`services/token-usage.service.ts`
   - `routes/ai-assistant.routes.ts`（SSE 对话）、`routes/ai-diagnosis.routes.ts`（报告查询与管理：备注 / 删除）、`routes/ai-analysis.routes.ts`（定向分析 SSE 与记录管理）、`routes/ai-model-config.routes.ts`
   - `repositories/` 层扩展只读查询，实现快照指标与白名单钻取工具，与现有查询同一套只读封装
-- **新增环境变量（节选）**：`COS_SECRET_ID`、`COS_SECRET_KEY`、`COS_BUCKET`、`COS_REGION`、`ACM_SYSTEM_DB`（默认 acm）、`FEISHU_WEBHOOK`、`AI_TOOL_CALL_BUDGET`、`AI_TOKEN_DAILY_BUDGET`；LLM 出口配置迁移至后台 `ai_model_config`，环境变量仅作首启兜底（可选）
+- **新增环境变量（节选）**：`COS_SECRET_ID`、`COS_SECRET_KEY`、`COS_BUCKET`、`COS_REGION`、`ACM_SYSTEM_DB`（默认 acm）、`FEISHU_WEBHOOK`、`AI_TOOL_CALL_BUDGET`、`AI_TOKEN_DAILY_BUDGET`、`LLM_AES_KEY`（仅用于 api_key 加解密）；LLM 出口配置全量存于后台 `ai_model_config`，**无环境变量兜底**——首启由管理员在后台新增模型配置并设默认，未配置时明确报错（M0 已按此语义验证，见 `backend/poc/agent/resolve-config.ts`）
 
 ## 6. 里程碑与验收标准
 
 | 里程碑 | 内容 | 验收标准 |
 |-------|------|---------|
 | M1 日志上传 | 游戏服 Appender 配置改造（a 模式 + 时间戳）+ 上传脚本（copytruncate / docker logs 导出 / manifest）+ COS 目录规范 + 断传监控 | 连续 3 天日志按时到齐且 md5 校验通过；重启 worldserver 后 Server.log 历史保留且新条目带时间戳；人为删除 manifest 触发断传告警 |
-| M2 Agent 底座 | acm 库建模 + LLM 后台配置与 Token 计量 + deepagents 运行时（SSE 对话、Redis checkpointer、白名单工具、全量审计）+ 前端对话页 | gmlevel ≥ 2 可对话、< 2 拒绝；修改模型配置后无需重启即生效；对话消息与工具调用全量落库可回放；DB 账号权限核查仅 SELECT |
-| M3 每日巡检 | Job 函数定时触发 + 全 agentic 日志分析 + 报告落库（MySQL / COS / Redis）+ 飞书推送 + 手动与对话触发重跑 | 对人工植入已知违规样例的日志能检出对应可疑玩家并附证据；**人工植入"十字军光环 + 骑乘超速"类合法加速样例时，报告正确标注误报信号且不给出 ban 建议**；同日重跑幂等覆盖不产生重复报告；Token 用量记录与预算告警生效；分析失败能告警；可疑玩家的证据链工具调用序列可由审计日志完整回放 |
-| M4 报告与处置 | 诊断报告页（含一键复制 Markdown）+ 定向分析（申诉分析）+ 提醒邮件 + 报告页批量联动 + 报告管理（增删改查，见 3.11） | 移动端可查看报告；gmlevel < 2 无法访问；复制内容粘贴至 Markdown 论坛正常渲染；提供昵称 + 时间范围可发起定向分析，结论落库且可复制回帖，存在误报信号时建议不为维持封禁；单发与批量邮件经 worldserver 成功送达游戏内邮箱；失败目标可识别并重试；"已警告"标注与全程审计记录；报告与定向分析可改备注 / 润色 Markdown / 删除（gmlevel=4、二次确认、审计可查） |
+| M2 Agent 底座 | acm 库建模 + LLM 后台配置与 Token 计量 + deepagents 运行时（SSE 对话、PG checkpointer、白名单工具、全量审计）+ 前端对话页 | gmlevel ≥ 2 可对话、< 2 拒绝；修改模型配置后无需重启即生效；对话消息与工具调用全量落库可回放；DB 账号权限核查仅 SELECT |
+| M3 每日巡检 | Job 函数定时触发 + 全 agentic 日志分析 + 报告落库（PG / COS / Redis 缓存）+ 飞书推送 + 手动与对话触发重跑 | 对人工植入已知违规样例的日志能检出对应可疑玩家并附证据；**人工植入"十字军光环 + 骑乘超速"类合法加速样例时，报告正确标注误报信号且不给出 ban 建议**；同日重跑幂等覆盖不产生重复报告；Token 用量记录与预算告警生效；分析失败能告警；可疑玩家的证据链工具调用序列可由审计日志完整回放 |
+| M4 报告与处置 | 诊断报告页（含一键复制 Markdown）+ 定向分析（申诉分析）+ 提醒邮件 + 报告页批量联动 + 报告管理（增删改查，见 3.11） | 移动端可查看报告；gmlevel < 2 无法访问；复制内容粘贴至 Markdown 论坛正常渲染；提供昵称 + 时间范围可发起定向分析，结论落库且可复制回帖，存在误报信号时建议不为维持封禁；单发与批量邮件经 worldserver 成功送达游戏内邮箱；失败目标可识别并重试；"已警告"标注与全程审计记录；报告与定向分析可改备注 / 润色 Markdown / 删除（gmlevel=3、二次确认、审计可查） |
 
 ## 7. 开放问题
 
 1. **反作弊日志轮转交接**：按天归档当前由生产环境 cron 完成，建议 M1 上传脚本（copytruncate）统一接管后下线旧 cron；需与运维确认交接时间点，避免与 05:00 上传产生竞争。
-2. **SCF Web 函数 SSE 兼容性**：M2 开发前做 spike 验证；不支持则对话降级为非流式整段返回（交互体验略降，功能不受影响）。
-3. **Job 函数资源上限**：时长 / 内存 / 临时磁盘上限需 M3 前实测（全 agentic 分析含日志下载解压）；若超限，按日志类型拆分为多次 Job 调用。
-4. ~~Redis AOF~~ **已决策（2026-09-21）：不开启**。会话 Redis 与 ranking 等服务共享实例，AOF 为实例级配置，开启会让其他服务的高频缓存写入拖累持久化与 rewrite；当前单管理员、任务用完即止的模式下，重启后会话作废可接受。遗留：开发前核实 JS 版 Redis saver 的 TTL 配置能力，为 checkpoint key 设置过期自动清理。
+2. ~~SCF Web 函数 SSE 兼容性~~ **已决策（2026-09-21）：支持**。腾讯云 SCF Web 函数对 SSE 的兼容性已在 squadsight 项目实测验证，M2 的 SSE 对话无需降级预案（保留非流式整段返回作为异常兜底）。
+3. **Job 函数资源上限**：时长 / 内存 / 临时磁盘上限需 M3 前实测（全 agentic 分析含日志下载解压）；若超限，按日志类型拆分为多次 Job 调用。**M0 进展（2026-09-21）**：Job 专用镜像 `docker/Dockerfile.job` 与验证桩 `src/job/inspection-job.ts`（fixture 下载→/tmp 解压→扫描→耗时内存 JSON）已就绪，本地基线：合成 fixture（20 文件 300KB）总耗时 66ms / RSS 41MB；SCF 实测待回填 /tmp 上限、子进程与出站网络结论（`docs/plan/M0-SCF部署指引.md`）。
+4. ~~Redis AOF / checkpoint 存储~~ **已决策（2026-09-22，T0.3 终局）：checkpoint 存 acm PostgreSQL，Redis 不承载会话**。T0.3 实测 `@langchain/langgraph-checkpoint-redis` 硬依赖 RedisJSON（`JSON.SET`）与 RediSearch（`FT.CREATE`）模块——本地 redis:7-alpine 无模块直接不可用，生产与 ranking 共享的腾讯云 Redis 亦不满足。决策：acm 自有库定为 PostgreSQL，checkpointer 采用官方 `@langchain/langgraph-checkpoint-postgres`（PostgresSaver，无模块依赖），checkpoint 与对话正本同库；Redis 回归纯缓存角色（ranking 共享实例维持现状）。PG checkpoint 无自动 TTL，会话清理由后端定期 `deleteThread` 实现（M2）。
 5. **`.send mail` 离线角色**：是否支持离线角色需开发前实测；若仅支持在线角色，发送时标注目标在线状态，离线目标保留在待发清单由 GM 稍后处理（不引入常驻发送队列）。
 6. **警告邮件默认文案**：需 Owner 评审定稿后上线。
 7. **报告公开粘贴脱敏**：首版"复制 Markdown"为原文复制（含玩家 IP / 账号），GM 公开发布前自行评估；是否需要"复制为公开版"（自动剥离敏感字段）留下轮迭代。
 8. **多 realm 编排**：realm3 单 realm 上线，多 realm 的并行任务隔离待后续评估。
-9. **`daily_players_reports` 生产写入确认**：本地测试库该表为空（`players_reports_status` 有数据）；开发前在生产确认有写入，否则反作弊 DB 聚合工具降级、日志解析为唯一权威来源。
+9. **`daily_players_reports` 生产写入确认**：本地测试库该表为空（`players_reports_status` 有数据）；开发前在生产确认有写入，否则反作弊 DB 聚合工具降级、日志解析为唯一权威来源。**M0 进展（2026-09-21）**：确认 SQL 已备妥（见 `docs/plan/M0-Spike结论.md` T0.4 节，只读查询），待授权在生产 characters 库执行后回填。
 10. **易误报地图 / 区域初始清单**：依运营经验（部分地图高频触发 Walk on Water / Ignore Control），需 Owner 整理已知高误报地图 / 区域列表，作为 3.5 误报防控第 2 层配置的初始值。

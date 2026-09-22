@@ -37,9 +37,9 @@ M4 处置                                  │──────────×�
 
 | 编号 | 任务 | 产出 | 预估 |
 |------|------|------|------|
-| T0.1 | SCF Web 函数 SSE 验证：部署最小 SSE 端点实测 | 支持/不支持结论；不支持则锁定非流式降级方案 | 0.5 天 |
-| T0.2 | SCF Job 函数实测：容器镜像形态、内存/时长/tmp 上限，模拟日志下载+解压 | 资源配额结论；超时则确定按日志类型拆分策略 | 0.5 天 |
-| T0.3 | deepagents JS PoC（本地）：`createDeepAgent` + ChatOpenAI(GLM) + Redis checkpointer 多轮对话跑通；核实 checkpoint key TTL 能力 | 可运行 PoC 代码（沉淀到 `backend/` 草稿）；TTL 结论 | 1 天 |
+| T0.1 | SCF Web 函数 SSE 验证：squadsight 项目已实测支持，无需再部署端点 | 支持结论（已达成）；保留非流式整段返回作异常兜底 | 0 天（已完成） |
+| T0.2 | SCF Job 函数实测：Job 专用镜像（Dockerfile.job）部署、内存/时长/tmp 上限，模拟日志下载+解压（`src/job/inspection-job.ts`） | 资源配额结论；超时则确定按日志类型拆分策略 | 0.5 天 |
+| T0.3 | deepagents JS PoC（本地）：`createDeepAgent` + 按协议分派模型客户端（openai→ChatOpenAI / anthropic→ChatAnthropic）+ checkpointer 多轮对话跑通。**结论（2026-09-22）**：全链路已跑通；RedisSaver 硬依赖 RedisJSON/RediSearch 模块不可用 → acm 库改 PostgreSQL + PostgresSaver（无 TTL，改 deleteThread 清理） | 可运行 PoC 代码（`backend/poc/agent/`）；checkpointer 选型结论 | 1 天 |
 | T0.4 | 生产数据确认：`daily_players_reports` 是否写入；`.send mail` 离线角色支持 | 两项结论，影响 T2.5 工具降级与 T4.4 方案 | 0.5 天 |
 | T0.5 | Owner 侧材料：易误报地图/区域清单、光环与解控技能 spell ID 校准（可与 M2 并行收集） | `aura-rules.ts` 与地图配置的定稿输入 | 0.5 天 |
 
@@ -57,14 +57,14 @@ M4 处置                                  │──────────×�
 
 | 编号 | 任务 | 产出 | 依赖 | 预估 |
 |------|------|------|------|------|
-| T2.1 | acm 库接入：第 4 个 TypeORM 数据源 + 8 张表实体（arch 4.1-4.7）与建表迁移 | entities/acm + 迁移脚本 | T0.3 | 1 天 |
-| T2.2 | llm-config.service：api_key AES 加密存取、出口指纹、model-config 路由（gmlevel=4，界面不回显） | 配置管理 API | T2.1 | 1 天 |
+| T2.1 | acm 库接入：第 4 个 TypeORM 数据源（**PostgreSQL**，T0.3 结论）+ 8 张表实体（arch 4.1-4.7）与建表迁移（`ai_model_config` 已于 M0 落表） | entities/acm + 迁移脚本 | T0.3 | 1 天 |
+| T2.2 | llm-config.service：api_key AES 加密存取、出口指纹、model-config 路由（gmlevel=3，界面不回显；配置内容与 UI 交互参考 ai-invest-assisstant：provider 预设自动填充、api_key 留空不改、Modal 内测试连接、设默认/删除行操作） | 配置管理 API | T2.1 | 1 天 |
 | T2.3 | token-usage.service：调用计量落库、按日聚合报表 API、日预算飞书告警 | 计量与告警 | T2.1 | 0.5 天 |
 | T2.4 | agent runtime：agent-factory（指纹 LRU + 闲置淘汰）、checkpointer 单例、budget-guard | `agent/runtime/` | T0.3, T2.2 | 1 天 |
 | T2.5 | DB 白名单工具 10 个：repository 只读查询（SQL 写死 + 参数化 + 行数/超时护栏）、zod schema、审计包装、单测（含空表降级） | `agent/tools/db-tools/` + 测试 | T2.1 | 1.5 天 |
 | T2.6 | 日志工具 3 个：cos.service、get_log_manifest、fetch_log_archive（/tmp 工作区 + 清理）、parse_anticheat_violations（正则 + 聚合 + explain 挂点） | `agent/tools/log-tools/` | T2.1 | 1 天 |
 | T2.7 | 误报引擎：aura-rules.ts（T0.5 输入定稿）、explain 解释器、ai_anticheat_exemption.service 与标注 API | `agent/false-positive/` | T0.5, T2.6 | 1 天 |
-| T2.8 | assistant 路由：SSE 流式 + 事件协议（arch 5.2）+ 非流式降级、会话管理（MySQL 正本 + Redis key 清理） | `routes/ai-assistant.routes.ts` | T2.4 | 1 天 |
+| T2.8 | assistant 路由：SSE 流式 + 事件协议（arch 5.2）+ 非流式降级、会话管理（PG 正本 + deleteThread 清理 checkpoint） | `routes/ai-assistant.routes.ts` | T2.4 | 1 天 |
 | T2.9 | 前端 ai-assistant：assistant-ui 集成、SSE runtime 适配、会话列表/历史、工具调用过程展示 | `features/ai-assistant/` | T2.8 | 1-1.5 天 |
 
 **M2 自测剧本**：gmlevel≥2 可对话、<2 拒绝；后台改模型 → 不重启生效；连续多轮对话上下文正确；`ai_tool_audit` 可完整回放一次工具调用链；DB 账号权限核查仅 SELECT。
@@ -75,8 +75,8 @@ M4 处置                                  │──────────×�
 |------|------|------|------|------|
 | T3.1 | inspection.service 编排：断传检查归并（替代 T1.5）、预算管理、JSON schema 校验（非法追问修复一轮）、ai_report 幂等 upsert、COS 归档、Redis 摘要、失败退避重试 + 告警 | 巡检核心编排 | T2.4-T2.7 | 1.5 天 |
 | T3.2 | 巡检提示词与 skills：inspection.yaml 系统提示词 + grep-first 检索方法论 skills（只读目录） | prompts + skills | T3.1 | 1 天 |
-| T3.3 | Job 函数形态：docker-entrypoint 按 `ACM_ENTRY_MODE` 分流、inspection-job.ts 一次性执行、SCF 定时触发器（06:00）与资源配置 | 可定时运行的 Job | T0.2, T3.1 | 1 天 |
-| T3.4 | 手动/对话触发：trigger 路由（gmlevel=4）+ inspection-tools（对话内触发） | 双触发入口 | T3.1 | 0.5 天 |
+| T3.3 | Job 函数形态：Job 专用镜像（`docker/Dockerfile.job`，与 Web 单体镜像分开构建）、inspection-job.ts 一次性执行、SCF 定时触发器（06:00）与资源配置 | 可定时运行的 Job | T0.2, T3.1 | 1 天 |
+| T3.4 | 手动/对话触发：trigger 路由（gmlevel=3）+ inspection-tools（对话内触发） | 双触发入口 | T3.1 | 0.5 天 |
 | T3.5 | 飞书日报卡片：评分/异常数/可疑数/TOP 风险/报告链接 | 推送可用 | T3.1 | 0.5 天 |
 | T3.6 | 植入样例联调：构造含已知违规日志 + "十字军光环+骑乘"合法加速样例，验证检出与误报拦截；Token 用量与预算告警验证 | 联调记录 | T3.1, T2.7 | 0.5-1 天 |
 
@@ -129,4 +129,4 @@ T0.4/T0.5（Owner 材料）随时并行收集，T2.7/T4.4 前到位即可
 - [ ] M1：连续 3 天日志到齐且 md5 通过；worldserver 重启后 Server.log 历史保留且带时间戳；删 manifest 触发断传告警
 - [ ] M2：gmlevel 权限正确；模型配置热生效；对话与工具调用全量落库可回放；DB 账号仅 SELECT
 - [ ] M3：植入违规样例可检出并附证据；合法加速样例标注误报且不建议 ban；同日重跑幂等；Token 记录与预算告警生效；失败可告警
-- [ ] M4：移动端可查看报告；复制 Markdown 粘贴论坛渲染正常；单发/批量邮件送达可重试；"已警告"标注与全程审计；定向分析结论落库可复制，存在误报信号时建议不为"维持封禁"；报告与定向分析可改备注 / 润色 Markdown / 删除（gmlevel=4、二次确认、审计可查）
+- [ ] M4：移动端可查看报告；复制 Markdown 粘贴论坛渲染正常；单发/批量邮件送达可重试；"已警告"标注与全程审计；定向分析结论落库可复制，存在误报信号时建议不为"维持封禁"；报告与定向分析可改备注 / 润色 Markdown / 删除（gmlevel=3、二次确认、审计可查）

@@ -1,6 +1,6 @@
 import { DataSource } from 'typeorm';
 import { join } from 'path';
-import { dbConn, env, isDevelopment } from './env';
+import { acmDbConn, dbConn, env, isDevelopment } from './env';
 import { logger } from '../middleware/request-logger';
 
 const commonConfig = {
@@ -31,6 +31,20 @@ export const worldDataSource = new DataSource({
   entities: [join(__dirname, '..', 'entities', 'world', '*.entity.{js,ts}')],
 });
 
+// acm 库为系统自有库（可写例外，见 docs/standard/数据库操作规范.md 第五节），使用 PostgreSQL（与游戏 MySQL 隔离）；
+// 表结构由 docker/database/migrations 下的 SQL 迁移文件管理（npm run db:migrate），不使用 synchronize
+export const acmDataSource = new DataSource({
+  type: 'postgres',
+  host: acmDbConn.host,
+  port: acmDbConn.port,
+  username: acmDbConn.user,
+  password: acmDbConn.pass,
+  database: acmDbConn.database,
+  synchronize: false,
+  logging: isDevelopment,
+  entities: [join(__dirname, '..', 'entities', 'acm', '*.entity.{js,ts}')],
+});
+
 let dataSourcesInitialized = false;
 
 export function areDataSourcesReady(): boolean {
@@ -42,6 +56,7 @@ export async function initializeDataSources(): Promise<void> {
     authDataSource.initialize(),
     charactersDataSource.initialize(),
     worldDataSource.initialize(),
+    acmDataSource.initialize(),
   ]);
   dataSourcesInitialized = true;
 }

@@ -1,4 +1,18 @@
 services:
+  # acm 系统自有库（可写）：模型配置 / 会话 / LangGraph checkpoint（PostgresSaver 无模块依赖）
+  # 游戏三库仍在 acore-mysql（只读），两者隔离
+  acm-postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=acm
+      - POSTGRES_PASSWORD=${ACM_PG_PASSWORD}
+      - POSTGRES_DB=acm
+    volumes:
+      - acm_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   app:
     build:
       context: .
@@ -8,9 +22,14 @@ services:
         VITE_ICON_BASE_URL: ${VITE_ICON_BASE_URL}
         VITE_AOWOW_BASE_URL: ${VITE_AOWOW_BASE_URL}
     ports:
-      - "9000:9000"
+      - "9010:9000"
     env_file:
       - .env
     environment:
       - NODE_ENV=production
+    depends_on:
+      - acm-postgres
     restart: unless-stopped
+
+volumes:
+  acm_pgdata:

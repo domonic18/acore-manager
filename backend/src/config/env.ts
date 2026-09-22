@@ -45,6 +45,27 @@ function parseMysqlUrl(url?: string): MysqlConn | null {
   };
 }
 
+interface PgConn {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  database: string;
+}
+
+function parsePgUrl(url?: string): PgConn | null {
+  if (!url) return null;
+  const m = url.match(/^postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^:/]+)(?::(\d+))?\/([^/?]+)/i);
+  if (!m) return null;
+  return {
+    user: decodeURIComponent(m[1]),
+    pass: decodeURIComponent(m[2]),
+    host: m[3],
+    port: m[4] ? parseInt(m[4], 10) : 5432,
+    database: decodeURIComponent(m[5]),
+  };
+}
+
 interface RedisConn {
   host: string;
   port: number;
@@ -90,6 +111,15 @@ export const dbConn = parseMysqlUrl(process.env.DB_URL) ?? {
   pass: 'acore',
 };
 
+// acm 自有库连接（PostgreSQL），与游戏 MySQL（DB_URL）隔离
+export const acmDbConn = parsePgUrl(process.env.ACM_DB_URL) ?? {
+  host: '127.0.0.1',
+  port: 5433,
+  user: 'acm',
+  pass: 'acm',
+  database: 'acm',
+};
+
 export const redisConn = parseRedisUrl(process.env.REDIS_URL) ?? {
   host: '127.0.0.1',
   port: 6379,
@@ -114,6 +144,10 @@ export const env = {
   DB_AUTH: getEnv('DB_AUTH', 'acore_auth'),
   DB_CHARACTERS: getEnv('DB_CHARACTERS', 'acore_characters'),
   DB_WORLD: getEnv('DB_WORLD', 'acore_world'),
+  DB_ACM: getEnv('DB_ACM', 'acm'),
+
+  // LLM api_key encryption (infra-level secret only; LLM connection config lives in acm DB)
+  LLM_AES_KEY: getEnv('LLM_AES_KEY', 'dev-only-llm-aes-key'),
 
   // Redis (connection via REDIS_URL)
   REDIS_EXPIRE_TIME: getEnvInt('REDIS_EXPIRE_TIME', 300),

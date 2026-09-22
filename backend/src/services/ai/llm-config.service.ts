@@ -1,7 +1,7 @@
-import { acmDataSource } from '../../config/database';
-import { AiModelConfig } from '../../entities/acm/ai-model-config.entity';
-import { auditLogService } from '../audit-log.service';
-import { decryptToken, encryptToken, maskToken } from '../../shared/utils/aes.util';
+import { acmDataSource } from '@/config/database';
+import { AiModelConfig } from '@/entities/acm/ai-model-config.entity';
+import { auditLogService } from '@/services/audit-log.service';
+import { decryptToken, encryptToken, maskToken } from '@/shared/utils/aes.util';
 
 // T2.2 最小切片（M0 提前实施）：模型出口配置管理。
 // 行为规则参考 ai-invest-assisstant llm_config_service：
@@ -202,11 +202,14 @@ class LlmConfigService {
     return { ok, latencyMs, error };
   }
 
-  async resolveDefault(): Promise<{ baseUrl: string; apiKey: string; modelName: string; temperature: number | null; maxTokens: number | null; name: string }> {
+  async resolveDefault(): Promise<{ id: number; name: string; provider: string; protocol: string; baseUrl: string; modelName: string; apiKey: string; temperature: number | null; maxTokens: number | null }> {
     const row = await this.repo.findOneBy({ isDefault: true, isActive: true });
     if (!row) throw new ServiceError('未配置默认 LLM 模型，请管理员在后台新增并设为默认 / no default LLM model configured', 500);
     return {
+      id: row.id,
       name: row.name,
+      provider: row.provider,
+      protocol: row.protocol,
       baseUrl: row.baseUrl,
       modelName: row.modelName,
       apiKey: decryptToken(row.apiKeyEncrypted),

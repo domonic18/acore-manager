@@ -1,4 +1,4 @@
-import { authDataSource } from '../config/database';
+import { authDataSource } from '@/config/database';
 
 class MuteRepository {
   async listActiveMutes(): Promise<any[]> {

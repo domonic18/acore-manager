@@ -1,7 +1,7 @@
 import { cacheService } from './cache.service';
 import { soapService } from './soap.service';
-import { logger } from '../middleware/request-logger';
-import { characterRepository } from '../repositories/character.repository';
+import { logger } from '@/middleware/request-logger';
+import { characterRepository } from '@/repositories/character.repository';
 
 export interface CharacterListItem {
   guid: number;

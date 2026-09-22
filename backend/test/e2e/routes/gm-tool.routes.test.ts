@@ -1,15 +1,15 @@
 import request from 'supertest';
 import express, { Application } from 'express';
-import { responseFormatter } from '../../../src/middleware/response-formatter';
-import gmToolRoutes from '../../../src/routes/gm-tool.routes';
-import { gmToolService } from '../../../src/services/gm-tool.service';
+import { responseFormatter } from '@/middleware/response-formatter';
+import gmToolRoutes from '@/routes/gm-tool.routes';
+import { gmToolService } from '@/services/gm-tool.service';
 
-jest.mock('../../../src/services/gm-tool.service');
-jest.mock('../../../src/middleware/auth', () => ({
+jest.mock('@/services/gm-tool.service');
+jest.mock('@/middleware/auth', () => ({
   authMiddleware: (_req: any, _res: any, next: any) => next(),
   AuthRequest: class {},
 }));
-jest.mock('../../../src/middleware/gm-guard', () => ({
+jest.mock('@/middleware/gm-guard', () => ({
   requireGmLevel: (_level: number) => (_req: any, _res: any, next: any) => next(),
 }));
 

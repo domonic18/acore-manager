@@ -1,7 +1,7 @@
 import { QueryRunner } from 'typeorm';
-import { authDataSource } from '../config/database';
-import { RbacLinkedPermission } from '../entities/auth/rbac-linked-permissions.entity';
-import { RbacPermission } from '../entities/auth/rbac-permissions.entity';
+import { authDataSource } from '@/config/database';
+import { RbacLinkedPermission } from '@/entities/auth/rbac-linked-permissions.entity';
+import { RbacPermission } from '@/entities/auth/rbac-permissions.entity';
 
 export interface RbacRole {
   id: number;

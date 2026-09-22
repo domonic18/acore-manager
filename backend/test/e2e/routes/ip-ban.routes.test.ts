@@ -1,15 +1,15 @@
 import request from 'supertest';
 import express, { Application } from 'express';
-import { responseFormatter } from '../../../src/middleware/response-formatter';
-import ipBanRoutes from '../../../src/routes/ip-ban.routes';
-import { ipBanService } from '../../../src/services/ip-ban.service';
+import { responseFormatter } from '@/middleware/response-formatter';
+import ipBanRoutes from '@/routes/ip-ban.routes';
+import { ipBanService } from '@/services/ip-ban.service';
 
-jest.mock('../../../src/services/ip-ban.service');
-jest.mock('../../../src/middleware/auth', () => ({
+jest.mock('@/services/ip-ban.service');
+jest.mock('@/middleware/auth', () => ({
   authMiddleware: (_req: any, _res: any, next: any) => next(),
   AuthRequest: class {},
 }));
-jest.mock('../../../src/middleware/gm-guard', () => ({
+jest.mock('@/middleware/gm-guard', () => ({
   requireGmLevel: (_level: number) => (_req: any, _res: any, next: any) => next(),
 }));
 

@@ -1,4 +1,4 @@
-import { auditLogRepository } from '../repositories/audit-log.repository';
+import { auditLogRepository } from '@/repositories/audit-log.repository';
 
 export interface OperationLog {
   id: number;

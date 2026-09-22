@@ -1,7 +1,7 @@
 import { DataSource } from 'typeorm';
 import { join } from 'path';
 import { acmDbConn, dbConn, env, isDevelopment } from './env';
-import { logger } from '../middleware/request-logger';
+import { logger } from '@/middleware/request-logger';
 
 const commonConfig = {
   type: 'mysql' as const,

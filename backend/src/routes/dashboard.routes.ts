@@ -1,7 +1,7 @@
 import { Request, Response, Router } from 'express';
-import { authMiddleware } from '../middleware/auth';
-import { asyncHandler } from '../shared/async-handler';
-import { dashboardService } from '../services/dashboard.service';
+import { authMiddleware } from '@/middleware/auth';
+import { asyncHandler } from '@/shared/async-handler';
+import { dashboardService } from '@/services/dashboard.service';
 
 const router = Router();
 

@@ -1,9 +1,9 @@
 import { Response, Router } from 'express';
 import { body, param, validationResult } from 'express-validator';
-import { asyncHandler } from '../shared/async-handler';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { requireGmLevel } from '../middleware/gm-guard';
-import { rbacService } from '../services/rbac.service';
+import { asyncHandler } from '@/shared/async-handler';
+import { authMiddleware, AuthRequest } from '@/middleware/auth';
+import { requireGmLevel } from '@/middleware/gm-guard';
+import { rbacService } from '@/services/rbac.service';
 
 const router = Router();
 

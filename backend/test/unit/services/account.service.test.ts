@@ -1,13 +1,13 @@
-import { accountService } from '../../../src/services/account.service';
-import { accountRepository } from '../../../src/repositories/account.repository';
-import { cacheService } from '../../../src/services/cache.service';
-import { soapService } from '../../../src/services/soap.service';
-import { logger } from '../../../src/middleware/request-logger';
+import { accountService } from '@/services/account.service';
+import { accountRepository } from '@/repositories/account.repository';
+import { cacheService } from '@/services/cache.service';
+import { soapService } from '@/services/soap.service';
+import { logger } from '@/middleware/request-logger';
 
-jest.mock('../../../src/repositories/account.repository');
-jest.mock('../../../src/services/cache.service');
-jest.mock('../../../src/services/soap.service');
-jest.mock('../../../src/middleware/request-logger', () => ({
+jest.mock('@/repositories/account.repository');
+jest.mock('@/services/cache.service');
+jest.mock('@/services/soap.service');
+jest.mock('@/middleware/request-logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),

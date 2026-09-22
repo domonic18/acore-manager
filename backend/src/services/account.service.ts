@@ -1,7 +1,7 @@
 import { cacheService } from './cache.service';
 import { soapService } from './soap.service';
-import { logger } from '../middleware/request-logger';
-import { accountRepository } from '../repositories/account.repository';
+import { logger } from '@/middleware/request-logger';
+import { accountRepository } from '@/repositories/account.repository';
 
 export interface AccountListItem {
   id: number;

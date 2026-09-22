@@ -1,9 +1,9 @@
-import { asyncHandler } from '../shared/async-handler';
+import { asyncHandler } from '@/shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { body, param, query, validationResult } from 'express-validator';
-import { authMiddleware } from '../middleware/auth';
-import { requireGmLevel } from '../middleware/gm-guard';
-import { accountService } from '../services/account.service';
+import { authMiddleware } from '@/middleware/auth';
+import { requireGmLevel } from '@/middleware/gm-guard';
+import { accountService } from '@/services/account.service';
 
 const router = Router();
 

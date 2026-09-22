@@ -1,5 +1,5 @@
-import { charactersDataSource, authDataSource } from '../config/database';
-import { env } from '../config/env';
+import { charactersDataSource, authDataSource } from '@/config/database';
+import { env } from '@/config/env';
 
 export interface DistributionItem {
   key: number;

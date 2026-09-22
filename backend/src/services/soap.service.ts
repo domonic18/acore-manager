@@ -1,6 +1,6 @@
 import { request } from 'http';
-import { soapConn } from '../config/env';
-import { logger } from '../middleware/request-logger';
+import { soapConn } from '@/config/env';
+import { logger } from '@/middleware/request-logger';
 
 export class SoapService {
   sendCommand(command: string): Promise<string> {

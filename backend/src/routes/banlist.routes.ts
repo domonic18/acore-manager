@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { authMiddleware } from '../middleware/auth';
-import { requireGmLevel } from '../middleware/gm-guard';
-import { asyncHandler } from '../shared/async-handler';
-import { banlistService } from '../services/banlist.service';
+import { authMiddleware } from '@/middleware/auth';
+import { requireGmLevel } from '@/middleware/gm-guard';
+import { asyncHandler } from '@/shared/async-handler';
+import { banlistService } from '@/services/banlist.service';
 
 const router = Router();
 

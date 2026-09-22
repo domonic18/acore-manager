@@ -1,12 +1,12 @@
-import { asyncHandler } from '../shared/async-handler';
+import { asyncHandler } from '@/shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { body, validationResult } from 'express-validator';
-import { authService } from '../services/auth.service';
-import { bruteForceService } from '../services/brute-force.service';
-import { captchaService } from '../services/captcha.service';
-import { getClientIp } from '../shared/utils/ip.util';
-import { env } from '../config/env';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authService } from '@/services/auth.service';
+import { bruteForceService } from '@/services/brute-force.service';
+import { captchaService } from '@/services/captcha.service';
+import { getClientIp } from '@/shared/utils/ip.util';
+import { env } from '@/config/env';
+import { authMiddleware, AuthRequest } from '@/middleware/auth';
 
 const router = Router();
 

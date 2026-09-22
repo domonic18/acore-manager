@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
-import { env } from '../../config/env';
+import { env } from '@/config/env';
 
 function deriveKey(secret: string): Buffer {
   return createHash('sha256').update(secret, 'utf8').digest();

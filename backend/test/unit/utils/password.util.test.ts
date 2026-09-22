@@ -1,4 +1,4 @@
-import { calculateSRP6Verifier, verifySRP6Password } from '../../../src/shared/utils/password.util';
+import { calculateSRP6Verifier, verifySRP6Password } from '@/shared/utils/password.util';
 
 describe('calculateSRP6Verifier', () => {
   it('produces consistent verifier for same inputs', () => {

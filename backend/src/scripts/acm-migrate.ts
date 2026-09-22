@@ -2,7 +2,7 @@ import '../config/load-env';
 import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { Client } from 'pg';
-import { acmDbConn } from '../config/env';
+import { acmDbConn } from '@/config/env';
 
 // SQL 迁移执行器（ai-invest-assisstant 同款模式）：
 // - 迁移文件：docker/database/migrations/YYYYMMDD_NN_description.sql（按文件名顺序执行，git 留痕）

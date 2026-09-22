@@ -1,7 +1,7 @@
-import { gmToolService } from '../../../src/services/gm-tool.service';
-import { soapService } from '../../../src/services/soap.service';
+import { gmToolService } from '@/services/gm-tool.service';
+import { soapService } from '@/services/soap.service';
 
-jest.mock('../../../src/services/soap.service');
+jest.mock('@/services/soap.service');
 
 describe('GmToolService', () => {
   beforeEach(() => {

@@ -1,7 +1,7 @@
-import { auditLogService } from '../../../src/services/audit-log.service';
-import { auditLogRepository } from '../../../src/repositories/audit-log.repository';
+import { auditLogService } from '@/services/audit-log.service';
+import { auditLogRepository } from '@/repositories/audit-log.repository';
 
-jest.mock('../../../src/repositories/audit-log.repository');
+jest.mock('@/repositories/audit-log.repository');
 
 describe('AuditLogService', () => {
   beforeEach(() => {

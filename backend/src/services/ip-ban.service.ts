@@ -1,6 +1,6 @@
 import { soapService } from './soap.service';
-import { logger } from '../middleware/request-logger';
-import { ipBanRepository } from '../repositories/ip-ban.repository';
+import { logger } from '@/middleware/request-logger';
+import { ipBanRepository } from '@/repositories/ip-ban.repository';
 
 export interface IpBanRecord {
   ip: string;

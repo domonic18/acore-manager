@@ -110,7 +110,8 @@ backend/src/
 │   ├── ai-report.service.ts        # 报告查询 / 幂等 upsert / 管理
 │   ├── llm-config.service.ts       # 模型出口配置（加密存取/指纹/测试连接）✅ 已建
 │   ├── chat-session.service.ts     # 会话与消息正本
-│   ├── token-usage.service.ts      # Token 计量与日预算告警
+│   ├── token-usage.service.ts      # Token 计量与日预算告警 ✅ 已建
+│   ├── feishu-notify.service.ts    # 飞书群机器人告警出口（预算/巡检失败/断传）✅ 已建
 │   ├── cos.service.ts              # COS 读写（日志包 / 报告归档）
 │   └── anticheat-exemption.service.ts  # 误报白名单 CRUD
 ├── entities/acm/                   # acm 库 TypeORM 实体（新增数据源）
@@ -128,7 +129,8 @@ backend/src/
     ├── ai-assistant.routes.ts      # SSE 对话 / 会话管理
     ├── ai-diagnosis.routes.ts      # 报告 / 手动触发 / 误报标注 / 上传状态
     ├── ai-analysis.routes.ts       # 定向分析（SSE 流式 / 历史查询）
-    └── ai-model-config.routes.ts   # 模型配置 / Token 用量（gmlevel=3）✅ 已建
+    ├── ai-model-config.routes.ts   # 模型配置（gmlevel=3）✅ 已建
+    └── ai-token-usage.routes.ts    # Token 用量报表（gmlevel=3）✅ 已建
 ```
 
 依赖方向（单向，禁止反向）：`routes/` → `services/ai/` → `agent/` → `entities/` / `shared/`；`agent/` 内部不 import `services/`。

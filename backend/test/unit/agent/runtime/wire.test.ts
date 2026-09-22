@@ -59,6 +59,37 @@ describe('wire: streamEvents → SSE logical events', () => {
     expect(out[2].event).toBe('done');
   });
 
+  it('marks tool_result as failed when the handler returns a structured error', async () => {
+    const agent = fakeAgent([
+      { event: 'on_tool_start', name: 'get_metrics_snapshot', run_id: 'run-3', data: { input: {} } },
+      { event: 'on_tool_end', name: 'get_metrics_snapshot', run_id: 'run-3', data: { output: { error: 'datasource characters not initialized' } } },
+    ]);
+
+    const out = [];
+    for await (const ev of streamAgentEvents(agent as never, {}, {})) out.push(ev);
+
+    expect(out[1]).toMatchObject({
+      event: 'tool_result',
+      data: { name: 'get_metrics_snapshot', rowCount: null, error: 'datasource characters not initialized' },
+    });
+  });
+
+  it('maps tool errors to a terminal tool_result so the frontend row does not stay running', async () => {
+    const agent = fakeAgent([
+      { event: 'on_tool_start', name: 'get_log_manifest', run_id: 'run-2', data: { input: { date: '2026-09-22' } } },
+      { event: 'on_tool_error', name: 'get_log_manifest', run_id: 'run-2', data: { error: new Error('COS 未配置') } },
+    ]);
+
+    const out = [];
+    for await (const ev of streamAgentEvents(agent as never, {}, {})) out.push(ev);
+
+    expect(out[1]).toMatchObject({
+      event: 'tool_result',
+      data: { name: 'get_log_manifest', rowCount: null, error: 'COS 未配置' },
+    });
+    expect(out[2].event).toBe('done');
+  });
+
   it('emits error event on upstream failure', async () => {
     const agent = {
       streamEvents: () => ({

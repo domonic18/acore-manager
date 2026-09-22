@@ -34,7 +34,13 @@ export function registerManifestTool(): void {
     }),
     handler: async (args) => {
       const { date, realm } = args as { date: string; realm: string };
-      const manifest = await cosGetObjectJson<LogManifest>(manifestKey(realm, date));
+      // COS 未配置/网络异常属预期条件，返回结构化 note 供模型解释而非抛错（抛错会引发 superstep 级联失败）
+      let manifest: LogManifest | null;
+      try {
+        manifest = await cosGetObjectJson<LogManifest>(manifestKey(realm, date));
+      } catch (err) {
+        return { present: false, note: `读取日志清单失败：${(err as Error).message}` };
+      }
       if (!manifest) return { present: false, note: `COS 无 ${realm}/${date}/manifest.json（断传或尚未上传）` };
       const presentTypes = new Set(manifest.files.map((f) => f.type));
       const missingTypes = LOG_TYPES.filter((t) => !presentTypes.has(t));

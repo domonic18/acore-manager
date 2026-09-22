@@ -30,13 +30,13 @@ describe('tools registry wrapper', () => {
     expect(result).toEqual([{ v: 42 }]);
   });
 
-  it('propagates handler errors', async () => {
+  it('converts handler errors to a structured error result so the round is not aborted', async () => {
     const wrapped = registerSample({
       handler: async () => {
         throw new Error('db down');
       },
     });
-    await expect(invoke(wrapped, { n: 1 }, {})).rejects.toThrow('db down');
+    await expect(invoke(wrapped, { n: 1 }, {})).resolves.toEqual({ error: 'db down' });
   });
 
   it('applies per-tool timeout override', async () => {
@@ -44,7 +44,7 @@ describe('tools registry wrapper', () => {
       timeoutMs: 10,
       handler: async () => new Promise((resolve) => setTimeout(() => resolve('late'), 200)),
     });
-    await expect(invoke(wrapped, { n: 1 }, {})).rejects.toThrow('timeout');
+    await expect(invoke(wrapped, { n: 1 }, {})).resolves.toEqual({ error: expect.stringContaining('timeout') });
   });
 
   it('blocks execution once budget is exhausted', async () => {

@@ -63,6 +63,20 @@ describe('log-tools', () => {
     expect(jsonMock).toHaveBeenCalledWith(manifestKey(REALM, DATE));
   });
 
+  it('get_log_manifest degrades gracefully when COS is unavailable instead of throwing', async () => {
+    jsonMock.mockRejectedValueOnce(new Error('COS 未配置（需要 COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION）'));
+    const result = await toolFn('get_log_manifest').invoke({ date: DATE, realm: REALM });
+    expect(result).toMatchObject({ present: false });
+    expect(String(result.note)).toContain('读取日志清单失败');
+  });
+
+  it('fetch_log_archive degrades gracefully when COS is unavailable instead of throwing', async () => {
+    bufferMock.mockRejectedValueOnce(new Error('COS 未配置（需要 COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION）'));
+    const result = await toolFn('fetch_log_archive').invoke({ date: DATE, type: 'anticheat', realm: REALM });
+    expect(result.files).toEqual([]);
+    expect(String(result.note)).toContain('拉取日志失败');
+  });
+
   it('get_log_manifest checks completeness against the four expected types', async () => {
     jsonMock.mockResolvedValueOnce({
       realm: REALM,

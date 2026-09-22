@@ -73,7 +73,10 @@ async function runWrapped(def: ToolDefinition, args: unknown, config?: RunnableC
       status: isBudget ? 'budget_exceeded' : 'error',
       error: (err as Error).message,
     });
-    throw err;
+    // deepagents/LangGraph 的工具抛错会以 superstep 异常终止整轮对话（模型无法解释），
+    // 故除预算超限（必须中止）外，统一转为结构化 error 结果交由模型自适应作答
+    if (isBudget) throw err;
+    return { error: (err as Error).message ?? String(err) };
   }
 }
 

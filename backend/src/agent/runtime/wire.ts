@@ -54,12 +54,31 @@ export async function* streamAgentEvents(
         case 'on_tool_end': {
           const startedAt = ev.run_id ? toolStartAt.get(ev.run_id) : undefined;
           if (ev.run_id) toolStartAt.delete(ev.run_id);
+          const output = ev.data.output as { error?: unknown } | undefined;
+          const failed = typeof output?.error === 'string';
           yield {
             event: 'tool_result',
             data: {
               name: ev.name,
-              rowCount: countOutputRows(ev.data.output),
+              rowCount: failed ? null : countOutputRows(ev.data.output),
               durationMs: startedAt ? Date.now() - startedAt : null,
+              ...(failed ? { error: output?.error } : {}),
+            },
+          };
+          break;
+        }
+        case 'on_tool_error': {
+          // 工具失败必须闭环 tool_result，否则前端该行永远停留在"运行中"
+          const startedAt = ev.run_id ? toolStartAt.get(ev.run_id) : undefined;
+          if (ev.run_id) toolStartAt.delete(ev.run_id);
+          const raw = ev.data.error;
+          yield {
+            event: 'tool_result',
+            data: {
+              name: ev.name,
+              rowCount: null,
+              durationMs: startedAt ? Date.now() - startedAt : null,
+              error: raw instanceof Error ? raw.message : String(raw ?? 'tool error'),
             },
           };
           break;

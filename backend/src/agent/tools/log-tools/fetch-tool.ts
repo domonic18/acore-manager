@@ -23,9 +23,14 @@ export function registerFetchTool(): void {
       const dir = workspaceDir(realm, date, type);
       const cached = listExtracted(dir);
       if (cached.length > 0) return { files: cached, cached: true };
-      const archive = await cosGetObjectBuffer(logArchiveKey(realm, date, type));
-      const files = await extractArchive(realm, date, type, archive);
-      return { files, cached: false };
+      // COS 未配置/对象不存在属预期条件，返回结构化 note 供模型解释而非抛错（抛错会引发 superstep 级联失败）
+      try {
+        const archive = await cosGetObjectBuffer(logArchiveKey(realm, date, type));
+        const files = await extractArchive(realm, date, type, archive);
+        return { files, cached: false };
+      } catch (err) {
+        return { files: [], note: `拉取日志失败：${(err as Error).message}` };
+      }
     },
   });
 }

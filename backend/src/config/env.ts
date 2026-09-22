@@ -151,6 +151,10 @@ export const env = {
 
   // AI notifications & budget (Feishu webhook; empty = log only, never blocks the main flow)
   FEISHU_WEBHOOK_URL: getEnv('FEISHU_WEBHOOK_URL', ''),
+  // 自定义机器人加签密钥（安全设置为"签名校验"时必填；空 = 不签名）
+  FEISHU_WEBHOOK_SECRET: getEnv('FEISHU_WEBHOOK_SECRET', ''),
+  // Web 前端基础地址（飞书日报卡片的报告链接；空 = 卡片不含跳转按钮）
+  ACM_WEB_BASE_URL: getEnv('ACM_WEB_BASE_URL', ''),
   AI_DAILY_TOKEN_BUDGET: getEnvInt('AI_DAILY_TOKEN_BUDGET', 5_000_000),
 
   // Agent runtime (arch 3.2.2 / 3.3.1)

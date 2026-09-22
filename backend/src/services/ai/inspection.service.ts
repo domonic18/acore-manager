@@ -346,9 +346,16 @@ class InspectionService {
       REPORT_CACHE_TTL_SECONDS,
     );
 
-    void feishuNotifyService.sendText(
-      `[ACM] ${input.realm} ${input.date} 巡检完成：健康分 ${report.healthScore}，可疑玩家 ${report.suspiciousPlayers.length} 名。${report.summary.slice(0, 120)}`,
-    );
+    // T3.5 日报卡片：评分 / 异常数 / 可疑数 / TOP 风险 / 报告链接（基础地址未配置则无跳转按钮）
+    void feishuNotifyService.sendDailyReportCard({
+      realm: input.realm,
+      date: input.date,
+      trigger: input.trigger,
+      healthScore: report.healthScore,
+      summary: report.summary,
+      serverHealth: report.serverHealth,
+      suspiciousPlayers: report.suspiciousPlayers,
+    });
   }
 
   private async recordFailure(input: InspectionInput, message: string): Promise<number | null> {

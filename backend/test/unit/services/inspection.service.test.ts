@@ -8,7 +8,7 @@ jest.mock('@/services/cache.service', () => ({
   cacheService: { get: jest.fn(), set: jest.fn(), del: jest.fn(), delPattern: jest.fn() },
 }));
 jest.mock('@/services/ai/feishu-notify.service', () => ({
-  feishuNotifyService: { sendText: jest.fn() },
+  feishuNotifyService: { sendText: jest.fn(), sendDailyReportCard: jest.fn().mockResolvedValue(true) },
 }));
 jest.mock('@/services/ai/token-usage.service', () => ({
   tokenUsageService: { record: jest.fn().mockResolvedValue(undefined) },
@@ -54,6 +54,7 @@ const cosGetJson = cosGetObjectJson as jest.Mock;
 const cosPut = cosPutObjectBuffer as jest.Mock;
 const cacheSet = cacheService.set as jest.Mock;
 const sendText = feishuNotifyService.sendText as jest.Mock;
+const sendDailyReportCard = feishuNotifyService.sendDailyReportCard as jest.Mock;
 const tokenRecord = tokenUsageService.record as jest.Mock;
 const getAgentMock = getAgent as jest.Mock;
 const getRepository = acmDataSource.getRepository as jest.Mock;
@@ -121,7 +122,9 @@ describe('InspectionService', () => {
     expect(cosPut).toHaveBeenCalledWith('acore-ai-reports/realm3/2026-08-22.json', expect.any(Buffer), 'application/json');
     expect(cosPut).toHaveBeenCalledWith('acore-ai-reports/realm3/2026-08-22.md', expect.any(Buffer), 'text/markdown');
     expect(cacheSet).toHaveBeenCalledWith('acm:ai:report:latest:realm3', expect.objectContaining({ healthScore: 82 }), expect.any(Number));
-    expect(sendText).toHaveBeenCalledWith(expect.stringContaining('巡检完成'));
+    expect(sendDailyReportCard).toHaveBeenCalledWith(
+      expect.objectContaining({ realm: 'realm3', date: '2026-08-22', trigger: 'cron', healthScore: 82 }),
+    );
     expect(clearWorkspace).toHaveBeenCalled();
   });
 

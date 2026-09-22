@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '@/agent/tools/registry';
+import { matchAuraSpells } from '@/agent/tools/false-positive/aura-rules';
 import { runReadOnly } from './query-guard';
 
 // 角色域白名单工具（需求 3.5）：全部经 runReadOnly 只读执行；
@@ -36,11 +37,19 @@ export function registerCharacterTools(): void {
 
   registerTool({
     name: 'get_character_auras',
-    description: '查询角色当前身上的光环（spell ID/叠加层数/剩余秒数）。用于比对移动类光环误报（详见误报解释引擎）。',
+    description: '查询角色当前身上的光环（spell ID/叠加层数/剩余秒数），命中的移动类规则附 movementHint。',
     schema: z.object({ guid: z.number().int().positive().describe('角色 guid') }),
     handler: async (args) => {
       const { guid } = args as { guid: number };
-      return runReadOnly('characters', 'SELECT spell, stackCount, remainTime FROM character_aura WHERE guid = ? LIMIT 50', [guid]);
+      const result = await runReadOnly('characters', 'SELECT spell, stackCount, remainTime FROM character_aura WHERE guid = ? LIMIT 50', [guid]);
+      const matched = matchAuraSpells(result.rows.map((r) => r.spell as number));
+      const spellToLabel = new Map<string, string>();
+      for (const m of matched) for (const s of m.spells) spellToLabel.set(String(s), m.label);
+      const rows = result.rows.map((r) => {
+        const label = spellToLabel.get(String(r.spell));
+        return label ? { ...r, movementHint: label } : r;
+      });
+      return { rows, truncated: result.truncated, movementRules: matched };
     },
   });
 

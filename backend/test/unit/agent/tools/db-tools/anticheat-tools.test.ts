@@ -45,14 +45,28 @@ describe('anticheat-tools', () => {
       status: { total_reports: number };
       daily: { rows: unknown[]; truncated: boolean };
       exemptions: { violationType: string }[];
+      movementAuras: { label: string; spells: number[] }[];
     };
 
     expect(result.character.name).toBe('Rama');
     expect(result.status.total_reports).toBe(3);
     expect(result.daily.truncated).toBe(false);
     expect(result.exemptions[0].violationType).toBe('speed');
-    expect(queryMock).toHaveBeenCalledTimes(3);
+    expect(result.movementAuras).toEqual([]);
+    expect(queryMock).toHaveBeenCalledTimes(4);
     expect(findMock).toHaveBeenCalledWith({ where: { characterGuid: 5 } });
+  });
+
+  it('annotates movementAuras from current character auras', async () => {
+    queryMock.mockResolvedValueOnce([]); // who
+    queryMock.mockResolvedValueOnce([]); // status
+    queryMock.mockResolvedValueOnce([]); // daily
+    queryMock.mockResolvedValueOnce([{ spell: 546 }, { spell: 12345 }]); // character_aura
+
+    const result = (await toolFn('get_anticheat_record').invoke({ guid: 7 })) as {
+      movementAuras: { label: string; spells: number[] }[];
+    };
+    expect(result.movementAuras).toEqual([{ label: '水上行走类光环', spells: [546], explainsTypes: ['waterwalk'] }]);
   });
 
   it('degrades to empty structures when all sources are empty', async () => {
@@ -61,10 +75,12 @@ describe('anticheat-tools', () => {
       status: unknown;
       daily: { rows: unknown[]; truncated: boolean };
       exemptions: unknown[];
+      movementAuras: unknown[];
     };
     expect(result.character).toBeNull();
     expect(result.status).toBeNull();
     expect(result.daily).toEqual({ rows: [], truncated: false });
     expect(result.exemptions).toEqual([]);
+    expect(result.movementAuras).toEqual([]);
   });
 });

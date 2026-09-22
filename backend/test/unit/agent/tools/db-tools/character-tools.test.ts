@@ -67,4 +67,15 @@ describe('character-tools', () => {
     };
     expect(result.friends).toEqual([{ guid: 9, name: 'Bob', level: 80, online: 1, note: 'x' }]);
   });
+
+  it('get_character_auras annotates movement rules on matching spells', async () => {
+    queryMock.mockResolvedValueOnce([{ spell: 546, stackCount: 1, remainTime: -1 }, { spell: 12345, stackCount: 2, remainTime: 30 }]);
+    const result = (await toolFn('get_character_auras').invoke({ guid: 1 })) as {
+      rows: { spell: number; movementHint?: string }[];
+      movementRules: { label: string }[];
+    };
+    expect(result.rows[0]).toMatchObject({ spell: 546, movementHint: '水上行走类光环' });
+    expect(result.rows[1]).toEqual({ spell: 12345, stackCount: 2, remainTime: 30 });
+    expect(result.movementRules).toHaveLength(1);
+  });
 });

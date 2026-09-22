@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { acmDataSource } from '@/config/database';
 import { AiAnticheatExemption } from '@/entities/acm/ai-anticheat-exemption.entity';
 import { registerTool } from '@/agent/tools/registry';
+import { matchAuraSpells } from '@/agent/tools/false-positive/aura-rules';
 import { runReadOnly } from './query-guard';
 
 // 反作弊域白名单工具（需求 3.5）：角色库举报聚合 + acm 库 GM 豁免标注一次返回；
@@ -16,14 +17,14 @@ export function registerAnticheatTools(): void {
   registerTool({
     name: 'get_anticheat_record',
     description:
-      '查询角色反作弊举报档案：当前聚合状态（players_reports_status）、N 天内逐日举报明细（daily_players_reports，creation_time 为 unix 秒）与 GM 豁免标注。average 为所有举报者举报时的均速均值。',
+      '查询角色反作弊举报档案：当前聚合状态（players_reports_status）、N 天内逐日举报明细（daily_players_reports，creation_time 为 unix 秒）、GM 豁免标注与当前移动类光环（误报解释参考）。average 为所有举报者举报时的均速均值。',
     schema: z.object({
       guid: z.number().int().positive().describe('角色 guid'),
       daysBack: z.number().int().min(1).max(90).default(7).describe('明细回溯天数'),
     }),
     handler: async (args) => {
       const { guid, daysBack } = args as { guid: number; daysBack: number };
-      const [who, status, daily, exemptions] = await Promise.all([
+      const [who, status, daily, exemptions, auras] = await Promise.all([
         runReadOnly('characters', 'SELECT name, level, online FROM characters WHERE guid = ? LIMIT 1', [guid]),
         runReadOnly('characters', `SELECT ${REPORT_COLUMNS} FROM players_reports_status WHERE guid = ? LIMIT 1`, [guid]),
         runReadOnly(
@@ -34,6 +35,7 @@ export function registerAnticheatTools(): void {
           [guid, daysBack],
         ),
         acmDataSource.getRepository(AiAnticheatExemption).find({ where: { characterGuid: guid } }),
+        runReadOnly('characters', 'SELECT spell FROM character_aura WHERE guid = ? LIMIT 50', [guid]),
       ]);
       return {
         character: who.rows[0] ?? null,
@@ -46,6 +48,7 @@ export function registerAnticheatTools(): void {
           createdBy: e.createdBy,
           createdAt: e.createdAt,
         })),
+        movementAuras: matchAuraSpells(auras.rows.map((r) => r.spell as number)),
       };
     },
   });

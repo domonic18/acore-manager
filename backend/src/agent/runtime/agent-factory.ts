@@ -4,7 +4,7 @@ import { logger } from '@/middleware/request-logger';
 import { buildModelClient, modelFingerprint, ResolvedModelConfig } from './model-factory';
 import { getCheckpointer } from './checkpointer';
 import { loadPrompt } from '@/agent/core/prompt-loader';
-import { registerAllDbTools } from '@/agent/tools/db-tools';
+import { registerAllTools } from '@/agent/tools';
 import { exportTools } from '@/agent/tools/registry';
 
 // agent 装配与指纹 LRU 缓存（arch 3.2.1 / 3.2.2）：
@@ -45,7 +45,7 @@ export function agentCacheStats(): { size: number; keys: string[] } {
 }
 
 async function buildAgent(cfg: ResolvedModelConfig, scene: AgentScene): Promise<DeepAgentInstance> {
-  registerAllDbTools();
+  registerAllTools();
   const model = buildModelClient(cfg);
   const checkpointer = await getCheckpointer();
   return createDeepAgent({

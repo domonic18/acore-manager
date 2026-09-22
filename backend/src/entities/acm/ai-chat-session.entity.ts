@@ -9,7 +9,7 @@ export class AiChatSession {
   @Column({ type: 'int', name: 'user_id' })
   userId!: number;
 
-  @Column({ type: 'varchar', length: 64 })
+  @Column({ type: 'varchar', length: 64, name: 'thread_id' })
   threadId!: string;
 
   @Column({ type: 'varchar', length: 200, default: '' })

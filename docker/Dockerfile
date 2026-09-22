@@ -1,6 +1,7 @@
 # Stage 1: Frontend build
 # Use Debian-based image because rolldown (Vite 8 bundler) lacks musl native bindings
-FROM node:20 AS frontend-builder
+# node:22：deepagents 传递依赖 openai@7 要求 node>=22，且 npm 10.8(node20) 有 Exit handler never called 损坏安装 bug
+FROM node:22 AS frontend-builder
 WORKDIR /app/frontend
 
 ARG VITE_APP_VERSION
@@ -12,7 +13,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Backend build
-FROM node:20-alpine AS backend-builder
+FROM node:22-alpine AS backend-builder
 WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm ci --legacy-peer-deps
@@ -20,10 +21,10 @@ COPY backend/ ./
 RUN npm run build
 
 # Stage 3: Production
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 WORKDIR /app
-# Install fonts required by svg-captcha on Alpine Linux
-RUN apk add --no-cache fontconfig ttf-dejavu
+# Install fonts required by svg-captcha on Alpine Linux (Alpine 3.18+: ttf-dejavu → font-dejavu)
+RUN apk add --no-cache fontconfig font-dejavu
 COPY backend/package*.json ./
 RUN npm ci --legacy-peer-deps --omit=dev && npm cache clean --force
 COPY --from=backend-builder /app/backend/dist ./dist

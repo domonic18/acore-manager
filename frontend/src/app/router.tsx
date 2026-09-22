@@ -19,11 +19,25 @@ const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
 const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
 const RbacConfigPage = lazy(() => import('@/pages/RbacConfigPage'));
 const ModelConfigPage = lazy(() => import('@/pages/ModelConfigPage'));
+const AiAssistantDock = lazy(() =>
+  import('@/features/ai-assistant/components/AiAssistantDock').then((m) => ({ default: m.AiAssistantDock })),
+);
 
 function withSuspense(Component: React.ComponentType) {
   return (
     <Suspense fallback={<div className="p-8 text-center text-muted-foreground">加载中...</div>}>
       <Component />
+    </Suspense>
+  );
+}
+
+// 全局 AI 助手入口：悬浮按钮 + 右侧抽屉，随 AppLayout 出现在所有已登录页
+function AiAssistantDockGate() {
+  const { hasGmLevel } = usePermission();
+  if (!hasGmLevel(2)) return null;
+  return (
+    <Suspense fallback={null}>
+      <AiAssistantDock />
     </Suspense>
   );
 }
@@ -54,7 +68,12 @@ export const router = createBrowserRouter([
     element: <AuthGuard />,
     children: [
       {
-        element: <AppLayout />,
+        element: (
+          <>
+            <AppLayout />
+            <AiAssistantDockGate />
+          </>
+        ),
         children: [
           { path: '', element: withSuspense(DashboardPage) },
           { path: 'accounts', element: withSuspense(AccountListPage) },
@@ -67,9 +86,7 @@ export const router = createBrowserRouter([
           { path: 'mutes', element: withSuspense(MuteListPage) },
           {
             element: <GmGuard minLevel={2} />,
-            children: [
-              { path: 'ip-bans', element: withSuspense(IpBanPage) },
-            ],
+            children: [{ path: 'ip-bans', element: withSuspense(IpBanPage) }],
           },
           {
             element: <GmGuard minLevel={3} />,

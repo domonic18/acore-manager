@@ -16,4 +16,5 @@ RUN npm ci --legacy-peer-deps --omit=dev && npm cache clean --force
 COPY --from=backend-builder /app/backend/dist ./dist
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 USER nodejs
-CMD ["node", "dist/job/inspection-job.js"]
+# ENTRYPOINT 固定脚本：docker run 追加的参数（--realm= 等）传给巡检入口而非 node 本体
+ENTRYPOINT ["node", "dist/job/inspection-job.js"]

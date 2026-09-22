@@ -1,117 +1,77 @@
-import { execSync } from 'child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import { performance } from 'perf_hooks';
+import 'reflect-metadata';
+import '@/config/load-env';
+import { initializeDataSourcesWithRetry } from '@/config/database';
+import { logger } from '@/middleware/request-logger';
+import { inspectionService, InspectionTrigger } from '@/services/ai/inspection.service';
 
-// T0.2 SCF Job 形态验证桩（M0 专用，docker/Dockerfile.job 镜像 CMD 直接执行，一次性运行后退出）。
-// 流程：下载/生成 fixture tar.gz → /tmp 解压 → 扫描 → 输出耗时与内存 JSON。
-// 目的：验证 SCF 容器对 /tmp 写入、子进程 tar、网络出站的限制与配额。
+// T3.3 Job 函数形态：SCF 定时触发的一次性巡检入口（docker/Dockerfile.job CMD 直接执行）。
+// 退出码语义：0 = 巡检成功；1 = 巡检失败（服务内部已落 failed 行并告警）；2 = 启动致命错误
+// （参数非法 / 数据源不可达），未进入巡检流程。
 
-interface JobReport {
-  mode: 'remote-fixture' | 'synthetic-fixture';
-  downloadMs: number;
-  downloadBytes: number;
-  extractMs: number;
-  scanMs: number;
-  files: number;
-  bytes: number;
-  matchedLines: number;
-  totalMs: number;
-  memoryRssMB: number;
-  memoryHeapUsedMB: number;
+const CST_OFFSET_MS = 8 * 3600 * 1000;
+
+export interface JobArgs {
+  realm: string;
+  date: string;
+  trigger: InspectionTrigger;
 }
 
-function walk(dir: string, visit: (file: string) => void): void {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) walk(full, visit);
-    else visit(full);
-  }
-}
+export function parseJobArgs(argv: string[], now: Date = new Date()): JobArgs {
+  let realm: string | undefined;
+  let date: string | undefined;
+  let trigger: InspectionTrigger = 'cron';
 
-async function downloadFixture(url: string, target: string): Promise<number> {
-  const t0 = performance.now();
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`fixture download failed: HTTP ${resp.status}`);
-  const buf = Buffer.from(await resp.arrayBuffer());
-  writeFileSync(target, buf);
-  return performance.now() - t0;
-}
-
-function buildSyntheticFixture(target: string): number {
-  const t0 = performance.now();
-  const dir = mkdtempSync('/tmp/fixture-src-');
-  for (let i = 0; i < 20; i += 1) {
-    const lines = Array.from({ length: 500 }, (_, n) =>
-      n % 10 === 0 ? `ERROR antifarm suspicious move map=0 guid=${i * 100 + n}` : `INFO tick ${n}`,
-    );
-    writeFileSync(join(dir, `worldserver-${i}.log`), lines.join('\n'));
-  }
-  execSync(`tar -czf ${JSON.stringify(target)} -C ${JSON.stringify(dir)} .`, { stdio: 'ignore' });
-  rmSync(dir, { recursive: true, force: true });
-  return performance.now() - t0;
-}
-
-async function main(): Promise<void> {
-  const t0 = performance.now();
-  const workDir = mkdtempSync('/tmp/acm-job-');
-  const tgzPath = join(workDir, 'fixture.tar.gz');
-  const extractDir = join(workDir, 'extracted');
-
-  let mode: JobReport['mode'];
-  let downloadMs: number;
-  try {
-    const url = process.env.JOB_FIXTURE_URL;
-    if (url) {
-      downloadMs = await downloadFixture(url, tgzPath);
-      mode = 'remote-fixture';
+  for (const arg of argv) {
+    if (arg.startsWith('--realm=')) {
+      realm = arg.slice('--realm='.length).trim();
+    } else if (arg.startsWith('--date=')) {
+      date = arg.slice('--date='.length).trim();
+    } else if (arg.startsWith('--trigger=')) {
+      trigger = arg.slice('--trigger='.length).trim() as InspectionTrigger;
     } else {
-      downloadMs = buildSyntheticFixture(tgzPath);
-      mode = 'synthetic-fixture';
+      throw new Error(`未知参数 ${arg}（支持 --realm=<realm> --date=YYYY-MM-DD --trigger=cron|manual）`);
     }
-  } catch (err) {
-    console.error(JSON.stringify({ fatal: 'fixture-prep', message: (err as Error).message }));
-    process.exit(1);
+  }
+  if (!realm) throw new Error('缺少必填参数 --realm=<realm>');
+  if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`--date 需为 YYYY-MM-DD，收到 ${date}`);
+  }
+  if (trigger !== 'cron' && trigger !== 'manual') {
+    throw new Error(`--trigger 仅支持 cron|manual，收到 ${trigger}`);
   }
 
-  const downloadBytes = statSync(tgzPath).size;
-  const t1 = performance.now();
-  execSync(`mkdir -p ${JSON.stringify(extractDir)} && tar -xzf ${JSON.stringify(tgzPath)} -C ${JSON.stringify(extractDir)}`, {
-    stdio: 'ignore',
-  });
-  const extractMs = performance.now() - t1;
+  // 未传 --date 时取上海时区（CST，UTC+8 无夏令时）的昨日：
+  // SCF 06:00 CST 触发时容器为 UTC，按 UTC 算"昨日"会偏一天。
+  if (date === undefined) {
+    const cst = new Date(now.getTime() + CST_OFFSET_MS);
+    cst.setUTCDate(cst.getUTCDate() - 1);
+    date = cst.toISOString().slice(0, 10);
+  }
 
-  let files = 0;
-  let bytes = 0;
-  let matchedLines = 0;
-  const t2 = performance.now();
-  walk(extractDir, (file) => {
-    files += 1;
-    const content = readFileSync(file, 'utf8');
-    bytes += content.length;
-    for (const line of content.split('\n')) if (/error|warn/i.test(line)) matchedLines += 1;
-  });
-  const scanMs = performance.now() - t2;
-
-  const mem = process.memoryUsage();
-  const report: JobReport = {
-    mode: mode!,
-    downloadMs: Math.round(downloadMs),
-    downloadBytes,
-    extractMs: Math.round(extractMs),
-    scanMs: Math.round(scanMs),
-    files,
-    bytes,
-    matchedLines,
-    totalMs: Math.round(performance.now() - t0),
-    memoryRssMB: Math.round(mem.rss / 1024 / 1024),
-    memoryHeapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
-  };
-  console.log(JSON.stringify(report, null, 2));
-  rmSync(workDir, { recursive: true, force: true });
+  return { realm, date, trigger };
 }
 
-main().catch((err) => {
-  console.error('inspection job failed:', err?.message ?? err);
-  process.exit(1);
-});
+export async function runJob(argv: string[]): Promise<number> {
+  let args: JobArgs;
+  try {
+    args = parseJobArgs(argv);
+  } catch (err) {
+    logger.error(`[inspection-job] ${(err as Error).message}`);
+    return 2;
+  }
+
+  try {
+    await initializeDataSourcesWithRetry();
+  } catch (err) {
+    logger.error(`[inspection-job] 数据源初始化失败：${(err as Error).message}`);
+    return 2;
+  }
+
+  const outcome = await inspectionService.run({ realm: args.realm, date: args.date, trigger: args.trigger });
+  logger.info(`[inspection-job] realm=${args.realm} date=${args.date} ok=${outcome.ok} reportId=${outcome.reportId} elapsedMs=${outcome.elapsedMs}`);
+  return outcome.ok ? 0 : 1;
+}
+
+if (require.main === module) {
+  void runJob(process.argv.slice(2)).then((code) => process.exit(code));
+}

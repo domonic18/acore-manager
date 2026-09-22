@@ -27,6 +27,24 @@ describe('wire: streamEvents → SSE logical events', () => {
     ]);
   });
 
+  it('extracts text blocks from array content and skips thinking blocks (anthropic-protocol models)', async () => {
+    const agent = fakeAgent([
+      { event: 'on_chat_model_stream', data: { chunk: { content: [{ index: 0, type: 'thinking', thinking: '推理中' }] } } },
+      { event: 'on_chat_model_stream', data: { chunk: { content: [{ index: 1, type: 'text', text: '今天是' }] } } },
+      { event: 'on_chat_model_stream', data: { chunk: { content: [{ index: 1, type: 'text', text: '2026-09-22' }] } } },
+      { event: 'on_chat_model_end', data: { output: { usage_metadata: { input_tokens: 8, output_tokens: 4, total_tokens: 12 } } } },
+    ]);
+
+    const out = [];
+    for await (const ev of streamAgentEvents(agent as never, {}, {})) out.push(ev);
+
+    expect(out).toEqual([
+      { event: 'delta', data: { text: '今天是' } },
+      { event: 'delta', data: { text: '2026-09-22' } },
+      { event: 'done', data: { tokens: { prompt: 8, completion: 4, total: 12 } } },
+    ]);
+  });
+
   it('maps tool start/end with row count and duration', async () => {
     const agent = fakeAgent([
       { event: 'on_tool_start', name: 'get_character_overview', run_id: 'run-1', data: { input: { name: 'rama' } } },

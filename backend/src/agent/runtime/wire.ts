@@ -35,7 +35,7 @@ export async function* streamAgentEvents(
       switch (ev.event) {
         case 'on_chat_model_stream': {
           const chunk = ev.data.chunk as { content?: unknown } | undefined;
-          const text = typeof chunk?.content === 'string' ? chunk.content : '';
+          const text = contentText(chunk?.content);
           if (text) yield { event: 'delta', data: { text } };
           break;
         }
@@ -79,6 +79,19 @@ export async function* streamAgentEvents(
 function extractUsage(output: unknown): UsageLike {
   const meta = (output as { usage_metadata?: UsageLike } | undefined)?.usage_metadata;
   return meta ?? {};
+}
+
+// chunk.content 归一化：OpenAI 系为纯字符串；Anthropic 系（kimi-for-coding 等）为
+// 分块数组 [{type:'thinking',thinking} | {type:'text',text}]——thinking 不进 delta（正本只落最终回复）
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  let out = '';
+  for (const block of content) {
+    const b = block as { type?: string; text?: unknown };
+    if (b?.type === 'text' && typeof b.text === 'string') out += b.text;
+  }
+  return out;
 }
 
 function countOutputRows(output: unknown): number | null {

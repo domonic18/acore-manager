@@ -1,4 +1,4 @@
-import { streamAgentEvents } from '@/agent/runtime/wire';
+import { streamAgentEvents, extractQuestionMarker } from '@/agent/runtime/wire';
 
 function fakeAgent(events: unknown[]) {
   return {
@@ -107,5 +107,65 @@ describe('wire: streamEvents → SSE logical events', () => {
       { event: 'delta', data: { text: '部分' } },
       { event: 'error', data: { message: 'boom', code: 'budget_exceeded' } },
     ]);
+  });
+});
+
+describe('wire: ask_user question marker', () => {
+  const questionPayload = {
+    question: '分析哪个服务器？',
+    options: [{ value: 'realm3', label: 'realm3' }],
+    default: 'realm3',
+  };
+
+  it('emits question before tool_result for ToolMessage stringified content', async () => {
+    const agent = fakeAgent([
+      { event: 'on_tool_start', name: 'ask_user', run_id: 'q1', data: { input: {} } },
+      {
+        event: 'on_tool_end',
+        name: 'ask_user',
+        run_id: 'q1',
+        data: { output: { content: JSON.stringify({ __question__: questionPayload }) } },
+      },
+    ]);
+
+    const out = [];
+    for await (const ev of streamAgentEvents(agent as never, {}, {})) out.push(ev);
+
+    const qIdx = out.findIndex((e) => e.event === 'question');
+    const tIdx = out.findIndex((e) => e.event === 'tool_result');
+    expect(qIdx).toBeGreaterThanOrEqual(0);
+    expect(out[qIdx].data).toEqual(questionPayload);
+    expect(tIdx).toBeGreaterThan(qIdx);
+  });
+
+  it('emits question for bare object output', async () => {
+    const agent = fakeAgent([
+      { event: 'on_tool_end', name: 'ask_user', run_id: 'q2', data: { output: { __question__: questionPayload } } },
+    ]);
+
+    const out = [];
+    for await (const ev of streamAgentEvents(agent as never, {}, {})) out.push(ev);
+
+    expect(out.find((e) => e.event === 'question')?.data).toEqual(questionPayload);
+  });
+
+  it('does not emit question for normal tool output', async () => {
+    const agent = fakeAgent([
+      { event: 'on_tool_end', name: 'get_money_flow', run_id: 'q3', data: { output: { content: '[1,2,3]' } } },
+    ]);
+
+    const out = [];
+    for await (const ev of streamAgentEvents(agent as never, {}, {})) out.push(ev);
+
+    expect(out.find((e) => e.event === 'question')).toBeUndefined();
+  });
+
+  it('extractQuestionMarker handles string/bare/invalid forms', () => {
+    expect(extractQuestionMarker({ content: JSON.stringify({ __question__: questionPayload }) })).toEqual(questionPayload);
+    expect(extractQuestionMarker({ __question__: questionPayload })).toEqual(questionPayload);
+    expect(extractQuestionMarker({ content: '{"foo":1}' })).toBeNull();
+    expect(extractQuestionMarker({ content: 'not-json' })).toBeNull();
+    expect(extractQuestionMarker({ content: '[1,2]' })).toBeNull();
+    expect(extractQuestionMarker(undefined)).toBeNull();
   });
 });

@@ -57,7 +57,12 @@ async function startRound(req: AuthRequest, res: Response, sessionId: number, me
     let error: AgentEventLike | null = null;
     for await (const ev of streamAgentEvents(agent, input, config)) {
       if (ev.event === 'delta') reply += String(ev.data.text ?? '');
-      else if (ev.event === 'done') tokens = roundTokens(ev);
+      else if (ev.event === 'question') {
+        // 非流式无 SSE 事件通道，提问以文本形态并入回复（回答仍走同 thread 下一轮）
+        const q = ev.data as { question?: string; options?: { label?: string }[] };
+        const opts = (q.options ?? []).map((o) => o.label).join(' / ');
+        reply += `\n\n[AI 提问] ${q.question ?? ''}${opts ? `\n选项：${opts}` : ''}`;
+      } else if (ev.event === 'done') tokens = roundTokens(ev);
       else if (ev.event === 'error') error = ev;
     }
     if (error) {
@@ -93,6 +98,7 @@ async function startRound(req: AuthRequest, res: Response, sessionId: number, me
       case 'tool_call':
       case 'tool_result':
       case 'step':
+      case 'question':
         send(ev.event, ev.data);
         break;
       case 'error':

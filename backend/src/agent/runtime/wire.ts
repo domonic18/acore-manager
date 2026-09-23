@@ -2,7 +2,7 @@
 // 输出为与传输无关的事件序列；ai-assistant / ai-analysis 路由负责序列化为 SSE 帧
 // 并在 done 事件中补充 sessionId / messageId 等会话信息。
 
-export type AgentSseEventName = 'delta' | 'tool_call' | 'tool_result' | 'step' | 'done' | 'error';
+export type AgentSseEventName = 'delta' | 'tool_call' | 'tool_result' | 'step' | 'question' | 'done' | 'error';
 
 export interface AgentSseEvent {
   event: AgentSseEventName;
@@ -56,6 +56,10 @@ export async function* streamAgentEvents(
           if (ev.run_id) toolStartAt.delete(ev.run_id);
           const output = ev.data.output as { error?: unknown } | undefined;
           const failed = typeof output?.error === 'string';
+          const question = extractQuestionMarker(ev.data.output);
+          if (question) {
+            yield { event: 'question', data: question };
+          }
           yield {
             event: 'tool_result',
             data: {
@@ -124,5 +128,26 @@ function countOutputRows(output: unknown): number | null {
     }
   }
   if (Array.isArray(content)) return content.length;
+  return null;
+}
+
+// ask_user 工具返回 __question__ 标记（ask-user.tool.ts）：兼容两种形态——
+// LangChain tool() 包装后为 ToolMessage {content: JSON 字符串}；部分链路为裸对象。
+export function extractQuestionMarker(output: unknown): Record<string, unknown> | null {
+  const content = (output as { content?: unknown } | undefined)?.content ?? output;
+  let candidate: unknown = content;
+  if (typeof content === 'string') {
+    try {
+      candidate = JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+  if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+    const marker = (candidate as Record<string, unknown>)['__question__'];
+    if (marker && typeof marker === 'object' && !Array.isArray(marker)) {
+      return marker as Record<string, unknown>;
+    }
+  }
   return null;
 }

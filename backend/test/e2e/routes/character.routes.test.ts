@@ -45,6 +45,27 @@ describe('Character Routes', () => {
     });
   });
 
+  describe('GET /api/characters/suggest', () => {
+    it('returns name suggestions by prefix', async () => {
+      (characterService.suggestNames as jest.Mock).mockResolvedValue(['Unparalleled', 'Unseen']);
+
+      const res = await request(app).get('/api/characters/suggest?prefix=Un');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual(['Unparalleled', 'Unseen']);
+      expect(characterService.suggestNames).toHaveBeenCalledWith('Un', 8);
+    });
+
+    it('rejects a missing or over-50-char prefix with 400', async () => {
+      const missing = await request(app).get('/api/characters/suggest');
+      expect(missing.status).toBe(400);
+
+      const long = await request(app).get(`/api/characters/suggest?prefix=${'a'.repeat(51)}`);
+      expect(long.status).toBe(400);
+      expect(characterService.suggestNames).not.toHaveBeenCalled();
+    });
+  });
+
   describe('GET /api/characters/:guid', () => {
     it('returns character detail', async () => {
       const mockDetail = { guid: 1, name: 'Hero', bans: [] };

@@ -99,6 +99,11 @@ export class CharacterService {
     return result;
   }
 
+  // 邮件目标联想（GM 工具）：前缀搜索角色名，轻量列表
+  async suggestNames(prefix: string, limit = 8): Promise<string[]> {
+    return characterRepository.suggestNames(prefix, limit);
+  }
+
   async getCharacterBanRecords(guid: number): Promise<CharacterBanRecord[]> {
     const result = await characterRepository.getCharacterBanRecords(guid);
 

@@ -2,24 +2,42 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReports } from '@/features/ai-diagnosis/hooks/useAiDiagnosis';
 import { UploadStatusStrip } from '@/features/ai-diagnosis/components/UploadStatusStrip';
+import { ReportCalendar } from '@/features/ai-diagnosis/components/ReportCalendar';
 
 export default function AiDiagnosisPage() {
   const navigate = useNavigate();
   const [realm, setRealm] = useState('realm3');
   const [realmInput, setRealmInput] = useState('realm3');
+  const [dateFilter, setDateFilter] = useState('');
   const { data: reports, isLoading } = useReports(realm || undefined);
+
+  const filtered = reports?.filter((r) => dateFilter === '' || r.reportDate === dateFilter) ?? [];
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">AI 巡检报告</h1>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <input
           value={realmInput}
           onChange={(e) => setRealmInput(e.target.value)}
           placeholder="realm 名"
           className="w-40 rounded-md border border-border bg-card px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
         />
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="rounded-md border border-border bg-card px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+        />
+        {dateFilter !== '' && (
+          <button
+            onClick={() => setDateFilter('')}
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent"
+          >
+            清除
+          </button>
+        )}
         <button
           onClick={() => setRealm(realmInput.trim())}
           className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
@@ -29,6 +47,8 @@ export default function AiDiagnosisPage() {
       </div>
 
       {realm && <UploadStatusStrip realm={realm} />}
+
+      {realm && reports && <ReportCalendar reports={reports} realm={realm} />}
 
       <div className="rounded-lg border border-border overflow-x-auto">
         <table className="w-full text-sm">
@@ -49,14 +69,14 @@ export default function AiDiagnosisPage() {
                   加载中...
                 </td>
               </tr>
-            ) : reports?.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                  暂无巡检报告
+                  {dateFilter !== '' ? '该日期暂无巡检报告' : '暂无巡检报告'}
                 </td>
               </tr>
             ) : (
-              reports?.map((r) => (
+              filtered.map((r) => (
                 <tr
                   key={r.id}
                   onClick={() => navigate(`/ai-diagnosis/${r.realm}/${r.reportDate}`)}

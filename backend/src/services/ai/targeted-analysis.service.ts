@@ -17,8 +17,6 @@ import { tokenUsageService } from './token-usage.service';
 // 复用巡检同款白名单工具取证，结论 JSON 校验（失败追问一轮）后追加落库 ai_targeted_analysis
 // （同一对象可多轮分析，不覆盖历史）。误报信号非空时强制 manual_review（确定性降级兜底）。
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_RANGE_DAYS = 31;
 const SUGGESTIONS = ['maintain', 'lift', 'downgrade', 'manual_review'] as const;
 export type AnalysisSuggestion = (typeof SUGGESTIONS)[number];
 

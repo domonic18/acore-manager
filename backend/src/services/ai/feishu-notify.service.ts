@@ -95,7 +95,7 @@ class FeishuNotifyService {
     for (const p of top) {
       const fp = p.falsePositiveSignals?.length ?? 0;
       const lines = [
-        `**【${SEVERITY_LABEL[p.severity] ?? p.severity}】${p.character}**　建议处置：**${p.suggestedAction}**`,
+        `**【${SEVERITY_LABEL[p.severity] ?? p.severity}】${p.character}** 建议处置：**${p.suggestedAction}**`,
       ];
       if (fp > 0) lines.push(`误报信号 ${fp} 项（不建议直接封禁）`);
       lines.push(`依据：${(p.reasons?.[0] ?? '').slice(0, 90)}`);

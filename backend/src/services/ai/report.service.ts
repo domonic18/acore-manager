@@ -41,7 +41,7 @@ export class ReportService {
     if (!Array.isArray(players) || players.length === 0) return report;
     const names = [...new Set(players.map((p) => p.character).filter(Boolean))];
     if (names.length === 0) return report;
-    let basics: { guid: number; name: string; accountId: number; accountUsername: string | null; online: number }[] = [];
+    let basics: { guid: number; name: string; accountId: number; accountUsername: string | null; online: number }[];
     try {
       basics = await characterRepository.findBasicByNames(names);
     } catch {

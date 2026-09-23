@@ -21,7 +21,8 @@ export interface ResolvedModelConfig {
 export function buildModelClient(cfg: ResolvedModelConfig) {
   const common = {
     temperature: cfg.temperature ?? undefined,
-    maxTokens: cfg.maxTokens ?? undefined,
+    // 完成 token 兜底：提供方默认 ~4k 会截断巡检 JSON 报告（T3.6 实测 8.7k 字符输出被腰斩）
+    maxTokens: cfg.maxTokens ?? 8192,
   };
   if (cfg.protocol === 'anthropic') {
     return new ChatAnthropic({

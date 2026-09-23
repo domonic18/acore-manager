@@ -134,9 +134,12 @@ class InspectionService {
 
     const cfg = await llmConfigService.resolveDefault();
     const agent = await getAgent(cfg, 'inspection');
+    // thread_id 必须每次运行唯一：复用同线程会让模型在 checkpointer 旧上下文里重放上轮结论
+    // （T3.6 实测重跑零工具调用），且同线程上下文随重跑次数膨胀推高 token 成本
+    const threadId = `inspection-${input.realm}-${input.date}-${Date.now()}-${attempt}`;
     const config = {
       configurable: {
-        thread_id: `inspection-${input.realm}-${input.date}-${attempt}`,
+        thread_id: threadId,
         budget: new BudgetGuard(env.AI_TOOL_CALL_BUDGET),
         refId: `inspection:${input.realm}:${input.date}`,
       },
@@ -150,7 +153,7 @@ class InspectionService {
       const fixRound = await this.collectAnswer(
         agent,
         [
-          { role: 'user', content: `你上一轮的输出无法解析为符合 schema 的报告 JSON。请检查以下问题并重新输出：${this.parseError(text, input.realm, input.date)}\n只输出修正后的完整 JSON，不要任何其他文字。` },
+          { role: 'user', content: `你上一轮的输出无法解析为符合报告 schema 的 JSON，问题：${this.parseError(text, input.realm, input.date)}。请重新输出**完整的报告 JSON 文档**：从 { 开始到 } 结束的一个完整对象，包含全部必需字段，不要使用 markdown 代码块，不要续写上文，不要输出任何解释文字。` },
         ],
         config,
       );

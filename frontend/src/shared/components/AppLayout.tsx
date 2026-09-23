@@ -20,6 +20,7 @@ import {
   MessageSquareOff,
   SlidersHorizontal,
   Bot,
+  FileSearch,
 } from 'lucide-react';
 
 const menuItems = [
@@ -35,6 +36,7 @@ const menuItems = [
   { path: '/ip-bans', label: 'IP 封禁', icon: Ban },
   { path: '/audit-logs', label: '日志审计', icon: ScrollText },
   { path: '/model-config', label: 'AI 模型配置', icon: Bot },
+  { path: '/ai-diagnosis', label: 'AI 巡检报告', icon: FileSearch },
 ];
 
 export function AppLayout() {

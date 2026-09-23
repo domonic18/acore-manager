@@ -19,6 +19,8 @@ const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
 const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
 const RbacConfigPage = lazy(() => import('@/pages/RbacConfigPage'));
 const ModelConfigPage = lazy(() => import('@/pages/ModelConfigPage'));
+const AiDiagnosisPage = lazy(() => import('@/pages/AiDiagnosisPage'));
+const AiDiagnosisReportDetailPage = lazy(() => import('@/pages/AiDiagnosisReportDetailPage'));
 const AiAssistantDock = lazy(() =>
   import('@/features/ai-assistant/components/AiAssistantDock').then((m) => ({ default: m.AiAssistantDock })),
 );
@@ -86,7 +88,11 @@ export const router = createBrowserRouter([
           { path: 'mutes', element: withSuspense(MuteListPage) },
           {
             element: <GmGuard minLevel={2} />,
-            children: [{ path: 'ip-bans', element: withSuspense(IpBanPage) }],
+            children: [
+              { path: 'ip-bans', element: withSuspense(IpBanPage) },
+              { path: 'ai-diagnosis', element: withSuspense(AiDiagnosisPage) },
+              { path: 'ai-diagnosis/:realm/:date', element: withSuspense(AiDiagnosisReportDetailPage) },
+            ],
           },
           {
             element: <GmGuard minLevel={3} />,

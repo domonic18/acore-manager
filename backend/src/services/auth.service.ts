@@ -1,8 +1,8 @@
 import jwt from 'jsonwebtoken';
-import { env } from '../config/env';
-import { accountRepository } from '../repositories/account.repository';
-import { verifySRP6Password } from '../shared/utils/password.util';
-import { logger } from '../middleware/request-logger';
+import { env } from '@/config/env';
+import { accountRepository } from '@/repositories/account.repository';
+import { verifySRP6Password } from '@/shared/utils/password.util';
+import { logger } from '@/middleware/request-logger';
 
 export interface LoginResult {
   token: string;

@@ -3,13 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacterList } from '@/features/character/hooks/useCharacter';
 import { raceMap, classMap } from '@/shared/constants/game.constants';
 
+const ONLINE_ONLY_KEY = 'acm.characters.onlineOnly';
+
+function readOnlineOnlyPref(): boolean {
+  return localStorage.getItem(ONLINE_ONLY_KEY) !== '0';
+}
+
 export default function CharacterListPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [includeDeleted, setIncludeDeleted] = useState(false);
-  const { data, isLoading } = useCharacterList({ page, pageSize: 20, search, includeDeleted });
+  const [onlineOnly, setOnlineOnly] = useState(readOnlineOnlyPref);
+  const { data, isLoading } = useCharacterList({ page, pageSize: 20, search, includeDeleted, online: onlineOnly });
+
+  const handleOnlineOnlyChange = (value: boolean) => {
+    setOnlineOnly(value);
+    localStorage.setItem(ONLINE_ONLY_KEY, value ? '1' : '0');
+    setPage(1);
+  };
 
   const handleSearch = () => {
     setSearch(searchInput);
@@ -20,10 +33,28 @@ export default function CharacterListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">角色管理</h1>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="inline-flex rounded-md border border-border p-0.5">
+            <button
+              onClick={() => handleOnlineOnlyChange(true)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                onlineOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-accent-foreground'
+              }`}
+            >
+              仅在线
+            </button>
+            <button
+              onClick={() => handleOnlineOnlyChange(false)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                !onlineOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-accent-foreground'
+              }`}
+            >
+              全部
+            </button>
+          </div>
+          <label className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground cursor-pointer select-none">
             <input
               type="checkbox"
               checked={includeDeleted}
@@ -38,7 +69,7 @@ export default function CharacterListPage() {
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="搜索角色名"
-            className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="min-w-[8rem] flex-1 px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring sm:w-56 sm:flex-none"
           />
           <button
             onClick={handleSearch}
@@ -50,15 +81,15 @@ export default function CharacterListPage() {
       </div>
 
       <div className="rounded-lg border border-border overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="border-b border-border bg-card">
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">名称</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">所属账号</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">等级</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">种族</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">职业</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground">状态</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">名称</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">所属账号</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">等级</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">种族</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">职业</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">状态</th>
             </tr>
           </thead>
           <tbody>
@@ -81,7 +112,7 @@ export default function CharacterListPage() {
                     }`}
                     onClick={() => !isDeleted && navigate(`/characters/${char.guid}`)}
                   >
-                    <td className="px-4 py-3 font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap font-medium">
                       {isDeleted ? (
                         <span className="text-muted-foreground line-through italic">
                           已删除（GUID: {char.guid}）
@@ -90,7 +121,7 @@ export default function CharacterListPage() {
                         char.name
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {isDeleted ? (
                         <span className="text-muted-foreground">-</span>
                       ) : (
@@ -105,10 +136,10 @@ export default function CharacterListPage() {
                         </button>
                       )}
                     </td>
-                    <td className="px-4 py-3">{char.level}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{raceMap[char.race] || '未知'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{classMap[char.class] || '未知'}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">{char.level}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{raceMap[char.race] || '未知'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{classMap[char.class] || '未知'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {isDeleted ? (
                         <span className="text-red-400 text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30">已删除</span>
                       ) : char.online ? (

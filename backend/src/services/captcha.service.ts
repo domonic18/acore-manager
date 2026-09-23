@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import svgCaptcha from 'svg-captcha';
-import { redis } from '../config/redis';
-import { env } from '../config/env';
-import { logger } from '../middleware/request-logger';
+import { redis } from '@/config/redis';
+import { env } from '@/config/env';
+import { logger } from '@/middleware/request-logger';
 
 export interface CaptchaResult {
   sessionId: string;

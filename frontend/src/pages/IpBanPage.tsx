@@ -230,6 +230,7 @@ export default function IpBanPage() {
           >
             <option value="1h">1小时</option>
             <option value="1d">1天</option>
+            <option value="3d">3天</option>
             <option value="7d">7天</option>
             <option value="30d">30天</option>
             <option value="-1">永久</option>

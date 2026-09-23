@@ -1,9 +1,9 @@
 import { auditLogService } from './audit-log.service';
 import { soapService } from './soap.service';
-import { rbacRepository, RbacRole } from '../repositories/rbac.repository';
-import { RbacPermission } from '../entities/auth/rbac-permissions.entity';
-import { authDataSource } from '../config/database';
-import { logger } from '../middleware/request-logger';
+import { rbacRepository, RbacRole } from '@/repositories/rbac.repository';
+import { RbacPermission } from '@/entities/auth/rbac-permissions.entity';
+import { authDataSource } from '@/config/database';
+import { logger } from '@/middleware/request-logger';
 
 export const RBAC_PERMISSION_LABELS: Record<number, { label: string; desc: string; category: string }> = {
   24: { label: '双阵营角色创建', desc: '允许同一账号创建联盟和部落角色', category: '账号' },

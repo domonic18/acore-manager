@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from './request-logger';
-import { env } from '../config/env';
+import { env } from '@/config/env';
 
 export function errorHandler(
   err: Error,

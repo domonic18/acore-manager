@@ -1,11 +1,11 @@
 import request from 'supertest';
 import express, { Application } from 'express';
-import { responseFormatter } from '../../../src/middleware/response-formatter';
-import authRoutes from '../../../src/routes/auth.routes';
-import { authService } from '../../../src/services/auth.service';
+import { responseFormatter } from '@/middleware/response-formatter';
+import authRoutes from '@/routes/auth.routes';
+import { authService } from '@/services/auth.service';
 
-jest.mock('../../../src/services/auth.service');
-jest.mock('../../../src/middleware/auth', () => ({
+jest.mock('@/services/auth.service');
+jest.mock('@/middleware/auth', () => ({
   authMiddleware: (_req: any, _res: any, next: any) => next(),
   AuthRequest: class {},
 }));

@@ -1,13 +1,13 @@
-import { rbacService } from '../../../src/services/rbac.service';
-import { rbacRepository } from '../../../src/repositories/rbac.repository';
-import { soapService } from '../../../src/services/soap.service';
-import { auditLogService } from '../../../src/services/audit-log.service';
-import { authDataSource } from '../../../src/config/database';
+import { rbacService } from '@/services/rbac.service';
+import { rbacRepository } from '@/repositories/rbac.repository';
+import { soapService } from '@/services/soap.service';
+import { auditLogService } from '@/services/audit-log.service';
+import { authDataSource } from '@/config/database';
 
-jest.mock('../../../src/repositories/rbac.repository');
-jest.mock('../../../src/services/soap.service');
-jest.mock('../../../src/services/audit-log.service');
-jest.mock('../../../src/config/database', () => ({
+jest.mock('@/repositories/rbac.repository');
+jest.mock('@/services/soap.service');
+jest.mock('@/services/audit-log.service');
+jest.mock('@/config/database', () => ({
   authDataSource: {
     createQueryRunner: jest.fn(),
   },

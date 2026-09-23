@@ -1,5 +1,5 @@
 import { cacheService } from './cache.service';
-import { muteRepository } from '../repositories/mute.repository';
+import { muteRepository } from '@/repositories/mute.repository';
 
 export interface MuteRecord {
   accountId: number;

@@ -1,9 +1,9 @@
-import { muteService } from '../../../src/services/mute.service';
-import { muteRepository } from '../../../src/repositories/mute.repository';
-import { cacheService } from '../../../src/services/cache.service';
+import { muteService } from '@/services/mute.service';
+import { muteRepository } from '@/repositories/mute.repository';
+import { cacheService } from '@/services/cache.service';
 
-jest.mock('../../../src/repositories/mute.repository');
-jest.mock('../../../src/services/cache.service');
+jest.mock('@/repositories/mute.repository');
+jest.mock('@/services/cache.service');
 
 describe('MuteService', () => {
   beforeEach(() => {

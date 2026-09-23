@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import 'dotenv/config';
+import '@/config/load-env';
 import { createApp } from './app';
 import { initializeDataSourcesWithRetry } from './config/database';
 import { redis } from './config/redis';

@@ -9,6 +9,7 @@ import {
 } from '@/features/character/hooks/useCharacter';
 import { Dialog } from '@/shared/components/Dialog';
 import { raceMap, classMap, banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
+import { AI_QUICK_ANALYZE_EVENT, type QuickAnalyzePayload } from '@/features/ai-assistant/components/AiAssistantDock';
 
 export default function CharacterDetailPage() {
   const { guid } = useParams<{ guid: string }>();
@@ -136,6 +137,31 @@ export default function CharacterDetailPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">{character.name}</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent(AI_QUICK_ANALYZE_EVENT, {
+                  detail: {
+                    subjectType: 'character',
+                    name: character.name,
+                    guid: character.guid,
+                    accountName: character.accountUsername,
+                  } satisfies QuickAnalyzePayload,
+                }),
+              )
+            }
+            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            快速分析
+          </button>
+          <button
+            onClick={() =>
+              navigate('/ai-diagnosis/targeted', { state: { subjectType: 'character', subjectName: character.name } })
+            }
+            className="px-4 py-2 rounded-md border border-blue-600 text-blue-400 text-sm font-medium hover:bg-blue-600/10"
+          >
+            AI 定向分析
+          </button>
           <button
             onClick={handleOpenMuteDialog}
             className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
@@ -283,6 +309,7 @@ export default function CharacterDetailPage() {
           >
             <option value="1h">1小时</option>
             <option value="1d">1天</option>
+            <option value="3d">3天</option>
             <option value="7d">7天</option>
             <option value="30d">30天</option>
             <option value="-1">永久</option>
@@ -405,6 +432,7 @@ export default function CharacterDetailPage() {
             <option value="10m">10分钟</option>
             <option value="1h">1小时</option>
             <option value="1d">1天</option>
+            <option value="3d">3天</option>
             <option value="7d">7天</option>
             <option value="30d">30天</option>
           </select>

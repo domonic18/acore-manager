@@ -1,7 +1,7 @@
 import { cacheService } from './cache.service';
 import { soapService } from './soap.service';
-import { logger } from '../middleware/request-logger';
-import { characterRepository } from '../repositories/character.repository';
+import { logger } from '@/middleware/request-logger';
+import { characterRepository } from '@/repositories/character.repository';
 
 export interface CharacterListItem {
   guid: number;
@@ -51,8 +51,9 @@ export class CharacterService {
     pageSize: number = 20,
     search?: string,
     includeDeleted: boolean = false,
+    online?: boolean,
   ): Promise<CharacterListResult> {
-    const cacheKey = `characters:list:${page}:${pageSize}:${search || ''}:${includeDeleted}`;
+    const cacheKey = `characters:list:${page}:${pageSize}:${search || ''}:${includeDeleted}:${online ? 1 : 0}`;
     const cached = await cacheService.get<CharacterListResult>(cacheKey);
     if (cached) {
       return cached;
@@ -68,6 +69,10 @@ export class CharacterService {
     if (search) {
       conditions.push('name LIKE ?');
       params.push(`%${search}%`);
+    }
+    if (online) {
+      // acore_auth.account 同名 online 列存在，JOIN 查询必须带 c. 前缀消歧
+      conditions.push('c.online = 1');
     }
 
     const { items, total } = await characterRepository.listCharacters(offset, pageSize, conditions, params);
@@ -92,6 +97,11 @@ export class CharacterService {
 
     await cacheService.set(cacheKey, result, 60);
     return result;
+  }
+
+  // 邮件目标联想（GM 工具）：前缀搜索角色名，轻量列表
+  async suggestNames(prefix: string, limit = 8): Promise<string[]> {
+    return characterRepository.suggestNames(prefix, limit);
   }
 
   async getCharacterBanRecords(guid: number): Promise<CharacterBanRecord[]> {

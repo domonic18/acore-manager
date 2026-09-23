@@ -1,9 +1,9 @@
-import { asyncHandler } from '../shared/async-handler';
+import { asyncHandler } from '@/shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { param, query, body, validationResult } from 'express-validator';
-import { authMiddleware } from '../middleware/auth';
-import { requireGmLevel } from '../middleware/gm-guard';
-import { characterService } from '../services/character.service';
+import { authMiddleware } from '@/middleware/auth';
+import { requireGmLevel } from '@/middleware/gm-guard';
+import { characterService } from '@/services/character.service';
 
 const router = Router();
 
@@ -16,6 +16,7 @@ router.get(
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('search').optional().trim(),
     query('includeDeleted').optional().isBoolean().toBoolean(),
+    query('online').optional().isBoolean().toBoolean(),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -28,9 +29,27 @@ router.get(
     const pageSize = parseInt(req.query.pageSize as string) || 20;
     const search = req.query.search as string | undefined;
     const includeDeleted = req.query.includeDeleted as boolean | undefined;
+    const online = req.query.online as boolean | undefined;
 
-    const result = await characterService.listCharacters(page, pageSize, search, includeDeleted);
+    const result = await characterService.listCharacters(page, pageSize, search, includeDeleted, online);
     res.jsonSuccess(result, result.items.length);
+  }),
+);
+
+// 角色名联想（GM 工具邮件目标输入）：前缀匹配轻量列表；须先于 /:guid 注册
+router.get(
+  '/suggest',
+  authMiddleware,
+  requireGmLevel(1),
+  [query('prefix').isString().trim().isLength({ min: 1, max: 50 }), query('limit').optional().isInt({ min: 1, max: 20 }).toInt()],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters', 400);
+      return;
+    }
+    const names = await characterService.suggestNames(req.query.prefix as string, (req.query.limit as unknown as number) ?? 8);
+    res.jsonSuccess(names, names.length);
   }),
 );
 

@@ -1,9 +1,9 @@
-import { transactionService } from '../../../src/services/transaction.service';
-import { transactionRepository } from '../../../src/repositories/transaction.repository';
-import { cacheService } from '../../../src/services/cache.service';
+import { transactionService } from '@/services/transaction.service';
+import { transactionRepository } from '@/repositories/transaction.repository';
+import { cacheService } from '@/services/cache.service';
 
-jest.mock('../../../src/repositories/transaction.repository');
-jest.mock('../../../src/services/cache.service');
+jest.mock('@/repositories/transaction.repository');
+jest.mock('@/services/cache.service');
 
 describe('TransactionService', () => {
   beforeEach(() => {

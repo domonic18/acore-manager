@@ -1,7 +1,7 @@
-import { authDataSource } from '../config/database';
+import { authDataSource } from '@/config/database';
 import { BaseRepository } from './base.repository';
-import { Account } from '../entities/auth/account.entity';
-import { AccountAccess } from '../entities/auth/account-access.entity';
+import { Account } from '@/entities/auth/account.entity';
+import { AccountAccess } from '@/entities/auth/account-access.entity';
 
 class AccountRepository extends BaseRepository<Account> {
   constructor() {

@@ -1,7 +1,7 @@
-import { CacheService } from '../../../src/services/cache.service';
-import { redis } from '../../../src/config/redis';
+import { CacheService } from '@/services/cache.service';
+import { redis } from '@/config/redis';
 
-jest.mock('../../../src/config/redis', () => ({
+jest.mock('@/config/redis', () => ({
   redis: {
     get: jest.fn(),
     setex: jest.fn(),

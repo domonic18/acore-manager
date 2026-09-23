@@ -1,6 +1,6 @@
 import { cacheService } from './cache.service';
-import { logger } from '../middleware/request-logger';
-import { dashboardRepository, type DistributionItem } from '../repositories/dashboard.repository';
+import { logger } from '@/middleware/request-logger';
+import { dashboardRepository, type DistributionItem } from '@/repositories/dashboard.repository';
 
 export interface FriendTopCharacter {
   guid: number;

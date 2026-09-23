@@ -70,17 +70,26 @@ class CharacterRepository {
     return result.length > 0 ? result[0] : null;
   }
 
-  // 报告页可疑玩家富化（T4.3）：按名批量取 guid/账号；已删除角色查不到，调用方降级纯文本
-  async findBasicByNames(names: string[]): Promise<{ guid: number; name: string; accountId: number; accountUsername: string | null }[]> {
+  // 报告页可疑玩家富化（T4.3）与邮件目标校验（T4.4）：按名批量取 guid/账号/在线状态；已删除角色查不到，调用方降级
+  async findBasicByNames(names: string[]): Promise<{ guid: number; name: string; accountId: number; accountUsername: string | null; online: number }[]> {
     if (names.length === 0) return [];
     const placeholders = names.map(() => '?').join(',');
     return charactersDataSource.query(
-      `SELECT c.guid, c.name, c.account as accountId, a.username as accountUsername
+      `SELECT c.guid, c.name, c.account as accountId, a.username as accountUsername, c.online
        FROM characters c
        LEFT JOIN acore_auth.account a ON c.account = a.id
        WHERE c.name IN (${placeholders})`,
       names,
     );
+  }
+
+  // 邮件目标联想（GM 工具）：前缀匹配角色名，仅取名称列轻量返回
+  async suggestNames(prefix: string, limit = 8): Promise<string[]> {
+    const rows: { name: string }[] = await charactersDataSource.query(
+      `SELECT c.name FROM characters c WHERE c.name LIKE ? ORDER BY c.name ASC LIMIT ?`,
+      [`${prefix}%`, limit],
+    );
+    return rows.map((r) => r.name);
   }
 
   async getCharacterBanRecords(guid: number): Promise<any[]> {

@@ -1,4 +1,4 @@
-import { Between, FindOptionsWhere, ILike, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Between, FindOptionsWhere, ILike, In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { acmDataSource } from '@/config/database';
 import { OperationLog } from '@/entities/acm/operation-log.entity';
 
@@ -34,6 +34,25 @@ class AuditLogRepository {
       .getRepository(OperationLog)
       .findAndCount({ where, order: { createdAt: 'DESC' }, skip: offset, take: pageSize });
 
+    return { items, total };
+  }
+
+  // 报告页"已警告"标注（T4.5）：按操作名 + 精确 target 集合查询，只取命中所需列
+  async listByOperationAndTargets(operation: string, targets: string[]): Promise<OperationLog[]> {
+    if (targets.length === 0) return [];
+    return acmDataSource.getRepository(OperationLog).find({
+      select: ['id', 'target'],
+      where: { operation, target: In(targets) },
+    });
+  }
+
+  // 邮件发送记录（GM 工具）：按操作名分页倒序；过滤词模糊匹配 target 列与 details JSON（角色名）
+  async listByOperation(operation: string, offset: number, pageSize: number, filter?: string): Promise<{ items: OperationLog[]; total: number }> {
+    const base: FindOptionsWhere<OperationLog> = { operation };
+    const where = filter ? [{ ...base, target: ILike(`%${filter}%`) }, { ...base, details: ILike(`%${filter}%`) }] : base;
+    const [items, total] = await acmDataSource
+      .getRepository(OperationLog)
+      .findAndCount({ where, order: { createdAt: 'DESC' }, skip: offset, take: pageSize });
     return { items, total };
   }
 

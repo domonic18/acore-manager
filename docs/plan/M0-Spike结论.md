@@ -10,7 +10,7 @@
 | T0.1 | SCF Web 函数 SSE 兼容性 | **支持**（squadsight 项目已实测验证） | ✅ 完成 | T2.8 SSE 流式方案锁定，无需专门降级分支（保留非流式整段返回作异常兜底） |
 | T0.2 | SCF Job 函数资源上限 | 待实测 | ⏳ 你侧部署 | 实测结论决定 T3.3 是否按日志类型拆分多次 Job |
 | T0.3 | deepagents JS + 库配置链路 | **全链路跑通**；重大架构决策：acm 库迁移 PostgreSQL | ✅ 完成 | T2.1/T2.4 技术路线锁定并提前落地（见下文细节） |
-| T0.4 | 生产 `daily_players_reports` 写入确认 | 待授权执行只读 SQL | ⏳ 你侧授权 | 无写入则反作弊 DB 聚合工具降级，日志解析为唯一权威来源 |
+| T0.4 | 生产 `daily_players_reports` 写入确认；`.send mail` 离线角色支持 | **`.send mail` 已实测：离线角色受理入邮箱**（2026-09-23，见下）；生产表只读 SQL 仍待授权 | 🔶 邮件已实测 / 生产 SQL 待授权 | 邮件照发策略成立（T4.4 无需待发清单）；无写入则反作弊 DB 聚合工具降级，日志解析为唯一权威来源 |
 | T0.5 | Owner 误报数据调研 | 模板已备 | ⏳ Owner 填写 | 填写结果作为 T2.7 误报引擎初始配置 |
 
 ## T0.1 SSE（已完成，无需部署）
@@ -85,7 +85,16 @@ SHOW CREATE TABLE characters.daily_players_reports;
 ```
 
 - **回填处**：本节下方 + 需求开放问题 9。
-- 另：`.send mail` 离线角色实测（开放问题 5）默认暂缓，可选用你的 GM 角色发 1 铜币无害邮件验证。
+- 另：`.send mail` 离线角色实测（开放问题 5）**已完成（2026-09-23）**，见下节。
+
+### T0.4-a `.send mail` 离线角色实测（✅ 2026-09-23）
+
+- **链路**：acore-manager `POST /api/gm/mail` → SOAP（frpc 隧道 175.27.167.123:7878）→ 本地测试 worldserver → auth 库账号校验（ADMIN_SOAP，security level 满足 gm2 门禁）。
+- **离线角色**：目标 Aix（online=0）→ worldserver **受理**，回执"邮件寄给 Aix"；`acore_characters.mail` 落库（deliver_time 已写入），登录后可取 → **照发策略成立，T4.4 无需待发清单/常驻队列**（需求开放问题 5 关闭）。
+- **不存在角色**：应用层先行库校验即拒（"角色不存在"），失败隔离不阻塞其他目标，审计 target=`name:XXX`。
+- **中文内容**：UTF-8 subject/body 经 XML 转义往返后落库完好（utf8mb4 验证）。
+- **处置闭环**：发送后报告详情 suspiciousPlayers `warned: false → true`（审计反查富化）。
+- **过程中发现并处理**：SOAP 账号 ADMIN_SOAP 密码与 auth 库记录不匹配（401），已由 Owner 在世界端控制台 `.account set password` 重置；回执含 `&#xD;` 实体残留，已在 gm-tool.service 解码。
 
 ## T0.5 Owner 调研（模板已备）
 

@@ -2,6 +2,12 @@ import { request } from 'http';
 import { soapConn } from '@/config/env';
 import { logger } from '@/middleware/request-logger';
 
+// command 注入 SOAP 文本节点：GM 可编辑内容（广播/邮件正文）可能含 & < > 等字符，
+// 不转义会破坏请求 XML；worldserver 收到的是反转义后的原文
+function escapeXml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c] as string);
+}
+
 export class SoapService {
   sendCommand(command: string): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -43,7 +49,7 @@ export class SoapService {
   xmlns:ns1="urn:AC">
   <SOAP-ENV:Body>
     <ns1:executeCommand>
-      <command>${command}</command>
+      <command>${escapeXml(command)}</command>
     </ns1:executeCommand>
   </SOAP-ENV:Body>
 </SOAP-ENV:Envelope>`);

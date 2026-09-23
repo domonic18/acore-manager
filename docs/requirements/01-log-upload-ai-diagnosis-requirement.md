@@ -504,7 +504,7 @@ ACM 前端
 2. ~~SCF Web 函数 SSE 兼容性~~ **已决策（2026-09-21）：支持**。腾讯云 SCF Web 函数对 SSE 的兼容性已在 squadsight 项目实测验证，M2 的 SSE 对话无需降级预案（保留非流式整段返回作为异常兜底）。
 3. **Job 函数资源上限**：时长 / 内存 / 临时磁盘上限需 M3 前实测（全 agentic 分析含日志下载解压）；若超限，按日志类型拆分为多次 Job 调用。**M0 进展（2026-09-21）**：Job 专用镜像 `docker/Dockerfile.job` 与验证桩 `src/job/inspection-job.ts`（fixture 下载→/tmp 解压→扫描→耗时内存 JSON）已就绪，本地基线：合成 fixture（20 文件 300KB）总耗时 66ms / RSS 41MB；SCF 实测待回填 /tmp 上限、子进程与出站网络结论（`docs/plan/M0-SCF部署指引.md`）。
 4. ~~Redis AOF / checkpoint 存储~~ **已决策（2026-09-22，T0.3 终局）：checkpoint 存 acm PostgreSQL，Redis 不承载会话**。T0.3 实测 `@langchain/langgraph-checkpoint-redis` 硬依赖 RedisJSON（`JSON.SET`）与 RediSearch（`FT.CREATE`）模块——本地 redis:7-alpine 无模块直接不可用，生产与 ranking 共享的腾讯云 Redis 亦不满足。决策：acm 自有库定为 PostgreSQL，checkpointer 采用官方 `@langchain/langgraph-checkpoint-postgres`（PostgresSaver，无模块依赖），checkpoint 与对话正本同库；Redis 回归纯缓存角色（ranking 共享实例维持现状）。PG checkpoint 无自动 TTL，会话清理由后端定期 `deleteThread` 实现（M2）。
-5. **`.send mail` 离线角色**：是否支持离线角色需开发前实测；若仅支持在线角色，发送时标注目标在线状态，离线目标保留在待发清单由 GM 稍后处理（不引入常驻发送队列）。
+5. ~~**`.send mail` 离线角色**~~ **已实测（2026-09-23，T0.4-a）：离线角色 worldserver 直接受理入邮箱**（回执"邮件寄给 X"，`characters.mail` 落库，登录可取）。照发策略成立：应用标注在线状态但不拦截离线目标，无需待发清单 / 常驻发送队列。实测细节见 `docs/plan/M0-Spike结论.md` T0.4-a。
 6. **警告邮件默认文案**：需 Owner 评审定稿后上线。
 7. **报告公开粘贴脱敏**：首版"复制 Markdown"为原文复制（含玩家 IP / 账号），GM 公开发布前自行评估；是否需要"复制为公开版"（自动剥离敏感字段）留下轮迭代。
 8. **多 realm 编排**：realm3 单 realm 上线，多 realm 的并行任务隔离待后续评估。

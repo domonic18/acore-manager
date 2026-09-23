@@ -1,9 +1,9 @@
 import { ChatUiMessage } from '../hooks/useChatStream';
-import { AlertCircle, Bot, Check, ChevronDown, Copy, Loader2, Wrench } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, Bot, ChevronDown, Loader2, Wrench } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/shared/lib/utils';
-import { Markdown } from './Markdown';
-import { toast } from '@/shared/utils/toast.util';
+import { Markdown } from '@/shared/components/Markdown';
+import { CopyButton } from '@/shared/components/CopyButton';
 
 const SUGGESTIONS = [
   '最近哪些角色被举报最多？',
@@ -97,7 +97,7 @@ export function MessageList({ messages, loading, onSuggest }: MessageListProps) 
                     </div>
                   )}
                 </div>
-                {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}
+                {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} className="mt-1" />}
               </div>
             </div>
           ))}
@@ -111,30 +111,6 @@ export function MessageList({ messages, loading, onSuggest }: MessageListProps) 
         </div>
       )}
     </div>
-  );
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error('复制失败');
-    }
-  };
-  return (
-    <button
-      type="button"
-      onClick={() => void handleCopy()}
-      title="复制内容"
-      className="mt-1 flex items-center gap-1 px-1 text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
-    >
-      {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-      {copied ? '已复制' : '复制'}
-    </button>
   );
 }
 

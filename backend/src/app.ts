@@ -22,6 +22,7 @@ import aiModelConfigRoutes from './routes/ai-model-config.routes';
 import aiTokenUsageRoutes from './routes/ai-token-usage.routes';
 import aiDiagnosisRoutes from './routes/ai-diagnosis.routes';
 import aiAssistantRoutes from './routes/ai-assistant.routes';
+import aiAnalysisRoutes from './routes/ai-analysis.routes';
 import { areDataSourcesReady } from './config/database';
 
 export function createApp(): Application {
@@ -73,6 +74,7 @@ export function createApp(): Application {
   app.use('/api/ai/token-usage', aiTokenUsageRoutes);
   app.use('/api/ai/diagnosis', aiDiagnosisRoutes);
   app.use('/api/ai/assistant', aiAssistantRoutes);
+  app.use('/api/ai/analysis', aiAnalysisRoutes);
   app.use('/api/health', healthRoutes);
 
   const publicPath = path.join(__dirname, 'public');

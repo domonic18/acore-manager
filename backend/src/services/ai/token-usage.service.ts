@@ -5,11 +5,11 @@ import { logger } from '@/middleware/request-logger';
 import { cacheService } from '@/services/cache.service';
 import { feishuNotifyService } from './feishu-notify.service';
 
-// LLM 调用计量（arch 4.2）：每次对话/巡检轮次落一行，按日聚合报表 + 日预算飞书告警。
+// LLM 调用计量（arch 4.2）：每次对话/巡检/定向分析轮次落一行，按日聚合报表 + 日预算飞书告警。
 // 告警语义为"仅告警不停用"（需求 3.6）；同日只告警一次（Redis 去重）。
 
 export interface TokenUsageRecordInput {
-  scene: 'chat' | 'inspection';
+  scene: 'chat' | 'inspection' | 'analysis';
   refId: string;
   model: string;
   promptTokens: number;

@@ -8,6 +8,7 @@ import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { LOG_TYPES, clearWorkspace, manifestKey } from '@/agent/tools/log-tools/log-workspace';
 import { setInspectionRunner } from '@/agent/tools/inspection-tools';
 import { cosGetObjectJson, cosPutObjectBuffer } from '@/shared/utils/cos.util';
+import { extractJson } from '@/shared/utils/extract-json.util';
 import { cacheService } from '@/services/cache.service';
 import { llmConfigService } from './llm-config.service';
 import { tokenUsageService } from './token-usage.service';
@@ -406,17 +407,6 @@ class InspectionService {
     lines.push('', '## 建议', '');
     for (const r of report.recommendations ?? []) lines.push(`- ${r}`);
     return lines.join('\n');
-  }
-}
-
-function extractJson(text: string): unknown | null {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return null;
   }
 }
 

@@ -1,35 +1,38 @@
-import { authDataSource } from '@/config/database';
+import { Between, FindOptionsWhere, ILike, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { acmDataSource } from '@/config/database';
+import { OperationLog } from '@/entities/acm/operation-log.entity';
+
+// GM 操作审计仓储（SELECT/INSERT）。2026-09-23 起表位于 acm（PostgreSQL），
+// 此前在 acore_auth（MySQL），方言条件串已改为结构化过滤由本仓储统一翻译。
+
+export interface AuditLogFilters {
+  operatorId?: number;
+  operation?: string;
+  startDate?: string;
+  endDate?: string;
+}
 
 class AuditLogRepository {
   async listLogs(
     offset: number,
     pageSize: number,
-    conditions: string[],
-    params: any[],
-  ): Promise<{ items: any[]; total: number }> {
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    filters: AuditLogFilters,
+  ): Promise<{ items: OperationLog[]; total: number }> {
+    const where: FindOptionsWhere<OperationLog> = {};
+    if (filters.operatorId) where.operatorId = filters.operatorId;
+    if (filters.operation) where.operation = ILike(`%${filters.operation}%`);
+    // 与原 DATE(created_at) 语义对齐：start 取当日零点起，end 取当日末点止
+    if (filters.startDate && filters.endDate) {
+      where.createdAt = Between(new Date(`${filters.startDate}T00:00:00`), new Date(`${filters.endDate}T23:59:59.999`));
+    } else if (filters.startDate) {
+      where.createdAt = MoreThanOrEqual(new Date(`${filters.startDate}T00:00:00`));
+    } else if (filters.endDate) {
+      where.createdAt = LessThanOrEqual(new Date(`${filters.endDate}T23:59:59.999`));
+    }
 
-    const countResult = await authDataSource.query(
-      `SELECT COUNT(*) as total FROM acm_operation_logs ${whereClause}`,
-      params,
-    );
-    const total = parseInt(countResult[0]?.total || '0', 10);
-
-    const items = await authDataSource.query(
-      `SELECT
-        id,
-        operator_id as operatorId,
-        operator_name as operatorName,
-        operation,
-        target,
-        details,
-        created_at as createdAt
-      FROM acm_operation_logs
-      ${whereClause}
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
-    );
+    const [items, total] = await acmDataSource
+      .getRepository(OperationLog)
+      .findAndCount({ where, order: { createdAt: 'DESC' }, skip: offset, take: pageSize });
 
     return { items, total };
   }
@@ -39,13 +42,17 @@ class AuditLogRepository {
     operatorName: string;
     operation: string;
     target: string;
-    details: string;
+    details: string | null;
   }): Promise<void> {
-    await authDataSource.query(
-      `INSERT INTO acm_operation_logs
-       (operator_id, operator_name, operation, target, details, created_at)
-       VALUES (?, ?, ?, ?, ?, NOW())`,
-      [log.operatorId, log.operatorName, log.operation, log.target, log.details],
+    const repo = acmDataSource.getRepository(OperationLog);
+    await repo.insert(
+      repo.create({
+        operatorId: log.operatorId,
+        operatorName: log.operatorName,
+        operation: log.operation,
+        target: log.target,
+        details: log.details,
+      }),
     );
   }
 }

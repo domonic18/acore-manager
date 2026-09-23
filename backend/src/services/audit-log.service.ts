@@ -6,7 +6,7 @@ export interface OperationLog {
   operatorName: string;
   operation: string;
   target: string;
-  details: string;
+  details: string | null;
   createdAt: Date;
 }
 
@@ -22,34 +22,17 @@ export class AuditLogService {
     },
   ): Promise<{ items: OperationLog[]; total: number; page: number; pageSize: number }> {
     const offset = (page - 1) * pageSize;
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    if (filters?.operatorId) {
-      conditions.push('operator_id = ?');
-      params.push(filters.operatorId);
-    }
-
-    if (filters?.operation) {
-      conditions.push('operation LIKE ?');
-      params.push(`%${filters.operation}%`);
-    }
-
-    if (filters?.startDate) {
-      conditions.push('DATE(created_at) >= ?');
-      params.push(filters.startDate);
-    }
-
-    if (filters?.endDate) {
-      conditions.push('DATE(created_at) <= ?');
-      params.push(filters.endDate);
-    }
 
     try {
-      const { items, total } = await auditLogRepository.listLogs(offset, pageSize, conditions, params);
+      const { items, total } = await auditLogRepository.listLogs(offset, pageSize, {
+        operatorId: filters?.operatorId,
+        operation: filters?.operation,
+        startDate: filters?.startDate,
+        endDate: filters?.endDate,
+      });
 
       return {
-        items: items.map((item: any) => ({
+        items: items.map((item) => ({
           id: item.id,
           operatorId: item.operatorId,
           operatorName: item.operatorName,

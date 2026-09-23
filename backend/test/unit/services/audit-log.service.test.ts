@@ -26,17 +26,12 @@ describe('AuditLogService', () => {
 
       expect(result.items).toHaveLength(1);
       expect(result.total).toBe(1);
-      expect(auditLogRepository.listLogs).toHaveBeenCalledWith(
-        0,
-        20,
-        expect.arrayContaining([
-          'operator_id = ?',
-          'operation LIKE ?',
-          'DATE(created_at) >= ?',
-          'DATE(created_at) <= ?',
-        ]),
-        expect.arrayContaining([1, '%ban%', '2024-01-01', '2024-12-31']),
-      );
+      expect(auditLogRepository.listLogs).toHaveBeenCalledWith(0, 20, {
+        operatorId: 1,
+        operation: 'ban',
+        startDate: '2024-01-01',
+        endDate: '2024-12-31',
+      });
     });
 
     it('returns empty result when repository throws', async () => {

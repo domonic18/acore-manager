@@ -5,6 +5,7 @@ import { useChatStream } from '../hooks/useChatStream';
 import { SessionSidebar } from './SessionSidebar';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
+import { QuestionCard } from './QuestionCard';
 import { toast } from '@/shared/utils/toast.util';
 
 // 常量与 ai-invest AssistantPanel 对齐：抽屉 520~960（默认 760），持久化宽度
@@ -12,6 +13,38 @@ const MIN_DRAWER_WIDTH = 520;
 const MAX_DRAWER_WIDTH = 960;
 const DEFAULT_DRAWER_WIDTH = 760;
 const DRAWER_STORAGE_KEY = 'acm.ai.drawerWidth';
+
+// 详情页「快速分析」按钮 → 侧边栏调起桥接事件（无全局 store，用 CustomEvent）
+export const AI_QUICK_ANALYZE_EVENT = 'acm:ai-quick-analyze';
+
+export interface QuickAnalyzePayload {
+  subjectType: 'account' | 'character';
+  name: string;
+  guid?: number;
+  accountName?: string;
+  /** 账号处于封禁状态时携带：分析切换为封禁当天活动 + 误封辨别 */
+  ban?: { date: string; reason: string; bannedBy: string };
+}
+
+export function buildQuickAnalyzePrompt(payload: QuickAnalyzePayload): string {
+  if (payload.subjectType === 'character') {
+    return (
+      `请对角色「${payload.name}」（guid:${payload.guid ?? '未知'}，账号：${payload.accountName ?? '未知'}）进行今天的行为分析：` +
+      '登录与在线情况、金币与交易流水、邮件与拍卖行异常、组队与关联账号风险，最后用中文给出结论摘要。'
+    );
+  }
+  if (payload.ban) {
+    return (
+      `账号「${payload.name}」已于 ${payload.ban.date} 被封禁（原因：${payload.ban.reason || '未记录'}，操作人：${payload.ban.bannedBy || '未知'}）。` +
+      '请分析该账号被封当天的活动记录：登录 IP 与在线时段、名下角色金币变动、交易/邮件/拍卖行为，' +
+      '结合封禁原因逐项核对证据，判断该封禁是否可能为误封，最后给出结论与建议（维持封禁/人工复核/建议解封）。'
+    );
+  }
+  return (
+    `请对账号「${payload.name}」进行今天的行为分析：` +
+    '登录 IP 情况、名下角色金币变动、交易/邮件/拍卖异常，最后用中文给出结论摘要。'
+  );
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -39,7 +72,19 @@ export function AiAssistantDock() {
   const pendingTextRef = useRef<string | null>(null);
 
   const { sessions, create, remove } = useChatSessions();
-  const { messages, loadingHistory, streaming, send, stop } = useChatStream(activeId);
+  const { messages, loadingHistory, streaming, pendingQuestion, send, stop } = useChatStream(activeId);
+
+  // 详情页快速分析：打开抽屉并自动发送分析指令（复用 handleSend 的建会话/补发机制）
+  const handleSendRef = useRef<(text: string) => void>(() => {});
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setOpen(true);
+      const detail = (e as CustomEvent<QuickAnalyzePayload>).detail;
+      if (detail) handleSendRef.current(buildQuickAnalyzePrompt(detail));
+    };
+    window.addEventListener(AI_QUICK_ANALYZE_EVENT, handler);
+    return () => window.removeEventListener(AI_QUICK_ANALYZE_EVENT, handler);
+  }, []);
 
   useEffect(() => {
     if (!resizing) return;
@@ -105,6 +150,7 @@ export function AiAssistantDock() {
     },
     [activeId, send, handleCreate],
   );
+  handleSendRef.current = handleSend;
 
   const handleDelete = useCallback(
     (id: number) => {
@@ -189,6 +235,7 @@ export function AiAssistantDock() {
           </div>
 
           <MessageList messages={messages} loading={loadingHistory} onSuggest={handleSend} />
+          {pendingQuestion && <QuestionCard payload={pendingQuestion} onSelect={(label) => void handleSend(`我选择：${label}`)} />}
           <Composer disabled={activeId === null && create.isPending} streaming={streaming} onSend={handleSend} onStop={stop} />
         </div>
 

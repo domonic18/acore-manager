@@ -10,6 +10,7 @@ import {
 } from '@/features/account/hooks/useAccount';
 import { Dialog } from '@/shared/components/Dialog';
 import { raceMap, classMap, banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
+import { AI_QUICK_ANALYZE_EVENT, type QuickAnalyzePayload } from '@/features/ai-assistant/components/AiAssistantDock';
 import { toast } from '@/shared/utils/toast.util';
 
 function formatMuteTime(muteTime: number): string {
@@ -148,6 +149,31 @@ export default function AccountDetailPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">{account.username}</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent(AI_QUICK_ANALYZE_EVENT, {
+                  detail: {
+                    subjectType: 'account',
+                    name: account.username,
+                    accountName: account.username,
+                    ...(activeBans.length > 0
+                      ? {
+                          ban: {
+                            date: new Date(activeBans[0].banDate).toLocaleString('zh-CN'),
+                            reason: activeBans[0].banReason,
+                            bannedBy: activeBans[0].bannedBy,
+                          },
+                        }
+                      : {}),
+                  } satisfies QuickAnalyzePayload,
+                }),
+              )
+            }
+            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            快速分析
+          </button>
           <button
             onClick={() => {
               setNewPassword('');
@@ -373,6 +399,7 @@ export default function AccountDetailPage() {
           >
             <option value="1h">1小时</option>
             <option value="1d">1天</option>
+            <option value="3d">3天</option>
             <option value="7d">7天</option>
             <option value="30d">30天</option>
             <option value="-1">永久</option>

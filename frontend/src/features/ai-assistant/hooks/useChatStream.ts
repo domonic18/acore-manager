@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { aiAssistantApi, streamChat, ToolCallEvent, ToolResultEvent } from '../api/ai-assistant.api';
+import { aiAssistantApi, streamChat, QuestionEvent, ToolCallEvent, ToolResultEvent } from '../api/ai-assistant.api';
 
 export interface ChatUiTool {
   name: string;
@@ -27,6 +27,7 @@ export function useChatStream(sessionId: number | null) {
   const [messages, setMessages] = useState<ChatUiMessage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState<QuestionEvent | null>(null);
   const queryClient = useQueryClient();
   const streamingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -84,6 +85,7 @@ export function useChatStream(sessionId: number | null) {
       if (sessionId === null || streamingRef.current || !text.trim()) return;
       streamingRef.current = true;
       setStreaming(true);
+      setPendingQuestion(null);
       const stamp = Date.now();
       setMessages((prev) => [
         ...prev,
@@ -101,6 +103,7 @@ export function useChatStream(sessionId: number | null) {
             onToolCall: (d: ToolCallEvent) =>
               patchLast((m) => ({ ...m, tools: [...m.tools, { name: d.name, args: d.args, status: 'running' as const }] })),
             onToolResult: (d: ToolResultEvent) => patchTool(d.name, { rowCount: d.rowCount, durationMs: d.durationMs, error: d.error ?? null }),
+            onQuestion: (d: QuestionEvent) => setPendingQuestion(d),
             onDone: () => patchLast((m) => ({ ...m, streaming: false })),
             onError: (d) => patchLast((m) => ({ ...m, streaming: false, error: d.message })),
           },
@@ -122,5 +125,5 @@ export function useChatStream(sessionId: number | null) {
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 
-  return { messages, loadingHistory, streaming, send, stop };
+  return { messages, loadingHistory, streaming, pendingQuestion, send, stop };
 }

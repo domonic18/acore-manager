@@ -1,7 +1,9 @@
 import { ChatUiMessage } from '../hooks/useChatStream';
-import { AlertCircle, Bot, ChevronDown, Loader2, Wrench } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { AlertCircle, Bot, Check, ChevronDown, Copy, Loader2, Wrench } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/shared/lib/utils';
+import { Markdown } from './Markdown';
+import { toast } from '@/shared/utils/toast.util';
 
 const SUGGESTIONS = [
   '最近哪些角色被举报最多？',
@@ -70,29 +72,32 @@ export function MessageList({ messages, loading, onSuggest }: MessageListProps) 
                   <Bot className="h-4 w-4 text-primary" />
                 </div>
               )}
-              <div
-                className={cn(
-                  'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap break-words md:max-w-[75%]',
-                  m.role === 'user'
-                    ? 'rounded-br-sm bg-primary text-primary-foreground'
-                    : 'rounded-tl-sm border border-border bg-card shadow-sm',
-                )}
-              >
-                {m.tools.length > 0 && (
-                  <div className="mb-2 space-y-1">
-                    {m.tools.map((t, i) => (
-                      <ToolRow key={`${t.name}-${i}`} tool={t} />
-                    ))}
-                  </div>
-                )}
-                {m.content}
-                {m.streaming && <span className="ml-0.5 inline-block h-4 w-[7px] translate-y-[3px] animate-pulse rounded-sm bg-primary/80" />}
-                {m.error && (
-                  <div className="mt-2 flex items-start gap-1.5 text-xs text-destructive">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>{m.error}</span>
-                  </div>
-                )}
+              <div className={cn('min-w-0 max-w-[85%] md:max-w-[75%]')}>
+                <div
+                  className={cn(
+                    'rounded-2xl px-3.5 py-2.5 text-sm break-words',
+                    m.role === 'user'
+                      ? 'whitespace-pre-wrap rounded-br-sm bg-primary text-primary-foreground'
+                      : 'rounded-tl-sm border border-border bg-card shadow-sm',
+                  )}
+                >
+                  {m.tools.length > 0 && (
+                    <div className="mb-2 space-y-1">
+                      {m.tools.map((t, i) => (
+                        <ToolRow key={`${t.name}-${i}`} tool={t} />
+                      ))}
+                    </div>
+                  )}
+                  {m.role === 'assistant' && m.content ? <Markdown content={m.content} /> : m.content}
+                  {m.streaming && <span className="ml-0.5 inline-block h-4 w-[7px] translate-y-[3px] animate-pulse rounded-sm bg-primary/80" />}
+                  {m.error && (
+                    <div className="mt-2 flex items-start gap-1.5 text-xs text-destructive">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{m.error}</span>
+                    </div>
+                  )}
+                </div>
+                {m.role === 'assistant' && !m.streaming && m.content && <CopyButton text={m.content} />}
               </div>
             </div>
           ))}
@@ -106,6 +111,30 @@ export function MessageList({ messages, loading, onSuggest }: MessageListProps) 
         </div>
       )}
     </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error('复制失败');
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      title="复制内容"
+      className="mt-1 flex items-center gap-1 px-1 text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
+    >
+      {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+      {copied ? '已复制' : '复制'}
+    </button>
   );
 }
 

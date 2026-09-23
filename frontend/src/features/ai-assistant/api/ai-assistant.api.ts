@@ -49,11 +49,18 @@ export interface ErrorEvent {
   code?: string;
 }
 
+export interface QuestionEvent {
+  question: string;
+  options: { value: string; label: string }[];
+  default?: string | null;
+}
+
 export interface StreamHandlers {
   onDelta: (text: string) => void;
   onToolCall: (data: ToolCallEvent) => void;
   onToolResult: (data: ToolResultEvent) => void;
   onStep?: (data: { todos?: unknown[] }) => void;
+  onQuestion?: (data: QuestionEvent) => void;
   onDone: (data: DoneEvent) => void;
   onError: (data: ErrorEvent) => void;
 }
@@ -123,6 +130,9 @@ function emitFrame(frame: string, h: StreamHandlers): void {
       break;
     case 'step':
       h.onStep?.(data as { todos?: unknown[] });
+      break;
+    case 'question':
+      h.onQuestion?.(data as unknown as QuestionEvent);
       break;
     case 'done':
       h.onDone(data as unknown as DoneEvent);

@@ -3,13 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { useCharacterList } from '@/features/character/hooks/useCharacter';
 import { raceMap, classMap } from '@/shared/constants/game.constants';
 
+const ONLINE_ONLY_KEY = 'acm.characters.onlineOnly';
+
+function readOnlineOnlyPref(): boolean {
+  return localStorage.getItem(ONLINE_ONLY_KEY) !== '0';
+}
+
 export default function CharacterListPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [includeDeleted, setIncludeDeleted] = useState(false);
-  const { data, isLoading } = useCharacterList({ page, pageSize: 20, search, includeDeleted });
+  const [onlineOnly, setOnlineOnly] = useState(readOnlineOnlyPref);
+  const { data, isLoading } = useCharacterList({ page, pageSize: 20, search, includeDeleted, online: onlineOnly });
+
+  const handleOnlineOnlyChange = (value: boolean) => {
+    setOnlineOnly(value);
+    localStorage.setItem(ONLINE_ONLY_KEY, value ? '1' : '0');
+    setPage(1);
+  };
 
   const handleSearch = () => {
     setSearch(searchInput);
@@ -23,6 +36,24 @@ export default function CharacterListPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">角色管理</h1>
         <div className="flex items-center gap-3">
+          <div className="inline-flex rounded-md border border-border p-0.5">
+            <button
+              onClick={() => handleOnlineOnlyChange(true)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                onlineOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-accent-foreground'
+              }`}
+            >
+              仅在线
+            </button>
+            <button
+              onClick={() => handleOnlineOnlyChange(false)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                !onlineOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-accent-foreground'
+              }`}
+            >
+              全部
+            </button>
+          </div>
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
             <input
               type="checkbox"

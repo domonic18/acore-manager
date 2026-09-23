@@ -65,6 +65,34 @@ describe('CharacterService', () => {
       expect(conditions).toContain('name LIKE ?');
       expect(params).toContain('%Hero%');
     });
+
+    it('applies online filter only when requested', async () => {
+      (cacheService.get as jest.Mock).mockResolvedValue(null);
+      (characterRepository.listCharacters as jest.Mock).mockResolvedValue({ items: [], total: 0 });
+
+      await characterService.listCharacters(1, 20, undefined, false, true);
+
+      let conditions = (characterRepository.listCharacters as jest.Mock).mock.calls[0][2];
+      expect(conditions).toContain('c.online = 1');
+
+      await characterService.listCharacters(1, 20, undefined, false, false);
+
+      conditions = (characterRepository.listCharacters as jest.Mock).mock.calls[1][2];
+      expect(conditions).not.toContain('c.online = 1');
+    });
+
+    it('caches online and offline results under distinct keys', async () => {
+      (cacheService.get as jest.Mock).mockResolvedValue(null);
+      (characterRepository.listCharacters as jest.Mock).mockResolvedValue({ items: [], total: 0 });
+
+      await characterService.listCharacters(1, 20, undefined, false, true);
+      await characterService.listCharacters(1, 20, undefined, false, false);
+
+      const keys = (cacheService.get as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(keys[0]).not.toBe(keys[1]);
+      expect(keys[0]).toContain(':1');
+      expect(keys[1]).toContain(':0');
+    });
   });
 
   describe('getCharacterDetail', () => {

@@ -43,11 +43,11 @@ export interface CharacterListResult {
 }
 
 export const characterApi = {
-  list: (params: { page?: number; pageSize?: number; search?: string; includeDeleted?: boolean }) =>
+  list: (params: { page?: number; pageSize?: number; search?: string; includeDeleted?: boolean; online?: boolean }) =>
     apiClient.get<CharacterListResult>(
       `/api/characters?page=${params.page || 1}&pageSize=${params.pageSize || 20}${
         params.search ? `&search=${encodeURIComponent(params.search)}` : ''
-      }${params.includeDeleted ? '&includeDeleted=true' : ''}`
+      }${params.includeDeleted ? '&includeDeleted=true' : ''}${params.online ? '&online=true' : ''}`
     ),
 
   detail: (guid: number) => apiClient.get<CharacterDetail>(`/api/characters/${guid}`),

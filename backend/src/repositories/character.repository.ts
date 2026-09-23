@@ -10,7 +10,7 @@ class CharacterRepository {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countResult = await charactersDataSource.query(
-      `SELECT COUNT(*) as total FROM characters ${whereClause}`,
+      `SELECT COUNT(*) as total FROM characters c ${whereClause}`,
       params,
     );
     const total = parseInt(countResult[0]?.total || '0', 10);

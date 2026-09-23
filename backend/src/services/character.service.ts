@@ -51,8 +51,9 @@ export class CharacterService {
     pageSize: number = 20,
     search?: string,
     includeDeleted: boolean = false,
+    online?: boolean,
   ): Promise<CharacterListResult> {
-    const cacheKey = `characters:list:${page}:${pageSize}:${search || ''}:${includeDeleted}`;
+    const cacheKey = `characters:list:${page}:${pageSize}:${search || ''}:${includeDeleted}:${online ? 1 : 0}`;
     const cached = await cacheService.get<CharacterListResult>(cacheKey);
     if (cached) {
       return cached;
@@ -68,6 +69,10 @@ export class CharacterService {
     if (search) {
       conditions.push('name LIKE ?');
       params.push(`%${search}%`);
+    }
+    if (online) {
+      // acore_auth.account 同名 online 列存在，JOIN 查询必须带 c. 前缀消歧
+      conditions.push('c.online = 1');
     }
 
     const { items, total } = await characterRepository.listCharacters(offset, pageSize, conditions, params);

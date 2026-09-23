@@ -16,6 +16,7 @@ router.get(
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('search').optional().trim(),
     query('includeDeleted').optional().isBoolean().toBoolean(),
+    query('online').optional().isBoolean().toBoolean(),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -28,8 +29,9 @@ router.get(
     const pageSize = parseInt(req.query.pageSize as string) || 20;
     const search = req.query.search as string | undefined;
     const includeDeleted = req.query.includeDeleted as boolean | undefined;
+    const online = req.query.online as boolean | undefined;
 
-    const result = await characterService.listCharacters(page, pageSize, search, includeDeleted);
+    const result = await characterService.listCharacters(page, pageSize, search, includeDeleted, online);
     res.jsonSuccess(result, result.items.length);
   }),
 );

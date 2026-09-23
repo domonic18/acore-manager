@@ -28,6 +28,8 @@ export interface SuspiciousPlayer {
   characterGuid?: number;
   accountId?: number;
   accountUsername?: string;
+  // T4.5：审计记录存在 gmtool.mail.send 时为 true
+  warned?: boolean;
 }
 
 export interface ReportServerHealth {

@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import type { SuspiciousPlayer } from '../api/ai-diagnosis.api';
 import { useExemptionsByGuids } from '../hooks/useAiDiagnosis';
 import { MarkFalsePositiveDialog, type MarkFalsePositiveTarget } from './MarkFalsePositiveDialog';
+import { SendWarningMailDialog } from './SendWarningMailDialog';
 
 // 可疑玩家处置表（T4.3）：卡片列表升级为可勾选表格，角色/账号富化 ID 跳转详情，
 // 行内/批量标记误报（豁免白名单落库）。guid 缺失（已删除角色）降级纯文本且不可勾选。
@@ -67,10 +68,11 @@ function AiAdviceCell({ player }: { player: SuspiciousPlayer }) {
   );
 }
 
-export function SuspiciousPlayerTable({ players }: { players: SuspiciousPlayer[] }) {
+export function SuspiciousPlayerTable({ players, realm, reportDate }: { players: SuspiciousPlayer[]; realm: string; reportDate: string }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
+  const [mailOpen, setMailOpen] = useState(false);
 
   const ordered = useMemo(
     () =>
@@ -114,6 +116,15 @@ export function SuspiciousPlayerTable({ players }: { players: SuspiciousPlayer[]
     setDialogOpen(true);
   };
 
+  // 警告邮件违规概要（{reason} 占位符）：按选中玩家的最高严重度生成
+  const mailReason = (() => {
+    const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const worst = [...players].filter((p) => p.characterGuid != null && selected.has(p.characterGuid)).sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9))[0];
+    const label = worst ? (SEVERITY_LABEL[worst.severity] ?? worst.severity) : '';
+    const action = worst ? (ACTION_LABEL[worst.suggestedAction] ?? '') : '';
+    return action ? `${action}（${label}）` : `多次违规行为（${label}）`;
+  })();
+
   if (players.length === 0) {
     return <div className="py-6 text-center text-sm text-muted-foreground">本日无可疑玩家</div>;
   }
@@ -128,6 +139,12 @@ export function SuspiciousPlayerTable({ players }: { players: SuspiciousPlayer[]
             className="rounded-md border border-sky-500/40 px-2.5 py-1 text-xs font-medium text-sky-400 hover:bg-sky-500/10"
           >
             批量标记误报
+          </button>
+          <button
+            onClick={() => setMailOpen(true)}
+            className="rounded-md border border-amber-500/40 px-2.5 py-1 text-xs font-medium text-amber-400 hover:bg-amber-500/10"
+          >
+            发送警告邮件
           </button>
           <button onClick={() => setSelected(new Set())} className="text-xs text-muted-foreground hover:text-foreground">
             清除选择
@@ -199,6 +216,11 @@ export function SuspiciousPlayerTable({ players }: { players: SuspiciousPlayer[]
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
+                      {p.warned && (
+                        <span className="whitespace-nowrap rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400">
+                          已警告
+                        </span>
+                      )}
                       {exempted && (
                         <span className="whitespace-nowrap rounded bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-400">
                           已标误报
@@ -221,15 +243,26 @@ export function SuspiciousPlayerTable({ players }: { players: SuspiciousPlayer[]
                   </td>
                   <td className="px-4 py-3">
                     {p.characterGuid != null ? (
-                      <button
-                        onClick={() => {
-                          setSelected(new Set([p.characterGuid as number]));
-                          openDialog(false);
-                        }}
-                        className="whitespace-nowrap rounded-md border border-sky-500/40 px-2 py-1 text-xs font-medium text-sky-400 hover:bg-sky-500/10"
-                      >
-                        标记误报
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => {
+                            setSelected(new Set([p.characterGuid as number]));
+                            openDialog(false);
+                          }}
+                          className="whitespace-nowrap rounded-md border border-sky-500/40 px-2 py-1 text-xs font-medium text-sky-400 hover:bg-sky-500/10"
+                        >
+                          标记误报
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelected(new Set([p.characterGuid as number]));
+                            setMailOpen(true);
+                          }}
+                          className="whitespace-nowrap rounded-md border border-amber-500/40 px-2 py-1 text-xs font-medium text-amber-400 hover:bg-amber-500/10"
+                        >
+                          发警告邮件
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
@@ -246,6 +279,15 @@ export function SuspiciousPlayerTable({ players }: { players: SuspiciousPlayer[]
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onDone={() => setSelected(new Set())}
+      />
+
+      <SendWarningMailDialog
+        targets={targets}
+        reason={mailReason}
+        reportDate={reportDate}
+        refReport={`${realm}:${reportDate}`}
+        open={mailOpen}
+        onClose={() => setMailOpen(false)}
       />
     </div>
   );

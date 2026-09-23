@@ -125,7 +125,7 @@ export function ReportDetailTabs({ report }: { report: AiReportDetail }) {
         ))}
       </div>
       {tab === 'health' && <HealthTab serverHealth={report.contentJson?.serverHealth} summary={report.summary} />}
-      {tab === 'players' && <SuspiciousPlayerTable players={players} />}
+      {tab === 'players' && <SuspiciousPlayerTable players={players} realm={report.realm} reportDate={report.reportDate} />}
       {tab === 'recs' && <RecsTab recommendations={report.contentJson?.recommendations} />}
       {tab === 'full' && <FullTab realm={report.realm} reportDate={report.reportDate} contentMarkdown={report.contentMarkdown} />}
     </div>

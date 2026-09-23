@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { aiDiagnosisApi } from '../api/ai-diagnosis.api';
+import { gmMailApi } from '@/shared/api/gm-mail';
 
 export function useReports(realm?: string) {
   return useQuery({
@@ -55,6 +56,26 @@ export function useCreateExemption() {
     mutationFn: aiDiagnosisApi.createExemption,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'exemptions'] });
+    },
+  });
+}
+
+export function useMailTemplate(enabled: boolean) {
+  return useQuery({
+    queryKey: ['ai-diagnosis', 'mail-template'],
+    queryFn: () => gmMailApi.template(),
+    enabled,
+    staleTime: Infinity,
+  });
+}
+
+export function useSendWarningMail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: gmMailApi.send,
+    onSuccess: () => {
+      // 已警告徽标来自报告详情响应层富化，发送成功后刷新详情
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'report'] });
     },
   });
 }

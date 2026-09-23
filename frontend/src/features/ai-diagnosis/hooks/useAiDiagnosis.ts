@@ -27,7 +27,8 @@ export function useDeleteReport() {
   return useMutation({
     mutationFn: ({ realm, date }: { realm: string; date: string }) => aiDiagnosisApi.removeReport(realm, date),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis'] });
+      // 只失效列表：详情查询此时仍挂在详情页上，若一并失效会对已删除的报告发 GET（404 报错）
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'reports'] });
     },
   });
 }

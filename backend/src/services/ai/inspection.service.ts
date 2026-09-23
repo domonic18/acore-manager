@@ -358,6 +358,7 @@ class InspectionService {
       summary: report.summary,
       serverHealth: report.serverHealth,
       suspiciousPlayers: report.suspiciousPlayers,
+      recommendations: report.recommendations,
     });
   }
 

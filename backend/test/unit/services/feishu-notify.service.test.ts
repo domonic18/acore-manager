@@ -19,6 +19,7 @@ const baseInput = {
   healthScore: 82,
   summary: '总体平稳',
   serverHealth: { crashes: [{}], errors: [{}, {}], authAnomalies: [] },
+  recommendations: ['优先处置 HighGuy', '核查日志上传链路'],
   suspiciousPlayers: [
     { character: 'LowGuy', severity: 'low' as const, suggestedAction: 'warning' as const, reasons: ['低速'], evidence: [], falsePositiveSignals: [] },
     { character: 'HighGuy', severity: 'high' as const, suggestedAction: 'ban' as const, reasons: ['穿墙'], evidence: [], falsePositiveSignals: [] },
@@ -92,10 +93,28 @@ describe('feishu-notify: daily report card', () => {
       expect.stringContaining('2'),
       expect.stringContaining('0'),
     ]);
-    const risk = (card.elements as Array<{ tag: string; text?: { content: string } }>)[2].text!.content;
-    expect(risk).toContain('HighGuy');
-    expect(risk.indexOf('HighGuy')).toBeLessThan(risk.indexOf('LowGuy'));
+    const texts = (card.elements as Array<{ tag: string; text?: { content: string } }>)
+      .filter((e) => e.tag === 'div' && e.text)
+      .map((e) => e.text!.content);
+    const joined = texts.join('\n');
+    // 每名玩家一个结构化块：风险标签 + 建议处置，高危排前
+    expect(joined).toContain('【高危】HighGuy');
+    expect(joined).toContain('建议处置：**ban**');
+    expect(joined.indexOf('HighGuy')).toBeLessThan(joined.indexOf('LowGuy'));
+    expect(joined).toContain('处置建议');
+    expect(joined).toContain('优先处置 HighGuy');
+    // 整段 summary 文字不再进卡片
+    expect(joined).not.toContain('总体平稳');
     expect(JSON.stringify(card)).not.toContain('查看完整报告');
+  });
+
+  it('marks players carrying false-positive signals so GMs do not ban directly', () => {
+    const card = feishuNotifyService.buildDailyReportCard({
+      ...baseInput,
+      suspiciousPlayers: [{ ...baseInput.suspiciousPlayers[1], falsePositiveSignals: ['平均延迟 131.7 ms > 100 ms'] }],
+    });
+    expect(JSON.stringify(card)).toContain('误报信号 1 项');
+    expect(JSON.stringify(card)).toContain('不建议直接封禁');
   });
 
   it('turns the header red on high severity or low health score', () => {

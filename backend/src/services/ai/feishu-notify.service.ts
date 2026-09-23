@@ -13,9 +13,10 @@ type FeishuCard = Record<string, unknown>;
 type FeishuPayload = Record<string, unknown>;
 
 export type DailyReportCardInput = Pick<InspectionInput, 'realm' | 'date' | 'trigger'> &
-  Pick<InspectionReportJson, 'healthScore' | 'summary' | 'serverHealth' | 'suspiciousPlayers'>;
+  Pick<InspectionReportJson, 'healthScore' | 'summary' | 'serverHealth' | 'suspiciousPlayers' | 'recommendations'>;
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
+const SEVERITY_LABEL = { high: '高危', medium: '中危', low: '低危' } as const;
 
 class FeishuNotifyService {
   async sendText(text: string): Promise<boolean> {
@@ -62,7 +63,7 @@ class FeishuNotifyService {
   }
 
   buildDailyReportCard(input: DailyReportCardInput): FeishuCard {
-    const { realm, date, healthScore, summary } = input;
+    const { realm, date, healthScore } = input;
     const crashes = input.serverHealth.crashes?.length ?? 0;
     const errors = input.serverHealth.errors?.length ?? 0;
     const authAnomalies = input.serverHealth.authAnomalies?.length ?? 0;
@@ -71,9 +72,6 @@ class FeishuNotifyService {
     const top = [...input.suspiciousPlayers]
       .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
       .slice(0, 3);
-    const riskLines = top.length
-      ? top.map((p, i) => `${i + 1}. **${p.character}**（${p.severity} → ${p.suggestedAction}）${p.reasons[0] ?? ''}`)
-      : ['本日无可疑玩家'];
     const risky = top.some((p) => p.severity === 'high') || healthScore < 60;
 
     const elements: FeishuCard[] = [
@@ -88,10 +86,28 @@ class FeishuNotifyService {
         ],
       },
       { tag: 'hr' },
-      { tag: 'div', text: { tag: 'lark_md', content: `**TOP 风险**\n${riskLines.join('\n')}` } },
-      { tag: 'hr' },
-      { tag: 'div', text: { tag: 'lark_md', content: summary.slice(0, 200) } },
     ];
+
+    // 每名玩家一个结构化块：风险级别 → 处置 → 误报信号 → 首条依据，替代整段 summary 文字
+    if (top.length === 0) {
+      elements.push({ tag: 'div', text: { tag: 'lark_md', content: '**本日无可疑玩家**' } });
+    }
+    for (const p of top) {
+      const fp = p.falsePositiveSignals?.length ?? 0;
+      const lines = [
+        `**【${SEVERITY_LABEL[p.severity] ?? p.severity}】${p.character}**　建议处置：**${p.suggestedAction}**`,
+      ];
+      if (fp > 0) lines.push(`误报信号 ${fp} 项（不建议直接封禁）`);
+      lines.push(`依据：${(p.reasons?.[0] ?? '').slice(0, 90)}`);
+      elements.push({ tag: 'div', text: { tag: 'lark_md', content: lines.join('\n') } });
+    }
+    if (input.recommendations?.length) {
+      elements.push({ tag: 'hr' });
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: `**处置建议**\n${input.recommendations.slice(0, 2).map((r) => `- ${r.slice(0, 90)}`).join('\n')}` },
+      });
+    }
 
     // 报告页由 T4.0 提供；配置了基础地址才渲染跳转按钮
     if (env.ACM_WEB_BASE_URL) {

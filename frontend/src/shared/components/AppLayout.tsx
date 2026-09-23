@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ComponentType } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -23,20 +23,52 @@ import {
   FileSearch,
 } from 'lucide-react';
 
-const menuItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/accounts', label: '账号管理', icon: Users },
-  { path: '/characters', label: '角色管理', icon: UserCircle },
-  { path: '/transactions', label: '交易记录', icon: Receipt },
-  { path: '/gm-tools', label: 'GM 工具', icon: Shield },
-  { path: '/gm-accounts', label: 'GM 账号', icon: Crown },
-  { path: '/rbac-config', label: 'RBAC 配置', icon: SlidersHorizontal },
-  { path: '/banlist', label: '封号列表', icon: ShieldAlert },
-  { path: '/mutes', label: '禁言列表', icon: MessageSquareOff },
-  { path: '/ip-bans', label: 'IP 封禁', icon: Ban },
-  { path: '/audit-logs', label: '日志审计', icon: ScrollText },
-  { path: '/model-config', label: 'AI 模型配置', icon: Bot },
-  { path: '/ai-diagnosis', label: 'AI 巡检报告', icon: FileSearch },
+interface MenuItem {
+  path: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}
+
+const menuGroups: { title: string; items: MenuItem[] }[] = [
+  {
+    title: '总览',
+    items: [{ path: '/', label: '管理总览', icon: LayoutDashboard }],
+  },
+  {
+    title: '玩家管理',
+    items: [
+      { path: '/accounts', label: '账号管理', icon: Users },
+      { path: '/characters', label: '角色管理', icon: UserCircle },
+      { path: '/transactions', label: '交易记录', icon: Receipt },
+    ],
+  },
+  {
+    title: 'GM 运维',
+    items: [
+      { path: '/gm-tools', label: 'GM 工具', icon: Shield },
+      { path: '/gm-accounts', label: 'GM 账号', icon: Crown },
+      { path: '/rbac-config', label: 'RBAC 配置', icon: SlidersHorizontal },
+    ],
+  },
+  {
+    title: '处罚中心',
+    items: [
+      { path: '/banlist', label: '封号列表', icon: ShieldAlert },
+      { path: '/mutes', label: '禁言列表', icon: MessageSquareOff },
+      { path: '/ip-bans', label: 'IP 封禁', icon: Ban },
+    ],
+  },
+  {
+    title: 'AI 智能',
+    items: [
+      { path: '/model-config', label: '模型配置', icon: Bot },
+      { path: '/ai-diagnosis', label: '巡检报告', icon: FileSearch },
+    ],
+  },
+  {
+    title: '系统',
+    items: [{ path: '/audit-logs', label: '日志审计', icon: ScrollText }],
+  },
 ];
 
 export function AppLayout() {
@@ -82,24 +114,31 @@ export function AppLayout() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1">
-            {menuItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                  )
-                }
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </NavLink>
+          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+            {menuGroups.map((group) => (
+              <div key={group.title}>
+                <div className="px-3 pt-4 pb-1 text-xs font-medium text-muted-foreground">
+                  {group.title}
+                </div>
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                      )
+                    }
+                  >
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
             ))}
           </nav>
 

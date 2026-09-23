@@ -22,6 +22,7 @@ export const banReasonOptions = [
 export const durationLabels: Record<string, string> = {
   '1h': '1小时',
   '1d': '1天',
+  '3d': '3天',
   '7d': '7天',
   '30d': '30天',
   '-1': '永久',

@@ -155,6 +155,14 @@ export default function CharacterDetailPage() {
             快速分析
           </button>
           <button
+            onClick={() =>
+              navigate('/ai-diagnosis/targeted', { state: { subjectType: 'character', subjectName: character.name } })
+            }
+            className="px-4 py-2 rounded-md border border-blue-600 text-blue-400 text-sm font-medium hover:bg-blue-600/10"
+          >
+            AI 定向分析
+          </button>
+          <button
             onClick={handleOpenMuteDialog}
             className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
           >

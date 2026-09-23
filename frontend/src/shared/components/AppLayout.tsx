@@ -21,12 +21,15 @@ import {
   SlidersHorizontal,
   Bot,
   FileSearch,
+  Crosshair,
 } from 'lucide-react';
 
 interface MenuItem {
   path: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
+  /** 前缀路径互斥（如 /ai-diagnosis 与 /ai-diagnosis/targeted）时精确匹配高亮 */
+  end?: boolean;
 }
 
 const menuGroups: { title: string; items: MenuItem[] }[] = [
@@ -62,7 +65,8 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     title: 'AI 智能',
     items: [
       { path: '/model-config', label: '模型配置', icon: Bot },
-      { path: '/ai-diagnosis', label: '巡检报告', icon: FileSearch },
+      { path: '/ai-diagnosis', label: '巡检报告', icon: FileSearch, end: true },
+      { path: '/ai-diagnosis/targeted', label: '定向分析', icon: Crosshair },
     ],
   },
   {
@@ -124,6 +128,7 @@ export function AppLayout() {
                   <NavLink
                     key={item.path}
                     to={item.path}
+                    end={item.end}
                     onClick={() => setSidebarOpen(false)}
                     className={({ isActive }) =>
                       cn(

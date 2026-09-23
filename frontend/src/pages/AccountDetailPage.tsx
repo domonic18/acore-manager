@@ -175,6 +175,14 @@ export default function AccountDetailPage() {
             快速分析
           </button>
           <button
+            onClick={() =>
+              navigate('/ai-diagnosis/targeted', { state: { subjectType: 'account', subjectName: account.username } })
+            }
+            className="px-4 py-2 rounded-md border border-blue-600 text-blue-400 text-sm font-medium hover:bg-blue-600/10"
+          >
+            AI 定向分析
+          </button>
+          <button
             onClick={() => {
               setNewPassword('');
               setConfirmPassword('');

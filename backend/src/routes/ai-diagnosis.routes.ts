@@ -5,6 +5,7 @@ import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
 import { ServiceError, anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
 import { inspectionService } from '@/services/ai/inspection.service';
+import { reportService } from '@/services/ai/report.service';
 import { yesterdayCST } from '@/shared/utils/cst-date.util';
 import { VIOLATION_TYPES } from '@/agent/tools/log-tools/anticheat-parser';
 
@@ -110,6 +111,81 @@ router.delete(
     } catch (err) {
       handleServiceError(res, err);
     }
+  }),
+);
+
+// 报告查询（T4.1，arch 4.2）：列表摘要 + 详情全量；只读，gmlevel≥2
+router.get(
+  '/reports',
+  authMiddleware,
+  requireGmLevel(2),
+  [query('realm').optional().isString().trim().notEmpty(), query('limit').optional().isInt({ min: 1, max: 100 }).toInt()],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    const items = await reportService.list(req.query.realm as string | undefined, req.query.limit as number | undefined);
+    res.jsonSuccess(items, items.length);
+  }),
+);
+
+router.get(
+  '/reports/:realm/:date',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('realm').isString().trim().notEmpty(), param('date').matches(/^\d{4}-\d{2}-\d{2}$/)],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    const report = await reportService.getByRealmDate((req.params.realm as string).trim(), req.params.date);
+    if (!report) {
+      res.jsonError('报告不存在 / Report not found', 404);
+      return;
+    }
+    res.jsonSuccess(report);
+  }),
+);
+
+// 报告删除（T4.7 前置切片，gmlevel=3）：硬删除 + 审计
+router.delete(
+  '/reports/:realm/:date',
+  authMiddleware,
+  requireGmLevel(3),
+  [param('realm').isString().trim().notEmpty(), param('date').matches(/^\d{4}-\d{2}-\d{2}$/)],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      await reportService.remove((req.params.realm as string).trim(), req.params.date, req.user?.id || 0, req.user?.username || '');
+      res.jsonSuccess({ success: true });
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+// 近 N 天日志上传状态（manifest 完整性），供报告列表页断传提示
+router.get(
+  '/upload-status',
+  authMiddleware,
+  requireGmLevel(2),
+  [query('realm').isString().trim().notEmpty(), query('days').optional().isInt({ min: 1, max: 30 }).toInt()],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    const items = await reportService.uploadStatus((req.query.realm as string).trim(), req.query.days as number | undefined);
+    res.jsonSuccess(items, items.length);
   }),
 );
 

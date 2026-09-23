@@ -16,6 +16,14 @@ jest.mock('@/services/ai/anticheat-exemption.service', () => ({
 jest.mock('@/services/ai/inspection.service', () => ({
   inspectionService: { run: jest.fn().mockResolvedValue({ ok: true }) },
 }));
+jest.mock('@/services/ai/report.service', () => ({
+  reportService: {
+    list: jest.fn().mockResolvedValue([]),
+    getByRealmDate: jest.fn().mockResolvedValue(null),
+    uploadStatus: jest.fn().mockResolvedValue([]),
+    remove: jest.fn().mockResolvedValue(undefined),
+  },
+}));
 jest.mock('@/config/env', () => ({
   env: { LOG_LEVEL: 'silent', NODE_ENV: 'test' },
 }));
@@ -34,7 +42,9 @@ import express, { Application } from 'express';
 import request from 'supertest';
 import { responseFormatter } from '@/middleware/response-formatter';
 import aiDiagnosisRoutes from '@/routes/ai-diagnosis.routes';
+import { ServiceError as ReportedServiceError } from '@/services/ai/anticheat-exemption.service';
 import { inspectionService } from '@/services/ai/inspection.service';
+import { reportService } from '@/services/ai/report.service';
 
 describe('AI Diagnosis Routes: manual inspection trigger', () => {
   let app: Application;
@@ -83,5 +93,84 @@ describe('AI Diagnosis Routes: manual inspection trigger', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.accepted).toBe(true);
+  });
+});
+
+describe('AI Diagnosis Routes: report query (T4.1)', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    app = express();
+    app.use(express.json());
+    app.use(responseFormatter);
+    app.use('/api/ai/diagnosis', aiDiagnosisRoutes);
+  });
+
+  it('lists reports with optional realm filter and count', async () => {
+    (reportService.list as jest.Mock).mockResolvedValueOnce([{ id: 8, realm: 'realm3', reportDate: '2026-08-23' }]);
+    const res = await request(app).get('/api/ai/diagnosis/reports?realm=realm3');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.count).toBe(1);
+    expect(res.body.data[0]).toMatchObject({ id: 8 });
+    expect(reportService.list).toHaveBeenCalledWith('realm3', undefined);
+  });
+
+  it('rejects an empty realm param with 400', async () => {
+    const res = await request(app).get('/api/ai/diagnosis/reports?realm=');
+    expect(res.status).toBe(400);
+  });
+
+  it('returns report detail for a valid realm/date', async () => {
+    (reportService.getByRealmDate as jest.Mock).mockResolvedValueOnce({ id: 8, contentJson: {}, contentMarkdown: '# r' });
+    const res = await request(app).get('/api/ai/diagnosis/reports/realm3/2026-08-23');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ id: 8 });
+    expect(reportService.getByRealmDate).toHaveBeenCalledWith('realm3', '2026-08-23');
+  });
+
+  it('returns 404 when the report is absent', async () => {
+    const res = await request(app).get('/api/ai/diagnosis/reports/realm3/2026-08-23');
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects a malformed date param with 400', async () => {
+    const res = await request(app).get('/api/ai/diagnosis/reports/realm3/20260823');
+    expect(res.status).toBe(400);
+    expect(reportService.getByRealmDate).not.toHaveBeenCalled();
+  });
+
+  it('returns upload status for the requested realm and days', async () => {
+    (reportService.uploadStatus as jest.Mock).mockResolvedValueOnce([{ date: '2026-08-23', present: true, missingTypes: [] }]);
+    const res = await request(app).get('/api/ai/diagnosis/upload-status?realm=realm3&days=7');
+
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(1);
+    expect(reportService.uploadStatus).toHaveBeenCalledWith('realm3', 7);
+  });
+
+  it('rejects upload status without realm', async () => {
+    const res = await request(app).get('/api/ai/diagnosis/upload-status');
+    expect(res.status).toBe(400);
+  });
+
+  it('deletes a report and reports 404 when absent', async () => {
+    const res = await request(app).delete('/api/ai/diagnosis/reports/realm3/2026-08-23');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ success: true });
+    expect(reportService.remove).toHaveBeenCalledWith('realm3', '2026-08-23', 0, '');
+
+    (reportService.remove as jest.Mock).mockRejectedValueOnce(new ReportedServiceError('报告不存在', 404));
+    const missing = await request(app).delete('/api/ai/diagnosis/reports/realm3/2026-08-23');
+    expect(missing.status).toBe(404);
+  });
+
+  it('rejects delete with a malformed date', async () => {
+    const res = await request(app).delete('/api/ai/diagnosis/reports/realm3/bad-date');
+    expect(res.status).toBe(400);
+    expect(reportService.remove).not.toHaveBeenCalled();
   });
 });

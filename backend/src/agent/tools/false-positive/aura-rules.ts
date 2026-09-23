@@ -19,6 +19,8 @@ export const MOVEMENT_AURA_RULES: MovementAuraRule[] = [
   { label: '缓落漂浮类', spells: [130, 1706, 45514], explainsTypes: ['nofalldamage', 'jump', 'zaxis', 'gravity'] },
   // 控制解除：_every man for himself / 亡灵意志（受控瞬移类误报）
   { label: '控制解除技能', spells: [59752, 7744], explainsTypes: ['ignorecontrol', 'teleport'] },
+  // 十字军光环（骑乘移速 +20%，WotLK 34859 / TBC 32223）：反作弊速度阈值未计入骑乘加成时的经典误报源
+  { label: '十字军光环（骑乘移速）', spells: [34859, 32223], explainsTypes: ['speed'] },
 ];
 
 export function rulesForType(type: string): MovementAuraRule[] {
@@ -38,3 +40,4 @@ export function matchAuraSpells(spells: number[]): { label: string; spells: numb
 // 待校准（Owner T0.5 调研回填）：
 // - 坐骑移速加成附魔/道具（Riding Crop、Carrot on a Stick、Mithril Spurs 等）→ speed
 // - PvP 饰品解除移动限制族（42292 一族触发技能）→ ignorecontrol
+// 已回填：十字军光环（34859/32223）→ speed（T3.6 误报样例联调确认）

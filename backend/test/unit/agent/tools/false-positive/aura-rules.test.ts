@@ -11,9 +11,16 @@ describe('aura-rules', () => {
 
   it('rulesForType returns only rules explaining that type', () => {
     const speedRules = rulesForType('speed');
-    expect(speedRules).toHaveLength(0); // 待校准：坐骑移速附魔回填前 speed 无光环解释
+    expect(speedRules).toHaveLength(1); // T3.6：十字军光环（骑乘移速）→ speed
+    expect(speedRules[0].spells).toEqual(expect.arrayContaining([34859, 32223]));
     const waterwalkRules = rulesForType('waterwalk');
     expect(waterwalkRules.some((r) => r.spells.includes(546))).toBe(true);
+  });
+
+  it('crusader aura spell hits the speed rule (T3.6 mounted false-positive sample)', () => {
+    const matched = matchAuraSpells([34859]);
+    expect(matched).toHaveLength(1);
+    expect(matched[0]).toMatchObject({ label: '十字军光环（骑乘移速）', explainsTypes: ['speed'] });
   });
 
   it('matchAuraSpells hits only present spells and reports them', () => {

@@ -9,6 +9,7 @@ jest.mock('@/services/ai/anticheat-exemption.service', () => ({
   },
   anticheatExemptionService: {
     list: jest.fn().mockResolvedValue([]),
+    listByGuids: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
     remove: jest.fn(),
   },
@@ -45,6 +46,7 @@ import aiDiagnosisRoutes from '@/routes/ai-diagnosis.routes';
 import { ServiceError as ReportedServiceError } from '@/services/ai/anticheat-exemption.service';
 import { inspectionService } from '@/services/ai/inspection.service';
 import { reportService } from '@/services/ai/report.service';
+import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
 
 describe('AI Diagnosis Routes: manual inspection trigger', () => {
   let app: Application;
@@ -143,6 +145,20 @@ describe('AI Diagnosis Routes: report query (T4.1)', () => {
     expect(reportService.getByRealmDate).not.toHaveBeenCalled();
   });
 
+  it('returns the markdown raw body as text/plain (T4.2)', async () => {
+    (reportService.getByRealmDate as jest.Mock).mockResolvedValueOnce({ id: 8, contentJson: {}, contentMarkdown: '# 巡检报告全文' });
+    const res = await request(app).get('/api/ai/diagnosis/reports/realm3/2026-08-23/markdown');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/plain');
+    expect(res.text).toBe('# 巡检报告全文');
+  });
+
+  it('returns 404 for the markdown endpoint when the report is absent', async () => {
+    const res = await request(app).get('/api/ai/diagnosis/reports/realm3/2026-08-23/markdown');
+    expect(res.status).toBe(404);
+  });
+
   it('returns upload status for the requested realm and days', async () => {
     (reportService.uploadStatus as jest.Mock).mockResolvedValueOnce([{ date: '2026-08-23', present: true, missingTypes: [] }]);
     const res = await request(app).get('/api/ai/diagnosis/upload-status?realm=realm3&days=7');
@@ -155,6 +171,22 @@ describe('AI Diagnosis Routes: report query (T4.1)', () => {
   it('rejects upload status without realm', async () => {
     const res = await request(app).get('/api/ai/diagnosis/upload-status');
     expect(res.status).toBe(400);
+  });
+
+  it('lists exemptions filtered by a comma-separated guids param (T4.3)', async () => {
+    const res = await request(app).get('/api/ai/diagnosis/exemptions?guids=12, 34,abc,12');
+
+    expect(res.status).toBe(200);
+    expect(anticheatExemptionService.listByGuids).toHaveBeenCalledWith([12, 34]);
+    expect(anticheatExemptionService.list).not.toHaveBeenCalled();
+  });
+
+  it('returns the violation type dictionary (T4.3)', async () => {
+    const res = await request(app).get('/api/ai/diagnosis/exemptions/types');
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data).toContain('speed');
   });
 
   it('deletes a report and reports 404 when absent', async () => {

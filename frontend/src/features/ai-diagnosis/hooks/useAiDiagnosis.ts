@@ -32,3 +32,29 @@ export function useDeleteReport() {
     },
   });
 }
+
+export function useExemptionsByGuids(guids: number[]) {
+  return useQuery({
+    queryKey: ['ai-diagnosis', 'exemptions', 'guids', guids],
+    queryFn: () => aiDiagnosisApi.exemptionsByGuids(guids),
+    enabled: guids.length > 0,
+  });
+}
+
+export function useViolationTypes() {
+  return useQuery({
+    queryKey: ['ai-diagnosis', 'exemption-types'],
+    queryFn: () => aiDiagnosisApi.violationTypes(),
+    staleTime: Infinity,
+  });
+}
+
+export function useCreateExemption() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: aiDiagnosisApi.createExemption,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'exemptions'] });
+    },
+  });
+}

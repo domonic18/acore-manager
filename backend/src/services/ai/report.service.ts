@@ -4,6 +4,7 @@ import { cosGetObjectJson } from '@/shared/utils/cos.util';
 import { LOG_TYPES, manifestKey } from '@/agent/tools/log-tools/log-workspace';
 import { yesterdayCST } from '@/shared/utils/cst-date.util';
 import { auditLogService } from '@/services/audit-log.service';
+import { characterRepository } from '@/repositories/character.repository';
 import { ServiceError } from './anticheat-exemption.service';
 
 // 报告查询与管理（T4.1/T4.7 前置，arch 4.2 报告页数据源）：列表（摘要列）/ 详情（全量 JSON+Markdown）/
@@ -27,7 +28,32 @@ export class ReportService {
   }
 
   async getByRealmDate(realm: string, date: string): Promise<AiReport | null> {
-    return acmDataSource.getRepository(AiReport).findOne({ where: { realm, reportDate: date } });
+    const report = await acmDataSource.getRepository(AiReport).findOne({ where: { realm, reportDate: date } });
+    if (!report) return null;
+    return this.enrichSuspiciousPlayers(report);
+  }
+
+  // 响应层富化（T4.3）：为可疑玩家补充 guid/账号信息供前端跳转，仅注入返回值，不写回 contentJson
+  private async enrichSuspiciousPlayers(report: AiReport): Promise<AiReport> {
+    const players = (report.contentJson as { suspiciousPlayers?: { character: string }[] } | null)?.suspiciousPlayers;
+    if (!Array.isArray(players) || players.length === 0) return report;
+    const names = [...new Set(players.map((p) => p.character).filter(Boolean))];
+    if (names.length === 0) return report;
+    let basics: { guid: number; name: string; accountId: number; accountUsername: string | null }[] = [];
+    try {
+      basics = await characterRepository.findBasicByNames(names);
+    } catch {
+      return report; // 角色库查询失败不阻塞报告展示，降级纯文本
+    }
+    const byName = new Map(basics.map((b) => [b.name, b]));
+    report.contentJson = {
+      ...report.contentJson,
+      suspiciousPlayers: players.map((p) => {
+        const b = byName.get(p.character);
+        return b ? { ...p, characterGuid: b.guid, accountId: b.accountId, accountUsername: b.accountUsername ?? undefined } : p;
+      }),
+    } as any;
+    return report;
   }
 
   async remove(realm: string, date: string, operatorId: number, operatorName: string): Promise<void> {

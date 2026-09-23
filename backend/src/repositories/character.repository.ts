@@ -70,6 +70,19 @@ class CharacterRepository {
     return result.length > 0 ? result[0] : null;
   }
 
+  // 报告页可疑玩家富化（T4.3）：按名批量取 guid/账号；已删除角色查不到，调用方降级纯文本
+  async findBasicByNames(names: string[]): Promise<{ guid: number; name: string; accountId: number; accountUsername: string | null }[]> {
+    if (names.length === 0) return [];
+    const placeholders = names.map(() => '?').join(',');
+    return charactersDataSource.query(
+      `SELECT c.guid, c.name, c.account as accountId, a.username as accountUsername
+       FROM characters c
+       LEFT JOIN acore_auth.account a ON c.account = a.id
+       WHERE c.name IN (${placeholders})`,
+      names,
+    );
+  }
+
   async getCharacterBanRecords(guid: number): Promise<any[]> {
     return charactersDataSource.query(
       `SELECT

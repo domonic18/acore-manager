@@ -46,17 +46,30 @@ router.get(
   '/exemptions',
   authMiddleware,
   requireGmLevel(2),
-  [query('guid').optional().isInt({ min: 1 }).toInt()],
+  [query('guid').optional().isInt({ min: 1 }).toInt(), query('guids').optional().isString()],
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request parameters / 请求参数不合法', 400);
       return;
     }
+    // guids=1,2,3（T4.3 报告页批量查询：哪些角色已标误报）
+    const guidsParam = req.query.guids as string | undefined;
+    if (guidsParam?.trim()) {
+      const guids = [...new Set(guidsParam.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isInteger(n) && n > 0))];
+      const items = await anticheatExemptionService.listByGuids(guids);
+      res.jsonSuccess(items, items.length);
+      return;
+    }
     const items = await anticheatExemptionService.list(req.query.guid as number | undefined);
     res.jsonSuccess(items, items.length);
   }),
 );
+
+// 违规类型字典（T4.3）：供前端标记误报表单下拉
+router.get('/exemptions/types', authMiddleware, requireGmLevel(2), (_req: AuthRequest, res: Response) => {
+  res.jsonSuccess(VIOLATION_TYPES, VIOLATION_TYPES.length);
+});
 
 router.post(
   '/exemptions',
@@ -148,6 +161,27 @@ router.get(
       return;
     }
     res.jsonSuccess(report);
+  }),
+);
+
+// 报告 Markdown 原文（T4.2）：text/plain 直出，供一键复制与论坛粘贴；404 语义与详情一致
+router.get(
+  '/reports/:realm/:date/markdown',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('realm').isString().trim().notEmpty(), param('date').matches(/^\d{4}-\d{2}-\d{2}$/)],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    const report = await reportService.getByRealmDate((req.params.realm as string).trim(), req.params.date);
+    if (!report) {
+      res.jsonError('报告不存在 / Report not found', 404);
+      return;
+    }
+    res.type('text/plain; charset=utf-8').send(report.contentMarkdown);
   }),
 );
 

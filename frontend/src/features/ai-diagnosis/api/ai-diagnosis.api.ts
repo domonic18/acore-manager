@@ -1,4 +1,4 @@
-import { apiClient } from '@/shared/api/client';
+import { apiClient, buildUrl } from '@/shared/api/client';
 
 // AI 诊断报告（T4.1）：列表摘要 / 详情全量 / 近 7 天日志上传状态。
 // 字段与后端 AiReport 实体及 InspectionReportJson 对齐（camelCase 由 TypeORM 实体保证）。
@@ -24,6 +24,10 @@ export interface SuspiciousPlayer {
   reasons?: string[];
   evidence?: string[];
   falsePositiveSignals?: string[];
+  // T4.3 响应层富化：后端按角色名回查，已删除角色缺失时前端降级纯文本
+  characterGuid?: number;
+  accountId?: number;
+  accountUsername?: string;
 }
 
 export interface ReportServerHealth {
@@ -48,6 +52,23 @@ export interface UploadStatusDay {
   missingTypes: string[];
 }
 
+export interface ExemptionItem {
+  id: number;
+  characterGuid: number;
+  violationType: string;
+  mapId: number | null;
+  reason: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ExemptionInput {
+  characterGuid: number;
+  violationType: string;
+  mapId?: number | null;
+  reason: string;
+}
+
 export const aiDiagnosisApi = {
   reports: (realm?: string) =>
     apiClient.get<AiReportSummary[]>(`/api/ai/diagnosis/reports${realm ? `?realm=${encodeURIComponent(realm)}` : ''}`),
@@ -57,4 +78,15 @@ export const aiDiagnosisApi = {
     apiClient.get<UploadStatusDay[]>(`/api/ai/diagnosis/upload-status?realm=${encodeURIComponent(realm)}&days=${days}`),
   removeReport: (realm: string, date: string) =>
     apiClient.del<{ success: boolean }>(`/api/ai/diagnosis/reports/${encodeURIComponent(realm)}/${date}`),
+  // text/plain 响应不走 apiClient 的 JSON 解析，直接 fetch 取原文
+  fetchReportMarkdown: async (realm: string, date: string): Promise<string> => {
+    const token = localStorage.getItem('acm_token');
+    const url = new URL(buildUrl(`/api/ai/diagnosis/reports/${encodeURIComponent(realm)}/${date}/markdown`), window.location.origin);
+    const res = await fetch(url.toString(), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    return res.text();
+  },
+  exemptionsByGuids: (guids: number[]) => apiClient.get<ExemptionItem[]>(`/api/ai/diagnosis/exemptions?guids=${guids.join(',')}`),
+  createExemption: (input: ExemptionInput) => apiClient.post<ExemptionItem>('/api/ai/diagnosis/exemptions', input),
+  violationTypes: () => apiClient.get<string[]>('/api/ai/diagnosis/exemptions/types'),
 };

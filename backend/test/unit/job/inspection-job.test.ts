@@ -43,6 +43,14 @@ describe('inspection-job: parseJobArgs', () => {
 });
 
 describe('inspection-job: runJob exit codes', () => {
+  // runJob 内部用真实时钟取"昨日"，用假时钟固定，避免用例跨日失效
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(CST_MIDNIGHT);
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('returns 0 when the inspection succeeds', async () => {
     (inspectionService.run as jest.Mock).mockResolvedValueOnce({ ok: true });
     await expect(runJob(['--realm=realm3'])).resolves.toBe(0);

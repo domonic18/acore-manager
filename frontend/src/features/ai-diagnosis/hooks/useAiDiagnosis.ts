@@ -23,6 +23,18 @@ export function useUploadStatus(realm: string, days = 7) {
   });
 }
 
+export function useUpdateReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ realm, date, patch }: { realm: string; date: string; patch: { gmRemark?: string; contentMarkdown?: string } }) =>
+      aiDiagnosisApi.updateReport(realm, date, patch),
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'report', vars.realm, vars.date] });
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'reports'] });
+    },
+  });
+}
+
 export function useDeleteReport() {
   const queryClient = useQueryClient();
   return useMutation({

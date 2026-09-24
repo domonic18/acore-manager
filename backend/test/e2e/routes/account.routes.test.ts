@@ -43,6 +43,45 @@ describe('Account Routes', () => {
         data: mockData,
       });
     });
+
+    it('passes time range filters to service', async () => {
+      (accountService.listAccounts as jest.Mock).mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 20,
+      });
+
+      const res = await request(app)
+        .get('/api/accounts')
+        .query({ joinedFrom: '2026-01-01', joinedTo: '2026-06-30', loginFrom: '2026-08-01' });
+
+      expect(res.status).toBe(200);
+      expect(accountService.listAccounts).toHaveBeenCalledWith(
+        expect.objectContaining({
+          joinedFrom: '2026-01-01',
+          joinedTo: '2026-06-30',
+          loginFrom: '2026-08-01',
+          loginTo: undefined,
+        }),
+      );
+    });
+
+    it('returns 400 for invalid date format', async () => {
+      const res = await request(app).get('/api/accounts').query({ joinedFrom: '2026/9/1' });
+
+      expect(res.status).toBe(400);
+      expect(accountService.listAccounts).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when date range is reversed', async () => {
+      const res = await request(app)
+        .get('/api/accounts')
+        .query({ joinedFrom: '2026-09-24', joinedTo: '2026-09-01' });
+
+      expect(res.status).toBe(400);
+      expect(accountService.listAccounts).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET /api/accounts/:id', () => {

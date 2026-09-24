@@ -146,4 +146,55 @@ router.get(
   }),
 );
 
+// 记录更新（T4.7，gmlevel=3）：处置备注 / Markdown 润色，白名单字段 + 审计
+router.put(
+  '/targeted/:id',
+  authMiddleware,
+  requireGmLevel(3),
+  [
+    param('id').isInt({ min: 1 }).toInt(),
+    body('gmRemark').optional().isString().trim().isLength({ max: 1000 }),
+    body('conclusionMarkdown').optional().isString().isLength({ min: 1, max: 200000 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const item = await targetedAnalysisService.update(
+        parseInt(req.params.id, 10),
+        { gmRemark: req.body.gmRemark, conclusionMarkdown: req.body.conclusionMarkdown },
+        req.user?.id || 0,
+        req.user?.username || '',
+      );
+      res.jsonSuccess(item);
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+// 记录删除（T4.7，gmlevel=3）：硬删除 + 审计
+router.delete(
+  '/targeted/:id',
+  authMiddleware,
+  requireGmLevel(3),
+  [param('id').isInt({ min: 1 }).toInt()],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid analysis ID', 400);
+      return;
+    }
+    try {
+      await targetedAnalysisService.remove(parseInt(req.params.id, 10), req.user?.id || 0, req.user?.username || '');
+      res.jsonSuccess({ success: true });
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
 export default router;

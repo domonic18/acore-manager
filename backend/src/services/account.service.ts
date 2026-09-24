@@ -11,6 +11,7 @@ export interface AccountListItem {
   online: number;
   lastLogin: Date | null;
   lastIp: string;
+  joinDate: Date;
   locked: number;
   characterCount: number;
 }
@@ -76,21 +77,36 @@ export interface GmAccountItem {
 }
 
 export class AccountService {
-  async listAccounts(
-    page: number = 1,
-    pageSize: number = 20,
-    search?: string,
-    sortBy?: string,
-    sortOrder?: string,
-  ): Promise<AccountListResult> {
-    const cacheKey = `accounts:list:${page}:${pageSize}:${search || ''}:${sortBy || ''}:${sortOrder || ''}`;
+  async listAccounts(options: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    joinedFrom?: string;
+    joinedTo?: string;
+    loginFrom?: string;
+    loginTo?: string;
+  }): Promise<AccountListResult> {
+    const { page, pageSize, search, sortBy, sortOrder, joinedFrom, joinedTo, loginFrom, loginTo } = options;
+    const cacheKey = `accounts:list:${page}:${pageSize}:${search || ''}:${sortBy || ''}:${sortOrder || ''}:${joinedFrom || ''}:${joinedTo || ''}:${loginFrom || ''}:${loginTo || ''}`;
     const cached = await cacheService.get<AccountListResult>(cacheKey);
     if (cached) {
       return cached;
     }
 
     const offset = (page - 1) * pageSize;
-    const { items, total } = await accountRepository.listAccounts(offset, pageSize, search, sortBy, sortOrder);
+    const { items, total } = await accountRepository.listAccounts({
+      offset,
+      pageSize,
+      search,
+      sortBy,
+      sortOrder,
+      joinedFrom,
+      joinedTo,
+      loginFrom,
+      loginTo,
+    });
 
     const result: AccountListResult = {
       items: items.map((item: any) => ({
@@ -101,6 +117,7 @@ export class AccountService {
         online: item.online,
         lastLogin: item.lastLogin,
         lastIp: item.lastIp,
+        joinDate: item.joinDate,
         locked: item.locked,
         characterCount: parseInt(item.characterCount || '0', 10),
       })),

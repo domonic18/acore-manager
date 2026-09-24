@@ -6,6 +6,7 @@ export interface AccountListItem {
   online: number;
   lastLogin: Date | null;
   lastIp: string;
+  joinDate: Date;
   locked: number;
 }
 
@@ -18,7 +19,6 @@ export interface BanRecord {
 }
 
 export interface AccountDetail extends AccountListItem {
-  joinDate: Date;
   failedLogins: number;
   muteTime: number;
   muteReason: string;

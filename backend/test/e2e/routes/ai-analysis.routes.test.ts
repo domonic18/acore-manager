@@ -11,6 +11,8 @@ jest.mock('@/services/ai/targeted-analysis.service', () => ({
     stream: jest.fn(),
     list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     getById: jest.fn(),
+    update: jest.fn().mockResolvedValue({ id: 77, gmRemark: 'ok' }),
+    remove: jest.fn().mockResolvedValue(undefined),
   },
 }));
 jest.mock('@/config/env', () => ({
@@ -139,5 +141,54 @@ describe('AI Analysis Routes: GET /targeted (history)', () => {
     (targetedAnalysisService.getById as jest.Mock).mockRejectedValueOnce(new ServiceError('定向分析记录不存在', 404));
     const missing = await request(app).get('/api/ai/analysis/targeted/999');
     expect(missing.status).toBe(404);
+  });
+});
+
+describe('AI Analysis Routes: PUT/DELETE /targeted/:id (T4.7)', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    app = express();
+    app.use(express.json());
+    app.use(responseFormatter);
+    app.use('/api/ai/analysis', aiAnalysisRoutes);
+  });
+
+  it('updates remark/markdown and returns the row', async () => {
+    const res = await request(app).put('/api/ai/analysis/targeted/77').send({ gmRemark: '复核通过', conclusionMarkdown: '# polished' });
+    expect(res.status).toBe(200);
+    expect(targetedAnalysisService.update).toHaveBeenCalledWith(
+      77,
+      { gmRemark: '复核通过', conclusionMarkdown: '# polished' },
+      0,
+      '',
+    );
+  });
+
+  it('rejects a bad id and an over-long remark with 400', async () => {
+    const badId = await request(app).put('/api/ai/analysis/targeted/abc').send({ gmRemark: 'x' });
+    expect(badId.status).toBe(400);
+
+    const long = await request(app).put('/api/ai/analysis/targeted/77').send({ gmRemark: 'a'.repeat(1001) });
+    expect(long.status).toBe(400);
+    expect(targetedAnalysisService.update).not.toHaveBeenCalled();
+  });
+
+  it('maps update/remove ServiceError to its status', async () => {
+    (targetedAnalysisService.update as jest.Mock).mockRejectedValueOnce(new ServiceError('定向分析记录不存在', 404));
+    const upd = await request(app).put('/api/ai/analysis/targeted/999').send({ gmRemark: 'x' });
+    expect(upd.status).toBe(404);
+
+    (targetedAnalysisService.remove as jest.Mock).mockRejectedValueOnce(new ServiceError('定向分析记录不存在', 404));
+    const del = await request(app).delete('/api/ai/analysis/targeted/999');
+    expect(del.status).toBe(404);
+  });
+
+  it('deletes a record with success payload', async () => {
+    const res = await request(app).delete('/api/ai/analysis/targeted/77');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ success: true });
+    expect(targetedAnalysisService.remove).toHaveBeenCalledWith(77, 0, '');
   });
 });

@@ -18,6 +18,7 @@ const repo = {
   find: jest.fn(),
   findOne: jest.fn(),
   remove: jest.fn(),
+  save: jest.fn(),
 };
 
 beforeEach(() => {
@@ -43,6 +44,43 @@ describe('report-query: remove', () => {
     await expect(reportService.remove('realm3', '2001-01-01', 7, 'gm1')).rejects.toMatchObject({ status: 404 });
     expect(repo.remove).not.toHaveBeenCalled();
     expect(auditLogService.record).not.toHaveBeenCalled();
+  });
+});
+
+describe('report-query: update (T4.7)', () => {
+  it('updates remark only and audits the changed fields', async () => {
+    repo.findOne.mockResolvedValue({ id: 8, realm: 'realm3', reportDate: '2026-08-23', gmRemark: null, contentMarkdown: '# md' });
+    const row = await reportService.update('realm3', '2026-08-23', { gmRemark: '  已复核  ' }, 7, 'gm1');
+
+    expect(row.gmRemark).toBe('已复核');
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 8, gmRemark: '已复核' }));
+    expect(auditLogService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'ai.report.update', target: 'realm3:2026-08-23', details: 'fields=gmRemark markdownLen=4' }),
+    );
+  });
+
+  it('updates markdown and trims an empty remark to null', async () => {
+    repo.findOne.mockResolvedValue({ id: 8, realm: 'realm3', reportDate: '2026-08-23', gmRemark: 'old', contentMarkdown: '# old' });
+    const row = await reportService.update('realm3', '2026-08-23', { contentMarkdown: '# polished', gmRemark: '   ' }, 7, 'gm1');
+
+    expect(row.contentMarkdown).toBe('# polished');
+    expect(row.gmRemark).toBeNull();
+    expect(auditLogService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'ai.report.update', details: 'fields=gmRemark,contentMarkdown markdownLen=10' }),
+    );
+  });
+
+  it('rejects an empty patch with 400 and does not save or audit', async () => {
+    repo.findOne.mockResolvedValue({ id: 8, realm: 'realm3', reportDate: '2026-08-23' });
+    await expect(reportService.update('realm3', '2026-08-23', {}, 7, 'gm1')).rejects.toMatchObject({ status: 400 });
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(auditLogService.record).not.toHaveBeenCalled();
+  });
+
+  it('throws 404 when the report does not exist', async () => {
+    repo.findOne.mockResolvedValue(null);
+    await expect(reportService.update('realm3', '2001-01-01', { gmRemark: 'x' }, 7, 'gm1')).rejects.toMatchObject({ status: 404 });
+    expect(repo.save).not.toHaveBeenCalled();
   });
 });
 

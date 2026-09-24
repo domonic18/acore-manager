@@ -3,17 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog } from '@/shared/components/Dialog';
 import { toast } from '@/shared/utils/toast.util';
 import { usePermission } from '@/shared/hooks/usePermission';
-import { useDeleteReport } from '../hooks/useAiDiagnosis';
+import { useDeleteReport, useUpdateReport } from '../hooks/useAiDiagnosis';
+import { RemarkEditDialog } from './RemarkEditDialog';
 
-// 报告管理操作（T4.7 前置切片）：删除需 gmlevel≥3 + 输入报告日期二次确认。
-// 后续备注编辑 / Markdown 润色归入本组件。
+// 报告管理操作（T4.7）：处置备注编辑 + 删除（gmlevel≥3，删除需输入报告日期二次确认）。
+// Markdown 润色在全文 Tab 内。
 
-export function ReportManageActions({ realm, date }: { realm: string; date: string }) {
+export function ReportManageActions({ realm, date, remark }: { realm: string; date: string; remark: string | null }) {
   const navigate = useNavigate();
   const { hasGmLevel } = usePermission();
   const deleteReport = useDeleteReport();
+  const updateReport = useUpdateReport();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [remarkOpen, setRemarkOpen] = useState(false);
 
   if (!hasGmLevel(3)) return null;
 
@@ -37,6 +40,12 @@ export function ReportManageActions({ realm, date }: { realm: string; date: stri
   return (
     <>
       <button
+        onClick={() => setRemarkOpen(true)}
+        className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent"
+      >
+        编辑备注
+      </button>
+      <button
         onClick={() => {
           setConfirmText('');
           setConfirmOpen(true);
@@ -45,6 +54,26 @@ export function ReportManageActions({ realm, date }: { realm: string; date: stri
       >
         删除报告
       </button>
+
+      <RemarkEditDialog
+        open={remarkOpen}
+        title="编辑处置备注"
+        initial={remark}
+        pending={updateReport.isPending}
+        onClose={() => setRemarkOpen(false)}
+        onSubmit={(text) =>
+          updateReport.mutate(
+            { realm, date, patch: { gmRemark: text } },
+            {
+              onSuccess: () => {
+                toast.success('备注已保存');
+                setRemarkOpen(false);
+              },
+              onError: (err: Error) => toast.error(err.message || '保存失败'),
+            },
+          )
+        }
+      />
 
       <Dialog
         open={confirmOpen}

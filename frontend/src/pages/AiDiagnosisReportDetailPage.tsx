@@ -27,7 +27,7 @@ export default function AiDiagnosisReportDetailPage() {
         <Link to="/ai-diagnosis" className="text-sm text-primary hover:underline">
           ← 返回报告列表
         </Link>
-        <ReportManageActions realm={report.realm} date={report.reportDate} />
+        <ReportManageActions realm={report.realm} date={report.reportDate} remark={report.gmRemark} />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

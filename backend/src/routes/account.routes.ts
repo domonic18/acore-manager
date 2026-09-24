@@ -15,8 +15,12 @@ router.get(
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('search').optional().trim(),
-    query('sortBy').optional().isIn(['lastLogin', 'characterCount']).trim(),
+    query('sortBy').optional().isIn(['lastLogin', 'joinDate', 'characterCount']).trim(),
     query('sortOrder').optional().isIn(['ASC', 'DESC']).trim(),
+    query('joinedFrom').optional({ values: 'falsy' }).isDate({ format: 'YYYY-MM-DD', strictMode: true }),
+    query('joinedTo').optional({ values: 'falsy' }).isDate({ format: 'YYYY-MM-DD', strictMode: true }),
+    query('loginFrom').optional({ values: 'falsy' }).isDate({ format: 'YYYY-MM-DD', strictMode: true }),
+    query('loginTo').optional({ values: 'falsy' }).isDate({ format: 'YYYY-MM-DD', strictMode: true }),
   ],
   asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -30,8 +34,27 @@ router.get(
     const search = req.query.search as string | undefined;
     const sortBy = req.query.sortBy as string | undefined;
     const sortOrder = req.query.sortOrder as string | undefined;
+    const joinedFrom = req.query.joinedFrom as string | undefined;
+    const joinedTo = req.query.joinedTo as string | undefined;
+    const loginFrom = req.query.loginFrom as string | undefined;
+    const loginTo = req.query.loginTo as string | undefined;
 
-    const result = await accountService.listAccounts(page, pageSize, search, sortBy, sortOrder);
+    if ((joinedFrom && joinedTo && joinedFrom > joinedTo) || (loginFrom && loginTo && loginFrom > loginTo)) {
+      res.jsonError('Invalid date range', 400);
+      return;
+    }
+
+    const result = await accountService.listAccounts({
+      page,
+      pageSize,
+      search,
+      sortBy,
+      sortOrder,
+      joinedFrom,
+      joinedTo,
+      loginFrom,
+      loginTo,
+    });
     res.jsonSuccess(result, result.items.length);
   }),
 );

@@ -155,4 +155,8 @@ export const aiAnalysisApi = {
       `/api/ai/analysis/targeted?page=${page}${subjectName ? `&subjectName=${encodeURIComponent(subjectName)}` : ''}`,
     ),
   detail: (id: number) => apiClient.get<TargetedAnalysisDetail>(`/api/ai/analysis/targeted/${id}`),
+  // 处置备注 / Markdown 润色与删除（T4.7，gm3）
+  update: (id: number, patch: { gmRemark?: string; conclusionMarkdown?: string }) =>
+    apiClient.put<TargetedAnalysisDetail>(`/api/ai/analysis/targeted/${id}`, patch),
+  remove: (id: number) => apiClient.del<{ success: boolean }>(`/api/ai/analysis/targeted/${id}`),
 };

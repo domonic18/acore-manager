@@ -89,6 +89,38 @@ export class ReportService {
     });
   }
 
+  // 处置备注 / Markdown 润色（T4.7，gmlevel=3）：仅白名单字段，审计记录改动字段清单
+  async update(
+    realm: string,
+    date: string,
+    patch: { gmRemark?: string; contentMarkdown?: string },
+    operatorId: number,
+    operatorName: string,
+  ): Promise<AiReport> {
+    const repo = acmDataSource.getRepository(AiReport);
+    const existing = await repo.findOne({ where: { realm, reportDate: date } });
+    if (!existing) throw new ServiceError('报告不存在', 404);
+    const changes: string[] = [];
+    if (patch.gmRemark !== undefined) {
+      existing.gmRemark = patch.gmRemark.trim() || null;
+      changes.push('gmRemark');
+    }
+    if (patch.contentMarkdown !== undefined) {
+      existing.contentMarkdown = patch.contentMarkdown;
+      changes.push('contentMarkdown');
+    }
+    if (changes.length === 0) throw new ServiceError('无可更新字段', 400);
+    await repo.save(existing);
+    await auditLogService.record({
+      operatorId,
+      operatorName,
+      operation: 'ai.report.update',
+      target: `${realm}:${date}`,
+      details: `fields=${changes.join(',')} markdownLen=${existing.contentMarkdown?.length ?? 0}`,
+    });
+    return existing;
+  }
+
   // manifest 读取失败视为未上传（与巡检断传检查同语义，不让 COS 故障打断查询）
   async uploadStatus(realm: string, days = 7): Promise<UploadStatusDay[]> {
     const anchor = yesterdayCST();

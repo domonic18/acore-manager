@@ -37,6 +37,9 @@ Thumbs.db
 # Testing
 coverage/
 
+# Claude Code 本地运行时状态
+.claude/scheduled_tasks.lock
+
 # Misc
 .cache/
 temp/

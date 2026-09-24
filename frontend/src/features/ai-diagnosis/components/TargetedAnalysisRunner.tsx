@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { AlertCircle, ChevronDown, Loader2, Wrench, X } from 'lucide-react';
 import { CopyButton } from '@/shared/components/CopyButton';
 import { Markdown } from '@/shared/components/Markdown';
+import { TimeRangeFilter } from '@/shared/components/TimeRangeFilter';
 import { streamTargetedAnalysis, type AnalysisConclusion, type TargetedAnalysisInput, type TargetedSubjectType, type ToolResultEvent } from '../api/ai-analysis.api';
 
 // 定向分析发起（T4.6，需求 3.8 申诉研判）：单一对象 + 时间范围，SSE 过程展示，
@@ -270,25 +271,22 @@ export function TargetedAnalysisRunner({ onFinished }: { onFinished?: () => void
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">开始日期</label>
-              <input
-                type="date"
-                value={timeFrom}
-                onChange={(e) => setTimeFrom(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">结束日期</label>
-              <input
-                type="date"
-                value={timeTo}
-                onChange={(e) => setTimeTo(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">时间范围（跨度 ≤31 天）</label>
+            <TimeRangeFilter
+              label="分析区间"
+              value={{ from: timeFrom, to: timeTo }}
+              onChange={(v) => {
+                if (v) {
+                  setTimeFrom(v.from);
+                  setTimeTo(v.to);
+                } else {
+                  // 表单两个日期必填，清除时回落到默认近 7 天
+                  setTimeFrom(localDate(new Date(Date.now() - 6 * 86400000)));
+                  setTimeTo(localDate(new Date()));
+                }
+              }}
+            />
           </div>
         </div>
         <details className="mt-3">

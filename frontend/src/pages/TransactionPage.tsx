@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTransactionList } from '@/features/transaction/hooks/useTransaction';
 import { formatGold } from '@/shared/utils/gold.util';
 import { Dialog } from '@/shared/components/Dialog';
+import { TimeRangeFilter, type TimeRange } from '@/shared/components/TimeRangeFilter';
 import { HelpCircle } from 'lucide-react';
 
 const typeDescriptions: Record<number, string> = {
@@ -32,8 +33,7 @@ export default function TransactionPage() {
   const [page, setPage] = useState(1);
   const [characterName, setCharacterName] = useState('');
   const [type, setType] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [dateRange, setDateRange] = useState<TimeRange | null>(null);
   const [showTypeHelp, setShowTypeHelp] = useState(false);
 
   const { data, isLoading } = useTransactionList({
@@ -41,9 +41,16 @@ export default function TransactionPage() {
     pageSize: 20,
     characterName: characterName || undefined,
     type: type ? parseInt(type) : undefined,
-    startDate: startDate || undefined,
-    endDate: endDate || undefined,
+    startDate: dateRange?.from,
+    endDate: dateRange?.to,
   });
+
+  const handleReset = () => {
+    setCharacterName('');
+    setType('');
+    setDateRange(null);
+    setPage(1);
+  };
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
 
@@ -72,18 +79,19 @@ export default function TransactionPage() {
           <option value="5">邮寄</option>
           <option value="6">交易</option>
         </select>
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        <TimeRangeFilter
+          label="时间范围"
+          value={dateRange}
+          onChange={(v) => {
+            setDateRange(v);
+            setPage(1);
+          }}
         />
-        <input
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        {(characterName || type || dateRange) && (
+          <button onClick={handleReset} className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+            重置
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-border overflow-x-auto">

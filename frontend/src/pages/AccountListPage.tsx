@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { useAccountList } from '@/features/account/hooks/useAccount';
+import { TimeRangeFilter, type TimeRange } from '@/shared/components/TimeRangeFilter';
 
 interface SortState {
   sortBy?: string;
@@ -49,6 +50,8 @@ export default function AccountListPage() {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [sort, setSort] = useState<SortState>({});
+  const [joinRange, setJoinRange] = useState<TimeRange | null>(null);
+  const [loginRange, setLoginRange] = useState<TimeRange | null>(null);
 
   const { data, isLoading } = useAccountList({
     page,
@@ -56,12 +59,26 @@ export default function AccountListPage() {
     search,
     sortBy: sort.sortBy,
     sortOrder: sort.sortOrder,
+    joinedFrom: joinRange?.from,
+    joinedTo: joinRange?.to,
+    loginFrom: loginRange?.from,
+    loginTo: loginRange?.to,
   });
 
   const handleSearch = () => {
     setSearch(searchInput);
     setPage(1);
   };
+
+  const handleReset = () => {
+    setSearchInput('');
+    setSearch('');
+    setJoinRange(null);
+    setLoginRange(null);
+    setPage(1);
+  };
+
+  const hasFilters = Boolean(search || joinRange || loginRange);
 
   const handleSort = (field: string) => {
     setSort((prev) => {
@@ -82,22 +99,45 @@ export default function AccountListPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">账号管理</h1>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="搜索账号/IP/邮箱"
-            className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
-          >
-            搜索
+        <p className="text-sm text-muted-foreground">共 {data?.total ?? 0} 个账号</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          placeholder="搜索账号/IP/邮箱"
+          className="px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          onClick={handleSearch}
+          className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
+        >
+          搜索
+        </button>
+        <TimeRangeFilter
+          label="注册时间"
+          value={joinRange}
+          onChange={(v) => {
+            setJoinRange(v);
+            setPage(1);
+          }}
+        />
+        <TimeRangeFilter
+          label="最后登录"
+          value={loginRange}
+          onChange={(v) => {
+            setLoginRange(v);
+            setPage(1);
+          }}
+        />
+        {hasFilters && (
+          <button onClick={handleReset} className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+            重置
           </button>
-        </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-border overflow-x-auto">
@@ -110,6 +150,7 @@ export default function AccountListPage() {
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">GM等级</th>
               <SortHeader label="角色数" field="characterCount" sort={sort} onSort={handleSort} />
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">状态</th>
+              <SortHeader label="注册时间" field="joinDate" sort={sort} onSort={handleSort} />
               <SortHeader label="最后登录" field="lastLogin" sort={sort} onSort={handleSort} />
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">最后IP</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">操作</th>
@@ -118,13 +159,13 @@ export default function AccountListPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
                   加载中...
                 </td>
               </tr>
             ) : data?.items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
                   暂无数据
                 </td>
               </tr>
@@ -164,6 +205,9 @@ export default function AccountListPage() {
                     ) : (
                       <span className="text-muted-foreground">离线</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {account.joinDate ? new Date(account.joinDate).toLocaleDateString('zh-CN') : '-'}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {account.lastLogin

@@ -1,7 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountApi } from '../api/account.api';
 
-export function useAccountList(params: { page?: number; pageSize?: number; search?: string; sortBy?: string; sortOrder?: string }) {
+export function useAccountList(params: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  joinedFrom?: string;
+  joinedTo?: string;
+  loginFrom?: string;
+  loginTo?: string;
+}) {
   return useQuery({
     queryKey: ['accounts', 'list', params],
     queryFn: () => accountApi.list(params),

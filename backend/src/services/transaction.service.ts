@@ -1,5 +1,5 @@
 import { cacheService } from './cache.service';
-import { transactionRepository } from '../repositories/transaction.repository';
+import { transactionRepository } from '@/repositories/transaction.repository';
 
 export interface TransactionRecord {
   senderName: string;

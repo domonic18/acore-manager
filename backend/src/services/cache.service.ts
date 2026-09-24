@@ -1,5 +1,5 @@
-import { redis } from '../config/redis';
-import { env } from '../config/env';
+import { redis } from '@/config/redis';
+import { env } from '@/config/env';
 
 export class CacheService {
   async get<T>(key: string): Promise<T | null> {

@@ -18,11 +18,30 @@ const BanlistPage = lazy(() => import('@/pages/BanlistPage'));
 const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
 const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
 const RbacConfigPage = lazy(() => import('@/pages/RbacConfigPage'));
+const ModelConfigPage = lazy(() => import('@/pages/ModelConfigPage'));
+const AiDiagnosisPage = lazy(() => import('@/pages/AiDiagnosisPage'));
+const AiDiagnosisReportDetailPage = lazy(() => import('@/pages/AiDiagnosisReportDetailPage'));
+const TargetedAnalysisPage = lazy(() => import('@/pages/TargetedAnalysisPage'));
+const TargetedAnalysisDetailPage = lazy(() => import('@/pages/TargetedAnalysisDetailPage'));
+const AiAssistantDock = lazy(() =>
+  import('@/features/ai-assistant/components/AiAssistantDock').then((m) => ({ default: m.AiAssistantDock })),
+);
 
 function withSuspense(Component: React.ComponentType) {
   return (
     <Suspense fallback={<div className="p-8 text-center text-muted-foreground">加载中...</div>}>
       <Component />
+    </Suspense>
+  );
+}
+
+// 全局 AI 助手入口：悬浮按钮 + 右侧抽屉，随 AppLayout 出现在所有已登录页
+function AiAssistantDockGate() {
+  const { hasGmLevel } = usePermission();
+  if (!hasGmLevel(2)) return null;
+  return (
+    <Suspense fallback={null}>
+      <AiAssistantDock />
     </Suspense>
   );
 }
@@ -53,7 +72,12 @@ export const router = createBrowserRouter([
     element: <AuthGuard />,
     children: [
       {
-        element: <AppLayout />,
+        element: (
+          <>
+            <AppLayout />
+            <AiAssistantDockGate />
+          </>
+        ),
         children: [
           { path: '', element: withSuspense(DashboardPage) },
           { path: 'accounts', element: withSuspense(AccountListPage) },
@@ -68,6 +92,10 @@ export const router = createBrowserRouter([
             element: <GmGuard minLevel={2} />,
             children: [
               { path: 'ip-bans', element: withSuspense(IpBanPage) },
+              { path: 'ai-diagnosis', element: withSuspense(AiDiagnosisPage) },
+              { path: 'ai-diagnosis/targeted', element: withSuspense(TargetedAnalysisPage) },
+              { path: 'ai-diagnosis/targeted/:id', element: withSuspense(TargetedAnalysisDetailPage) },
+              { path: 'ai-diagnosis/:realm/:date', element: withSuspense(AiDiagnosisReportDetailPage) },
             ],
           },
           {
@@ -76,6 +104,12 @@ export const router = createBrowserRouter([
               { path: 'gm-accounts', element: withSuspense(GmAccountPage) },
               { path: 'audit-logs', element: withSuspense(AuditLogPage) },
               { path: 'rbac-config', element: withSuspense(RbacConfigPage) },
+            ],
+          },
+          {
+            element: <GmGuard minLevel={3} />,
+            children: [
+              { path: 'model-config', element: withSuspense(ModelConfigPage) },
             ],
           },
         ],

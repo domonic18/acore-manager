@@ -8,6 +8,7 @@ export interface AccountListItem {
   online: number;
   lastLogin: Date | null;
   lastIp: string;
+  joinDate: Date;
   locked: number;
   characterCount: number;
 }
@@ -32,7 +33,6 @@ export interface AccountCharacter {
 }
 
 export interface AccountDetail extends AccountListItem {
-  joinDate: Date;
   failedLogins: number;
   muteTime: number;
   muteReason: string;
@@ -58,8 +58,20 @@ export interface GmAccountItem {
 }
 
 export const accountApi = {
-  list: (params: { page?: number; pageSize?: number; search?: string; sortBy?: string; sortOrder?: string }) =>
-    apiClient.get<AccountListResult>(`/api/accounts?page=${params.page || 1}&pageSize=${params.pageSize || 20}${params.search ? `&search=${encodeURIComponent(params.search)}` : ''}${params.sortBy ? `&sortBy=${params.sortBy}` : ''}${params.sortOrder ? `&sortOrder=${params.sortOrder}` : ''}`),
+  list: (params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    joinedFrom?: string;
+    joinedTo?: string;
+    loginFrom?: string;
+    loginTo?: string;
+  }) =>
+    apiClient.get<AccountListResult>(
+      `/api/accounts?page=${params.page || 1}&pageSize=${params.pageSize || 20}${params.search ? `&search=${encodeURIComponent(params.search)}` : ''}${params.sortBy ? `&sortBy=${params.sortBy}` : ''}${params.sortOrder ? `&sortOrder=${params.sortOrder}` : ''}${params.joinedFrom ? `&joinedFrom=${params.joinedFrom}` : ''}${params.joinedTo ? `&joinedTo=${params.joinedTo}` : ''}${params.loginFrom ? `&loginFrom=${params.loginFrom}` : ''}${params.loginTo ? `&loginTo=${params.loginTo}` : ''}`,
+    ),
 
   detail: (id: number) =>
     apiClient.get<AccountDetail>(`/api/accounts/${id}`),

@@ -1,4 +1,4 @@
-import { charactersDataSource } from '../config/database';
+import { charactersDataSource } from '@/config/database';
 
 class TransactionRepository {
   async listTransactions(

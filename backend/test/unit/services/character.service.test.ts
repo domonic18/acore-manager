@@ -1,13 +1,12 @@
-import { characterService } from '../../../src/services/character.service';
-import { characterRepository } from '../../../src/repositories/character.repository';
-import { cacheService } from '../../../src/services/cache.service';
-import { soapService } from '../../../src/services/soap.service';
-import { logger } from '../../../src/middleware/request-logger';
+import { characterService } from '@/services/character.service';
+import { characterRepository } from '@/repositories/character.repository';
+import { cacheService } from '@/services/cache.service';
+import { soapService } from '@/services/soap.service';
 
-jest.mock('../../../src/repositories/character.repository');
-jest.mock('../../../src/services/cache.service');
-jest.mock('../../../src/services/soap.service');
-jest.mock('../../../src/middleware/request-logger', () => ({
+jest.mock('@/repositories/character.repository');
+jest.mock('@/services/cache.service');
+jest.mock('@/services/soap.service');
+jest.mock('@/middleware/request-logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),
@@ -65,6 +64,34 @@ describe('CharacterService', () => {
       const [, , conditions, params] = (characterRepository.listCharacters as jest.Mock).mock.calls[0];
       expect(conditions).toContain('name LIKE ?');
       expect(params).toContain('%Hero%');
+    });
+
+    it('applies online filter only when requested', async () => {
+      (cacheService.get as jest.Mock).mockResolvedValue(null);
+      (characterRepository.listCharacters as jest.Mock).mockResolvedValue({ items: [], total: 0 });
+
+      await characterService.listCharacters(1, 20, undefined, false, true);
+
+      let conditions = (characterRepository.listCharacters as jest.Mock).mock.calls[0][2];
+      expect(conditions).toContain('c.online = 1');
+
+      await characterService.listCharacters(1, 20, undefined, false, false);
+
+      conditions = (characterRepository.listCharacters as jest.Mock).mock.calls[1][2];
+      expect(conditions).not.toContain('c.online = 1');
+    });
+
+    it('caches online and offline results under distinct keys', async () => {
+      (cacheService.get as jest.Mock).mockResolvedValue(null);
+      (characterRepository.listCharacters as jest.Mock).mockResolvedValue({ items: [], total: 0 });
+
+      await characterService.listCharacters(1, 20, undefined, false, true);
+      await characterService.listCharacters(1, 20, undefined, false, false);
+
+      const keys = (cacheService.get as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(keys[0]).not.toBe(keys[1]);
+      expect(keys[0]).toContain(':1');
+      expect(keys[1]).toContain(':0');
     });
   });
 

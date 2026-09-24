@@ -22,7 +22,8 @@ export function Dialog({ open, onClose, title, children, footer }: DialogProps) 
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) {
+      // 输入法组合态下 Escape 用于取消候选词，不应关闭对话框
+      if (e.key === 'Escape' && open && !e.isComposing) {
         onClose();
       }
     };
@@ -30,14 +31,20 @@ export function Dialog({ open, onClose, title, children, footer }: DialogProps) 
     return () => document.removeEventListener('keydown', handleEscape);
   }, [open, onClose]);
 
+  const overlayMouseDownRef = useRef(false);
+
   if (!open) return null;
 
   return (
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onMouseDown={(e) => {
+        // 记录按下起点，避免内容区拖选到遮罩松开时误关
+        overlayMouseDownRef.current = e.target === overlayRef.current;
+      }}
       onClick={(e) => {
-        if (e.target === overlayRef.current) {
+        if (e.target === overlayRef.current && overlayMouseDownRef.current) {
           onClose();
         }
       }}

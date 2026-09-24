@@ -1,12 +1,11 @@
 import jwt from 'jsonwebtoken';
-import { authService } from '../../../src/services/auth.service';
-import { accountRepository } from '../../../src/repositories/account.repository';
-import { verifySRP6Password } from '../../../src/shared/utils/password.util';
-import { logger } from '../../../src/middleware/request-logger';
+import { authService } from '@/services/auth.service';
+import { accountRepository } from '@/repositories/account.repository';
+import { verifySRP6Password } from '@/shared/utils/password.util';
 
-jest.mock('../../../src/repositories/account.repository');
-jest.mock('../../../src/shared/utils/password.util');
-jest.mock('../../../src/middleware/request-logger', () => ({
+jest.mock('@/repositories/account.repository');
+jest.mock('@/shared/utils/password.util');
+jest.mock('@/middleware/request-logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),

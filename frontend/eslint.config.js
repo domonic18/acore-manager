@@ -6,6 +6,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 
 export default [
+  {
+    ignores: ['dist/', 'node_modules/', 'coverage/'],
+  },
   js.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
@@ -46,8 +49,5 @@ export default [
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },
-  },
-  {
-    ignores: ['dist/', 'node_modules/'],
   },
 ];

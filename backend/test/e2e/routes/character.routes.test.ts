@@ -1,15 +1,15 @@
 import request from 'supertest';
 import express, { Application } from 'express';
-import { responseFormatter } from '../../../src/middleware/response-formatter';
-import characterRoutes from '../../../src/routes/character.routes';
-import { characterService } from '../../../src/services/character.service';
+import { responseFormatter } from '@/middleware/response-formatter';
+import characterRoutes from '@/routes/character.routes';
+import { characterService } from '@/services/character.service';
 
-jest.mock('../../../src/services/character.service');
-jest.mock('../../../src/middleware/auth', () => ({
+jest.mock('@/services/character.service');
+jest.mock('@/middleware/auth', () => ({
   authMiddleware: (_req: any, _res: any, next: any) => next(),
   AuthRequest: class {},
 }));
-jest.mock('../../../src/middleware/gm-guard', () => ({
+jest.mock('@/middleware/gm-guard', () => ({
   requireGmLevel: (_level: number) => (_req: any, _res: any, next: any) => next(),
 }));
 
@@ -42,6 +42,27 @@ describe('Character Routes', () => {
         count: 1,
         data: mockData,
       });
+    });
+  });
+
+  describe('GET /api/characters/suggest', () => {
+    it('returns name suggestions by prefix', async () => {
+      (characterService.suggestNames as jest.Mock).mockResolvedValue(['Unparalleled', 'Unseen']);
+
+      const res = await request(app).get('/api/characters/suggest?prefix=Un');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual(['Unparalleled', 'Unseen']);
+      expect(characterService.suggestNames).toHaveBeenCalledWith('Un', 8);
+    });
+
+    it('rejects a missing or over-50-char prefix with 400', async () => {
+      const missing = await request(app).get('/api/characters/suggest');
+      expect(missing.status).toBe(400);
+
+      const long = await request(app).get(`/api/characters/suggest?prefix=${'a'.repeat(51)}`);
+      expect(long.status).toBe(400);
+      expect(characterService.suggestNames).not.toHaveBeenCalled();
     });
   });
 

@@ -1,11 +1,11 @@
-import { ipBanService } from '../../../src/services/ip-ban.service';
-import { ipBanRepository } from '../../../src/repositories/ip-ban.repository';
-import { soapService } from '../../../src/services/soap.service';
-import { logger } from '../../../src/middleware/request-logger';
+import { ipBanService } from '@/services/ip-ban.service';
+import { ipBanRepository } from '@/repositories/ip-ban.repository';
+import { soapService } from '@/services/soap.service';
+import { logger } from '@/middleware/request-logger';
 
-jest.mock('../../../src/repositories/ip-ban.repository');
-jest.mock('../../../src/services/soap.service');
-jest.mock('../../../src/middleware/request-logger', () => ({
+jest.mock('@/repositories/ip-ban.repository');
+jest.mock('@/services/soap.service');
+jest.mock('@/middleware/request-logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),

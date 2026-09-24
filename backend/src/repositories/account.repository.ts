@@ -1,7 +1,7 @@
-import { authDataSource } from '../config/database';
+import { authDataSource } from '@/config/database';
 import { BaseRepository } from './base.repository';
-import { Account } from '../entities/auth/account.entity';
-import { AccountAccess } from '../entities/auth/account-access.entity';
+import { Account } from '@/entities/auth/account.entity';
+import { AccountAccess } from '@/entities/auth/account-access.entity';
 
 class AccountRepository extends BaseRepository<Account> {
   constructor() {
@@ -19,20 +19,42 @@ class AccountRepository extends BaseRepository<Account> {
     return access?.gmlevel ?? 0;
   }
 
-  async listAccounts(
-    offset: number,
-    pageSize: number,
-    search?: string,
-    sortBy?: string,
-    sortOrder?: string,
-  ): Promise<{ items: any[]; total: number }> {
-    let whereClause = '';
-    let params: any[] = [];
+  async listAccounts(opts: {
+    offset: number;
+    pageSize: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    joinedFrom?: string;
+    joinedTo?: string;
+    loginFrom?: string;
+    loginTo?: string;
+  }): Promise<{ items: any[]; total: number }> {
+    const conds: string[] = [];
+    const params: any[] = [];
 
-    if (search) {
-      whereClause = 'WHERE a.username LIKE ? OR a.email LIKE ? OR a.last_ip LIKE ?';
-      params = [`%${search}%`, `%${search}%`, `%${search}%`];
+    if (opts.search) {
+      conds.push('(a.username LIKE ? OR a.email LIKE ? OR a.last_ip LIKE ?)');
+      params.push(`%${opts.search}%`, `%${opts.search}%`, `%${opts.search}%`);
     }
+    if (opts.joinedFrom) {
+      conds.push('a.joindate >= ?');
+      params.push(opts.joinedFrom);
+    }
+    if (opts.joinedTo) {
+      conds.push('a.joindate < DATE_ADD(?, INTERVAL 1 DAY)');
+      params.push(opts.joinedTo);
+    }
+    if (opts.loginFrom) {
+      conds.push('a.last_login >= ?');
+      params.push(opts.loginFrom);
+    }
+    if (opts.loginTo) {
+      conds.push('a.last_login < DATE_ADD(?, INTERVAL 1 DAY)');
+      params.push(opts.loginTo);
+    }
+
+    const whereClause = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
 
     const countResult = await authDataSource.query(
       `SELECT COUNT(*) as total FROM account a ${whereClause}`,
@@ -42,12 +64,13 @@ class AccountRepository extends BaseRepository<Account> {
 
     const allowedSortFields: Record<string, string> = {
       lastLogin: 'a.last_login',
+      joinDate: 'a.joindate',
       characterCount: 'characterCount',
     };
     const allowedOrders = ['ASC', 'DESC'];
 
-    const orderField = allowedSortFields[sortBy || ''];
-    const orderDir = allowedOrders.includes(sortOrder || '') ? sortOrder : undefined;
+    const orderField = allowedSortFields[opts.sortBy || ''];
+    const orderDir = allowedOrders.includes(opts.sortOrder || '') ? opts.sortOrder : undefined;
     const orderBy = orderField && orderDir ? `ORDER BY ${orderField} ${orderDir}, a.id DESC` : 'ORDER BY a.id DESC';
 
     const items = await authDataSource.query(
@@ -59,6 +82,7 @@ class AccountRepository extends BaseRepository<Account> {
         a.online,
         a.last_login as lastLogin,
         a.last_ip as lastIp,
+        a.joindate as joinDate,
         a.locked,
         COALESCE(ch.char_count, 0) as characterCount
       FROM account a
@@ -72,7 +96,7 @@ class AccountRepository extends BaseRepository<Account> {
       ${whereClause}
       ${orderBy}
       LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
+      [...params, opts.pageSize, opts.offset],
     );
 
     return { items, total };

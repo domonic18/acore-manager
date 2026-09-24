@@ -1,48 +1,43 @@
-import { useState } from 'react';
-import { useBroadcast } from '@/features/gm-tool/hooks/useGmTool';
-import { toast } from '@/shared/utils/toast.util';
+import { useSearchParams } from 'react-router-dom';
+import { Mail, Radio } from 'lucide-react';
+import { BroadcastPanel } from '@/features/gm-tool/components/BroadcastPanel';
+import { GmMailPanel } from '@/features/gm-tool/components/GmMailPanel';
+
+// GM 工具页：Tab 导航切换工具面板，?tab= 深链可直达；新增工具在 TABS 注册即可。
+
+const TABS = [
+  { key: 'broadcast', label: '广播消息', icon: Radio },
+  { key: 'mail', label: '邮件', icon: Mail },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
 
 export default function GmToolPage() {
-  const [broadcastMessage, setBroadcastMessage] = useState('');
-  const broadcastMutation = useBroadcast();
-
-  const handleBroadcast = async () => {
-    if (!broadcastMessage.trim()) return;
-    await broadcastMutation.mutateAsync(broadcastMessage);
-    setBroadcastMessage('');
-    toast.success('广播发送成功');
-  };
+  const [searchParams, setSearchParams] = useSearchParams();
+  const raw = searchParams.get('tab');
+  const active: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'broadcast';
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">GM 工具</h1>
 
-      <div className="max-w-xl">
-        <ToolCard title="广播消息">
-          <textarea
-            value={broadcastMessage}
-            onChange={(e) => setBroadcastMessage(e.target.value)}
-            placeholder="输入广播内容"
-            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring min-h-[80px] resize-none"
-          />
+      <div className="flex gap-1 border-b border-border">
+        {TABS.map(({ key, label, icon: Icon }) => (
           <button
-            onClick={handleBroadcast}
-            disabled={broadcastMutation.isPending}
-            className="w-full py-2 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+            key={key}
+            onClick={() => setSearchParams(key === 'broadcast' ? {} : { tab: key }, { replace: true })}
+            className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              active === key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
           >
-            {broadcastMutation.isPending ? '发送中...' : '发送广播'}
+            <Icon className="h-4 w-4" />
+            {label}
           </button>
-        </ToolCard>
+        ))}
       </div>
-    </div>
-  );
-}
 
-function ToolCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-6 space-y-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      {children}
+      {active === 'broadcast' && <BroadcastPanel />}
+      {active === 'mail' && <GmMailPanel />}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { cacheService } from './cache.service';
-import { banlistRepository } from '../repositories/banlist.repository';
+import { banlistRepository } from '@/repositories/banlist.repository';
 
 export interface BanlistItem {
   accountId: number;

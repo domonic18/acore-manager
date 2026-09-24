@@ -1,9 +1,9 @@
-import { banlistService } from '../../../src/services/banlist.service';
-import { banlistRepository } from '../../../src/repositories/banlist.repository';
-import { cacheService } from '../../../src/services/cache.service';
+import { banlistService } from '@/services/banlist.service';
+import { banlistRepository } from '@/repositories/banlist.repository';
+import { cacheService } from '@/services/cache.service';
 
-jest.mock('../../../src/repositories/banlist.repository');
-jest.mock('../../../src/services/cache.service');
+jest.mock('@/repositories/banlist.repository');
+jest.mock('@/services/cache.service');
 
 describe('BanlistService', () => {
   beforeEach(() => {

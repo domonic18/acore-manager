@@ -1,6 +1,6 @@
-import { redis } from '../config/redis';
-import { env } from '../config/env';
-import { logger } from '../middleware/request-logger';
+import { redis } from '@/config/redis';
+import { env } from '@/config/env';
+import { logger } from '@/middleware/request-logger';
 
 export interface LoginDefenseStatus {
   allowed: boolean;

@@ -139,7 +139,7 @@ export default function PopulationStats({
         <div className="rounded-lg border border-border bg-card p-6">
           <h3 className="text-sm font-medium mb-4">等级分布</h3>
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 288 }}>
               <BarChart data={levelData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis
@@ -161,7 +161,7 @@ export default function PopulationStats({
         <div className="rounded-lg border border-border bg-card p-6">
           <h3 className="text-sm font-medium mb-4">种族分布</h3>
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 288 }}>
               <BarChart data={raceData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis
@@ -187,7 +187,7 @@ export default function PopulationStats({
         <div className="rounded-lg border border-border bg-card p-6">
           <h3 className="text-sm font-medium mb-4">职业分布</h3>
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 288 }}>
               <BarChart data={classData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis

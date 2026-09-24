@@ -1,13 +1,12 @@
-import { accountService } from '../../../src/services/account.service';
-import { accountRepository } from '../../../src/repositories/account.repository';
-import { cacheService } from '../../../src/services/cache.service';
-import { soapService } from '../../../src/services/soap.service';
-import { logger } from '../../../src/middleware/request-logger';
+import { accountService } from '@/services/account.service';
+import { accountRepository } from '@/repositories/account.repository';
+import { cacheService } from '@/services/cache.service';
+import { soapService } from '@/services/soap.service';
 
-jest.mock('../../../src/repositories/account.repository');
-jest.mock('../../../src/services/cache.service');
-jest.mock('../../../src/services/soap.service');
-jest.mock('../../../src/middleware/request-logger', () => ({
+jest.mock('@/repositories/account.repository');
+jest.mock('@/services/cache.service');
+jest.mock('@/services/soap.service');
+jest.mock('@/middleware/request-logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),
@@ -30,7 +29,7 @@ describe('AccountService', () => {
       };
       (cacheService.get as jest.Mock).mockResolvedValue(cached);
 
-      const result = await accountService.listAccounts(1, 20);
+      const result = await accountService.listAccounts({ page: 1, pageSize: 20 });
 
       expect(result).toEqual(cached);
       expect(accountRepository.listAccounts).not.toHaveBeenCalled();
@@ -48,6 +47,7 @@ describe('AccountService', () => {
             online: 1,
             lastLogin: new Date('2024-01-01'),
             lastIp: '127.0.0.1',
+            joinDate: new Date('2023-01-01'),
             locked: 0,
             characterCount: '2',
           },
@@ -56,16 +56,26 @@ describe('AccountService', () => {
       });
       (cacheService.set as jest.Mock).mockResolvedValue(undefined);
 
-      const result = await accountService.listAccounts(1, 20);
+      const result = await accountService.listAccounts({ page: 1, pageSize: 20 });
 
       expect(result.items[0]).toMatchObject({
         id: 1,
         username: 'admin',
         characterCount: 2,
       });
-      expect(accountRepository.listAccounts).toHaveBeenCalledWith(0, 20, undefined, undefined, undefined);
+      expect(accountRepository.listAccounts).toHaveBeenCalledWith({
+        offset: 0,
+        pageSize: 20,
+        search: undefined,
+        sortBy: undefined,
+        sortOrder: undefined,
+        joinedFrom: undefined,
+        joinedTo: undefined,
+        loginFrom: undefined,
+        loginTo: undefined,
+      });
       expect(cacheService.set).toHaveBeenCalledWith(
-        'accounts:list:1:20:::',
+        'accounts:list:1:20:::::::',
         expect.any(Object),
         60,
       );
@@ -75,9 +85,42 @@ describe('AccountService', () => {
       (cacheService.get as jest.Mock).mockResolvedValue(null);
       (accountRepository.listAccounts as jest.Mock).mockResolvedValue({ items: [], total: 0 });
 
-      await accountService.listAccounts(2, 10, 'test');
+      await accountService.listAccounts({ page: 2, pageSize: 10, search: 'test' });
 
-      expect(accountRepository.listAccounts).toHaveBeenCalledWith(10, 10, 'test', undefined, undefined);
+      expect(accountRepository.listAccounts).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 10, pageSize: 10, search: 'test' }),
+      );
+    });
+
+    it('passes time range filters to repository and includes them in cache key', async () => {
+      (cacheService.get as jest.Mock).mockResolvedValue(null);
+      (accountRepository.listAccounts as jest.Mock).mockResolvedValue({ items: [], total: 0 });
+
+      await accountService.listAccounts({
+        page: 1,
+        pageSize: 20,
+        joinedFrom: '2026-01-01',
+        joinedTo: '2026-06-30',
+        loginFrom: '2026-08-01',
+        loginTo: '2026-09-01',
+      });
+
+      expect(accountRepository.listAccounts).toHaveBeenCalledWith({
+        offset: 0,
+        pageSize: 20,
+        search: undefined,
+        sortBy: undefined,
+        sortOrder: undefined,
+        joinedFrom: '2026-01-01',
+        joinedTo: '2026-06-30',
+        loginFrom: '2026-08-01',
+        loginTo: '2026-09-01',
+      });
+      expect(cacheService.set).toHaveBeenCalledWith(
+        'accounts:list:1:20::::2026-01-01:2026-06-30:2026-08-01:2026-09-01',
+        expect.any(Object),
+        60,
+      );
     });
   });
 

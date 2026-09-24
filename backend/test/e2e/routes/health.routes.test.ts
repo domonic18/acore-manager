@@ -1,7 +1,7 @@
 import request from 'supertest';
 import express, { Application } from 'express';
-import { responseFormatter } from '../../../src/middleware/response-formatter';
-import healthRoutes from '../../../src/routes/health.routes';
+import { responseFormatter } from '@/middleware/response-formatter';
+import healthRoutes from '@/routes/health.routes';
 
 describe('GET /api/health', () => {
   let app: Application;

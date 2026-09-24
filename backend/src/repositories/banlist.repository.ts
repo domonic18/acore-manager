@@ -1,4 +1,4 @@
-import { authDataSource } from '../config/database';
+import { authDataSource } from '@/config/database';
 
 class BanlistRepository {
   async listActiveAccountBans(): Promise<any[]> {

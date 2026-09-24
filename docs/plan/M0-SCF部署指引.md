@@ -59,3 +59,53 @@ docker push <TCR仓库>/acm-scf-job:<tag>
 - [ ] 删除 SCF 上测试函数（避免计费）
 - [ ] TCR 中的 job 测试镜像按需清理
 - [ ] 代码侧 `src/job/inspection-job.ts` 保留至 T3.3 正式实现时改造，无需删除
+
+---
+
+## 六、生产 Job 部署清单（M1 消费端落地，控制台操作）
+
+> 前置：CI 已随 app 镜像同步构建 Job 镜像（`docker/Dockerfile.job` →
+> `<TCR>/acm-scf-job:<branch>-<sha>` + `latest`，tag 规则与 app 镜像一致）。
+> 上游数据由 acore-deploy 的 `scripts/acore-upload-logs.sh` 每日 04:30 上传至
+> `cos://wow-warden-1259353115/acore-logs/realm2/{date}/`（生产 realm 为 realm2，
+> 本地测试环境为 realm3）。
+
+### 函数创建
+
+- 函数类型：**Job 函数**（容器镜像）
+- 镜像：`<TCR>/acm-scf-job:latest`（或锁定 `master-<sha>`；TCR 私有仓需在 SCF 配置镜像拉取凭证）
+- 内存：1024MB 起步（T0.2 基线为 20 文件 fixture；真实四类日志 + LLM 分析首周观察后调整）
+- 超时：900s 起步（本地全链路实测约 105s，生产日志量更大，留 8 倍余量）
+- 执行方法：镜像 ENTRYPOINT 已固定为 `node dist/job/inspection-job.js`，事件参数无需配置
+
+### 定时触发器
+
+- 名称：`inspection-daily`；类型：定时触发
+- Cron：`0 0 6 * * * *`（每日 06:00，SCF 触发器时区为 UTC+8）
+- 附加消息（函数入参）：`--realm=realm2 --date=<T-1> --trigger=cron`
+  （date 由 T-1 动态计算；若触发器不支持动态参数，则依赖 JOB 内默认取昨日，确认
+  `parseJobArgs` 无 date 参数时默认 CST 昨日）
+
+### 环境变量（与代码 `backend/src/config/env.ts` 键名逐一对应）
+
+| 键 | 说明 |
+| --- | --- |
+| `DB_URL` | 游戏库 MySQL 只读连接串（Job 建立全量数据源连接用） |
+| `ACM_DB_URL` | acm 库 PostgreSQL 连接串（报告/审计/checkpoint 写入） |
+| `REDIS_URL` | Redis 连接串（巡检摘要缓存） |
+| `COS_SECRET_ID` / `COS_SECRET_KEY` | 日志桶读取凭证 |
+| `COS_BUCKET` | `wow-warden-1259353115` |
+| `COS_REGION` | `ap-beijing` |
+| `FEISHU_WEBHOOK_URL` / `FEISHU_WEBHOOK_SECRET` | 日报/断传告警推送（含加签） |
+| `ACM_WEB_BASE_URL` | 日报卡片跳转 Web 基地址 |
+| `TZ` | 建议值 `Asia/Shanghai`：「昨日」日期计算内建 CST 偏移不依赖时区（`yesterdayCST`），TZ 影响的是函数日志时间戳可读性 |
+
+### 模型配置前置
+
+- Agent 模型协议/密钥存于 acm 库模型配置表（不走环境变量）；部署前确认生产 acm 库
+  已配置 inspection 场景可用模型（本地联调使用 `kimi` 协议 ChatOpenAI）
+
+### 上线验证
+
+- [ ] 手动触发一次（传昨日日期）：exit 0、`ai_report` 新增记录、飞书日报卡片送达
+- [ ] 次日 04:30 上游上传后 06:00 定时触发自动成功，连续观察 3 天（M1 验收）

@@ -80,6 +80,9 @@ export const aiDiagnosisApi = {
     apiClient.get<UploadStatusDay[]>(`/api/ai/diagnosis/upload-status?realm=${encodeURIComponent(realm)}&days=${days}`),
   removeReport: (realm: string, date: string) =>
     apiClient.del<{ success: boolean }>(`/api/ai/diagnosis/reports/${encodeURIComponent(realm)}/${date}`),
+  // 处置备注 / Markdown 润色（T4.7，gm3）
+  updateReport: (realm: string, date: string, patch: { gmRemark?: string; contentMarkdown?: string }) =>
+    apiClient.put<AiReportDetail>(`/api/ai/diagnosis/reports/${encodeURIComponent(realm)}/${date}`, patch),
   // text/plain 响应不走 apiClient 的 JSON 解析，直接 fetch 取原文
   fetchReportMarkdown: async (realm: string, date: string): Promise<string> => {
     const token = localStorage.getItem('acm_token');

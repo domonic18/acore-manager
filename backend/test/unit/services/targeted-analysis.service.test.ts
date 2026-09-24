@@ -13,6 +13,9 @@ jest.mock('@/services/ai/token-usage.service', () => ({
 jest.mock('@/services/ai/llm-config.service', () => ({
   llmConfigService: { resolveDefault: jest.fn().mockResolvedValue({ id: 1, name: 'kimi', provider: 'kimi', protocol: 'anthropic', baseUrl: 'x', modelName: 'kimi-for-coding', apiKey: 'k', temperature: null, maxTokens: null }) },
 }));
+jest.mock('@/services/audit-log.service', () => ({
+  auditLogService: { record: jest.fn().mockResolvedValue(undefined) },
+}));
 jest.mock('@/agent/runtime/agent-factory', () => ({
   getAgent: jest.fn(),
 }));
@@ -28,6 +31,7 @@ jest.mock('@/agent/runtime/wire', () => ({
 }));
 
 import { acmDataSource } from '@/config/database';
+import { auditLogService } from '@/services/audit-log.service';
 import { tokenUsageService } from '@/services/ai/token-usage.service';
 import { getAgent } from '@/agent/runtime/agent-factory';
 import { targetedAnalysisService, type AnalysisConclusion } from '@/services/ai/targeted-analysis.service';
@@ -79,6 +83,7 @@ function repoMock() {
     save: jest.fn().mockResolvedValue({ id: 77 }),
     update: jest.fn().mockResolvedValue(undefined),
     findOne: jest.fn().mockResolvedValue(null),
+    remove: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -191,5 +196,61 @@ describe('TargetedAnalysisService', () => {
 
     repo.findOne.mockResolvedValueOnce(null);
     await expect(targetedAnalysisService.getById(999)).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('TargetedAnalysisService: manage (T4.7)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getRepository.mockReturnValue(repoMock());
+  });
+
+  it('updates whitelisted fields, trims remark and audits the change', async () => {
+    const repo = repoMock();
+    repo.findOne.mockResolvedValue({ id: 9, subjectType: 'character', subjectName: 'Unparalleled', gmRemark: null, conclusionMarkdown: '# md' });
+    getRepository.mockReturnValue(repo);
+
+    const row = await targetedAnalysisService.update(9, { gmRemark: '  复核通过  ', conclusionMarkdown: '# polished' }, 7, 'gm1');
+
+    expect(row.gmRemark).toBe('复核通过');
+    expect(row.conclusionMarkdown).toBe('# polished');
+    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 9, gmRemark: '复核通过' }));
+    expect(auditLogService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'ai.analysis.update', target: 'id:9', details: 'subject=character:Unparalleled fields=gmRemark,conclusionMarkdown' }),
+    );
+  });
+
+  it('rejects an empty patch with 400 without saving or auditing', async () => {
+    const repo = repoMock();
+    repo.findOne.mockResolvedValue({ id: 9 });
+    getRepository.mockReturnValue(repo);
+
+    await expect(targetedAnalysisService.update(9, {}, 7, 'gm1')).rejects.toMatchObject({ status: 400 });
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(auditLogService.record).not.toHaveBeenCalled();
+  });
+
+  it('throws 404 on update/remove when the record is absent', async () => {
+    const repo = repoMock();
+    repo.findOne.mockResolvedValue(null);
+    getRepository.mockReturnValue(repo);
+
+    await expect(targetedAnalysisService.update(999, { gmRemark: 'x' }, 7, 'gm1')).rejects.toMatchObject({ status: 404 });
+    await expect(targetedAnalysisService.remove(999, 7, 'gm1')).rejects.toMatchObject({ status: 404 });
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(repo.remove).not.toHaveBeenCalled();
+  });
+
+  it('removes the record and audits with subject context', async () => {
+    const repo = repoMock();
+    repo.findOne.mockResolvedValue({ id: 9, subjectType: 'account', subjectName: 'acc1', status: 'ok' });
+    getRepository.mockReturnValue(repo);
+
+    await targetedAnalysisService.remove(9, 7, 'gm1');
+
+    expect(repo.remove).toHaveBeenCalledWith(expect.objectContaining({ id: 9 }));
+    expect(auditLogService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'ai.analysis.remove', target: 'id:9', details: 'subject=account:acc1 status=ok' }),
+    );
   });
 });

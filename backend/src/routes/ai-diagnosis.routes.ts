@@ -185,6 +185,38 @@ router.get(
   }),
 );
 
+// 报告更新（T4.7，gmlevel=3）：处置备注 / Markdown 润色，白名单字段 + 审计
+router.put(
+  '/reports/:realm/:date',
+  authMiddleware,
+  requireGmLevel(3),
+  [
+    param('realm').isString().trim().notEmpty(),
+    param('date').matches(/^\d{4}-\d{2}-\d{2}$/),
+    body('gmRemark').optional().isString().trim().isLength({ max: 1000 }),
+    body('contentMarkdown').optional().isString().isLength({ min: 1, max: 200000 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const item = await reportService.update(
+        (req.params.realm as string).trim(),
+        req.params.date,
+        { gmRemark: req.body.gmRemark, contentMarkdown: req.body.contentMarkdown },
+        req.user?.id || 0,
+        req.user?.username || '',
+      );
+      res.jsonSuccess(item);
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
 // 报告删除（T4.7 前置切片，gmlevel=3）：硬删除 + 审计
 router.delete(
   '/reports/:realm/:date',

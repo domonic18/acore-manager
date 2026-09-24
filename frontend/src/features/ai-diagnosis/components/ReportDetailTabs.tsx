@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import type { AiReportDetail, ReportServerHealth } from '../api/ai-diagnosis.api';
 import { aiDiagnosisApi } from '../api/ai-diagnosis.api';
+import { useUpdateReport } from '../hooks/useAiDiagnosis';
 import { Markdown } from '@/shared/components/Markdown';
 import { CopyButton } from '@/shared/components/CopyButton';
+import { usePermission } from '@/shared/hooks/usePermission';
+import { toast } from '@/shared/utils/toast.util';
 import { SuspiciousPlayerTable } from './SuspiciousPlayerTable';
 
 // 报告详情四 Tab（T4.1 + T4.2 全文 + T4.3 处置表）：结构化呈现 + 色块高亮，
@@ -91,15 +94,69 @@ function RecsTab({ recommendations }: { recommendations?: string[] }) {
 }
 
 function FullTab({ realm, reportDate, contentMarkdown }: { realm: string; reportDate: string; contentMarkdown: string }) {
+  const { hasGmLevel } = usePermission();
+  const updateReport = useUpdateReport();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const saving = updateReport.isPending;
+
+  const startEdit = (): void => {
+    setDraft(contentMarkdown);
+    setEditing(true);
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-xs text-muted-foreground">Markdown 原文，与落库版本一致，可直接粘贴到论坛或文档</div>
-        <CopyButton getText={() => aiDiagnosisApi.fetchReportMarkdown(realm, reportDate)} className="shrink-0" />
+        <div className="text-xs text-muted-foreground">
+          {editing ? '编辑后保存将覆盖落库版本（审计留痕），可直接粘贴到论坛或文档' : 'Markdown 原文，与落库版本一致，可直接粘贴到论坛或文档'}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {hasGmLevel(3) &&
+            (editing ? (
+              <>
+                <button onClick={() => setEditing(false)} className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent">
+                  取消
+                </button>
+                <button
+                  onClick={() =>
+                    updateReport.mutate(
+                      { realm, date: reportDate, patch: { contentMarkdown: draft } },
+                      {
+                        onSuccess: () => {
+                          setEditing(false);
+                          toast.success('润色已保存');
+                        },
+                        onError: (err: Error) => toast.error(err.message || '保存失败'),
+                      },
+                    )
+                  }
+                  disabled={saving}
+                  className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground disabled:opacity-40"
+                >
+                  {saving ? '保存中...' : '保存润色'}
+                </button>
+              </>
+            ) : (
+              <button onClick={startEdit} className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent">
+                润色
+              </button>
+            ))}
+          {!editing && <CopyButton getText={() => aiDiagnosisApi.fetchReportMarkdown(realm, reportDate)} className="shrink-0" />}
+        </div>
       </div>
-      <div className="rounded-lg border border-border bg-card px-4 py-3">
-        <Markdown content={contentMarkdown} />
-      </div>
+      {editing ? (
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={20}
+          className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
+        />
+      ) : (
+        <div className="rounded-lg border border-border bg-card px-4 py-3">
+          <Markdown content={contentMarkdown} />
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ jest.mock('@/services/ai/report.service', () => ({
     getByRealmDate: jest.fn().mockResolvedValue(null),
     uploadStatus: jest.fn().mockResolvedValue([]),
     remove: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockResolvedValue({ realm: 'realm3', reportDate: '2026-08-23', gmRemark: '已复核' }),
   },
 }));
 jest.mock('@/config/env', () => ({
@@ -204,5 +205,46 @@ describe('AI Diagnosis Routes: report query (T4.1)', () => {
     const res = await request(app).delete('/api/ai/diagnosis/reports/realm3/bad-date');
     expect(res.status).toBe(400);
     expect(reportService.remove).not.toHaveBeenCalled();
+  });
+});
+
+describe('AI Diagnosis Routes: PUT /reports/:realm/:date (T4.7)', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    app = express();
+    app.use(express.json());
+    app.use(responseFormatter);
+    app.use('/api/ai/diagnosis', aiDiagnosisRoutes);
+  });
+
+  it('updates remark/markdown and returns the row', async () => {
+    const res = await request(app)
+      .put('/api/ai/diagnosis/reports/realm3/2026-08-23')
+      .send({ gmRemark: '已复核', contentMarkdown: '# 润色后' });
+    expect(res.status).toBe(200);
+    expect(reportService.update).toHaveBeenCalledWith(
+      'realm3',
+      '2026-08-23',
+      { gmRemark: '已复核', contentMarkdown: '# 润色后' },
+      0,
+      '',
+    );
+  });
+
+  it('rejects a malformed date and an over-long remark with 400', async () => {
+    const badDate = await request(app).put('/api/ai/diagnosis/reports/realm3/bad-date').send({ gmRemark: 'x' });
+    expect(badDate.status).toBe(400);
+
+    const long = await request(app).put('/api/ai/diagnosis/reports/realm3/2026-08-23').send({ gmRemark: 'a'.repeat(1001) });
+    expect(long.status).toBe(400);
+    expect(reportService.update).not.toHaveBeenCalled();
+  });
+
+  it('maps ServiceError 404 when the report is absent', async () => {
+    (reportService.update as jest.Mock).mockRejectedValueOnce(new ReportedServiceError('报告不存在', 404));
+    const res = await request(app).put('/api/ai/diagnosis/reports/realm3/2001-01-01').send({ gmRemark: 'x' });
+    expect(res.status).toBe(404);
   });
 });

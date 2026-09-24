@@ -10,6 +10,7 @@ import { extractJson } from '@/shared/utils/extract-json.util';
 import { ServiceError } from './anticheat-exemption.service';
 
 export { ServiceError };
+import { auditLogService } from '@/services/audit-log.service';
 import { llmConfigService } from './llm-config.service';
 import { tokenUsageService } from './token-usage.service';
 
@@ -305,6 +306,51 @@ class TargetedAnalysisService {
     const row = await acmDataSource.getRepository(AiTargetedAnalysis).findOne({ where: { id } });
     if (!row) throw new ServiceError('定向分析记录不存在', 404);
     return row;
+  }
+
+  // 处置备注 / Markdown 润色（T4.7，gmlevel=3）：仅白名单字段，审计记录改动字段清单
+  async update(
+    id: number,
+    patch: { gmRemark?: string; conclusionMarkdown?: string },
+    operatorId: number,
+    operatorName: string,
+  ): Promise<AiTargetedAnalysis> {
+    const repo = acmDataSource.getRepository(AiTargetedAnalysis);
+    const existing = await repo.findOne({ where: { id } });
+    if (!existing) throw new ServiceError('定向分析记录不存在', 404);
+    const changes: string[] = [];
+    if (patch.gmRemark !== undefined) {
+      existing.gmRemark = patch.gmRemark.trim() || null;
+      changes.push('gmRemark');
+    }
+    if (patch.conclusionMarkdown !== undefined) {
+      existing.conclusionMarkdown = patch.conclusionMarkdown;
+      changes.push('conclusionMarkdown');
+    }
+    if (changes.length === 0) throw new ServiceError('无可更新字段', 400);
+    await repo.save(existing);
+    await auditLogService.record({
+      operatorId,
+      operatorName,
+      operation: 'ai.analysis.update',
+      target: `id:${id}`,
+      details: `subject=${existing.subjectType}:${existing.subjectName} fields=${changes.join(',')}`,
+    });
+    return existing;
+  }
+
+  async remove(id: number, operatorId: number, operatorName: string): Promise<void> {
+    const repo = acmDataSource.getRepository(AiTargetedAnalysis);
+    const existing = await repo.findOne({ where: { id } });
+    if (!existing) throw new ServiceError('定向分析记录不存在', 404);
+    await repo.remove(existing);
+    await auditLogService.record({
+      operatorId,
+      operatorName,
+      operation: 'ai.analysis.remove',
+      target: `id:${id}`,
+      details: `subject=${existing.subjectType}:${existing.subjectName} status=${existing.status}`,
+    });
   }
 }
 

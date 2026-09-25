@@ -26,15 +26,42 @@ export default function LoginPage() {
   };
 
   const performLogin = async (user: string, pass: string, sessionId?: string, code?: string) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: user,
-        password: pass,
-        ...(sessionId && code ? { captchaSessionId: sessionId, captchaCode: code } : {}),
-      }),
-    });
+    // 登录是冷启动后首屏最易撞就绪门禁的请求：初始化中按 Retry-After 重试，降级给友好提示。
+    // 注意：每个响应的 body 只能读取一次，gate 解析结果须复用
+    const postLogin = () =>
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: user,
+          password: pass,
+          ...(sessionId && code ? { captchaSessionId: sessionId, captchaCode: code } : {}),
+        }),
+      });
+
+    const parseGate = async (res: Response) => {
+      if (res.status !== 503) return null;
+      try {
+        const body = await res.json();
+        return body && typeof body === 'object' ? (body as { code?: string; error?: string }) : null;
+      } catch {
+        return null;
+      }
+    };
+
+    let response = await postLogin();
+    let gate = await parseGate(response);
+    for (let retried = 0; gate?.code === 'DB_INITIALIZING' && retried < 2; retried++) {
+      await new Promise((r) => setTimeout(r, (Number(response.headers.get('Retry-After')) || 2) * 1000));
+      response = await postLogin();
+      gate = await parseGate(response);
+    }
+
+    if (response.status === 503) {
+      throw new Error(
+        gate?.code === 'DB_DEGRADED' ? '数据库暂不可用，请稍后重试' : gate?.error || '服务启动中，请稍后重试',
+      );
+    }
 
     const result = await response.json();
 

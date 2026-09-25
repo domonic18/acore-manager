@@ -26,7 +26,9 @@ export class SoapService {
           res.on('data', (chunk) => { data += chunk; });
           res.on('end', () => {
             if (res.statusCode !== 200) {
-              logger.error({ statusCode: res.statusCode, command }, 'SOAP command failed');
+              // worldserver 的 401 有两种成因（Basic 认证失败 / 命令所需 gmlevel 不足），
+              // 仅凭状态码无法区分，响应体里的 AC 文案才是定位依据
+              logger.error({ statusCode: res.statusCode, command, resBody: data.slice(0, 500) }, 'SOAP command failed');
               reject(new Error(`SOAP command failed: ${res.statusCode}`));
             } else {
               resolve(data);

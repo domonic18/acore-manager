@@ -24,7 +24,8 @@ import aiTokenUsageRoutes from './routes/ai-token-usage.routes';
 import aiDiagnosisRoutes from './routes/ai-diagnosis.routes';
 import aiAssistantRoutes from './routes/ai-assistant.routes';
 import aiAnalysisRoutes from './routes/ai-analysis.routes';
-import { areDataSourcesReady } from './config/database';
+import { dbReadinessGate } from './middleware/db-readiness-gate';
+
 
 export function createApp(): Application {
   const app = express();
@@ -48,17 +49,8 @@ export function createApp(): Application {
   app.use(requestLogger);
   app.use(responseFormatter);
 
-  // API 路由健康检查：数据库未就绪时返回 503，不影响静态资源
-  app.use('/api', (req, res, next) => {
-    if (req.path === '/health' || areDataSourcesReady()) {
-      next();
-      return;
-    }
-    res.status(503).json({
-      success: false,
-      error: 'Database not available, please retry later / 数据库暂不可用，请稍后重试',
-    });
-  });
+  // API 就绪门禁：初始化中有限等待、降级快速失败（503 + code + Retry-After），不影响静态资源与健康端点
+  app.use('/api', dbReadinessGate);
 
   app.use('/api/auth', authRoutes);
   app.use('/api/accounts', accountRoutes);

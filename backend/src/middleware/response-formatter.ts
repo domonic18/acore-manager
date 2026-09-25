@@ -5,13 +5,14 @@ export interface ApiResponse<T> {
   count?: number;
   data: T;
   error?: string;
+  code?: string;
 }
 
 declare global {
   namespace Express {
     interface Response {
       jsonSuccess: <T>(data: T, count?: number) => void;
-      jsonError: (message: string, status?: number) => void;
+      jsonError: (message: string, status?: number, code?: string) => void;
     }
   }
 }
@@ -26,9 +27,10 @@ export function responseFormatter(req: Request, res: Response, next: NextFunctio
     res.json(response);
   };
 
-  res.jsonError = (message: string, status = 500): void => {
+  res.jsonError = (message: string, status = 500, code?: string): void => {
     res.status(status).json({
       success: false,
+      ...(code ? { code } : {}),
       error: message,
     });
   };

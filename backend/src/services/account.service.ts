@@ -192,6 +192,7 @@ export class AccountService {
     try {
       await soapService.sendCommand(`.unban account ${account.username}`);
       await cacheService.delPattern('accounts:list:*');
+      await cacheService.del('banlist:active');
       logger.info({ accountId, operatorId, username: account.username }, 'Account unban command sent');
     } catch (error) {
       logger.error({ error, accountId, username: account.username }, 'Failed to send account unban command');
@@ -214,6 +215,7 @@ export class AccountService {
     try {
       await soapService.sendCommand(`.ban account ${account.username} ${duration} ${reason}`);
       await cacheService.delPattern('accounts:list:*');
+      await cacheService.del('banlist:active');
       logger.info(
         { accountId, operatorId, username: account.username, duration, reason },
         'Account ban command sent',

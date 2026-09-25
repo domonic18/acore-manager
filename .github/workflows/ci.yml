@@ -34,7 +34,7 @@ env:
   REGISTRY: ccr.ccs.tencentyun.com
   NAMESPACE: ${{ secrets.TCR_NAMESPACE }}
   IMAGE_NAME: acore-manager
-  IMAGE_NAME_JOB: acm-scf-job
+  IMAGE_NAME_JOB: acore-manager-job
 
 jobs:
   # ============================================================

@@ -160,6 +160,7 @@ export class CharacterService {
     try {
       await soapService.sendCommand(`.unban character ${detail.name}`);
       await cacheService.delPattern('characters:*');
+      await cacheService.del('banlist:active');
       logger.info({ guid, operatorId, name: detail.name }, 'Character unban command sent');
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character unban command');
@@ -182,6 +183,7 @@ export class CharacterService {
     try {
       await soapService.sendCommand(`.ban character ${detail.name} ${duration} ${reason}`);
       await cacheService.delPattern('characters:*');
+      await cacheService.del('banlist:active');
       logger.info(
         { guid, operatorId, name: detail.name, duration, reason },
         'Character ban command sent',
@@ -207,6 +209,7 @@ export class CharacterService {
     try {
       await soapService.sendCommand(`.mute ${detail.name} ${duration} ${reason}`);
       await cacheService.delPattern('characters:*');
+      await cacheService.del('mute:active');
       logger.info(
         { guid, operatorId, name: detail.name, duration, reason },
         'Character mute command sent',
@@ -227,6 +230,7 @@ export class CharacterService {
     try {
       await soapService.sendCommand(`.unmute ${detail.name}`);
       await cacheService.delPattern('characters:*');
+      await cacheService.del('mute:active');
       logger.info({ guid, operatorId, name: detail.name }, 'Character unmute command sent');
     } catch (error) {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character unmute command');

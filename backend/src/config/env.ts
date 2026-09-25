@@ -140,6 +140,8 @@ export const env = {
   NODE_ENV: getEnv('NODE_ENV', 'production'),
   PORT: getEnvInt('PORT', 9000),
   LOG_LEVEL: getEnv('LOG_LEVEL', 'info'),
+  // 监听前等待数据库初始化的预算；耗尽则转 degraded 继续监听（后台重试自愈）
+  STARTUP_DB_BUDGET_MS: getEnvInt('STARTUP_DB_BUDGET_MS', 15_000),
 
   // Database names only (connection via DB_URL)
   DB_AUTH: getEnv('DB_AUTH', 'acore_auth'),

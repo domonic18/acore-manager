@@ -1,5 +1,6 @@
 import { acmDataSource } from '@/config/database';
 import { env } from '@/config/env';
+import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { AiReport } from '@/entities/acm/ai-report.entity';
 import { streamAgentEvents } from '@/agent/runtime/wire';
@@ -141,7 +142,7 @@ class InspectionService {
     const config = {
       configurable: {
         thread_id: threadId,
-        budget: new BudgetGuard(env.AI_TOOL_CALL_BUDGET),
+        budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
         refId: `inspection:${input.realm}:${input.date}`,
       },
     };

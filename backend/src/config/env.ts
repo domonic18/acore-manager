@@ -127,6 +127,7 @@ export const redisConn = parseRedisUrl(process.env.REDIS_URL) ?? {
   db: 0,
 };
 
+// SOAP 连接已支持系统配置页（acm_system_config）管理，DB 优先；此处 SOAP_URL 仅作未录入配置时的回落
 export const soapConn = parseSoapUrl(process.env.SOAP_URL) ?? {
   host: '127.0.0.1',
   port: 7878,

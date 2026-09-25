@@ -1,5 +1,6 @@
 import { acmDataSource } from '@/config/database';
 import { env } from '@/config/env';
+import { readRuntimeValues, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { AiTokenUsage } from '@/entities/acm/ai-token-usage.entity';
 import { logger } from '@/middleware/request-logger';
 import { cacheService } from '@/services/cache.service';
@@ -97,23 +98,29 @@ class TokenUsageService {
     return {
       from,
       to,
-      budget: env.AI_DAILY_TOKEN_BUDGET,
+      budget: await this.dailyBudget(),
       totalTokens: days.reduce((sum, d) => sum + d.totalTokens, 0),
       days,
     };
   }
 
+  private async dailyBudget(): Promise<number> {
+    const cfg = await readRuntimeValues([SYSTEM_CONFIG_KEYS.aiDailyTokenBudget]);
+    return Number(cfg.get(SYSTEM_CONFIG_KEYS.aiDailyTokenBudget) ?? env.AI_DAILY_TOKEN_BUDGET);
+  }
+
   private async alertIfOverBudget(scene: string): Promise<void> {
     const date = toDateStr(new Date());
+    const budget = await this.dailyBudget();
     const total = await this.getDailyTotal(date);
-    if (total <= env.AI_DAILY_TOKEN_BUDGET) return;
+    if (total <= budget) return;
 
     const dedupKey = `acm:ai:token-budget:alerted:${date}`;
     const alerted = await cacheService.get<string>(dedupKey);
     if (alerted) return;
 
     await feishuNotifyService.sendText(
-      `[ACM] AI Token 日预算超限：${date} 已消耗 ${total} tokens（预算 ${env.AI_DAILY_TOKEN_BUDGET}，场景 ${scene}）。仅告警不停用，请关注用量。`,
+      `[ACM] AI Token 日预算超限：${date} 已消耗 ${total} tokens（预算 ${budget}，场景 ${scene}）。仅告警不停用，请关注用量。`,
     );
     await cacheService.set(dedupKey, '1', ALERT_DEDUP_TTL_SECONDS);
   }

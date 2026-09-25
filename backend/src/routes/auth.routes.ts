@@ -6,6 +6,7 @@ import { bruteForceService } from '@/services/brute-force.service';
 import { captchaService } from '@/services/captcha.service';
 import { getClientIp } from '@/shared/utils/ip.util';
 import { env } from '@/config/env';
+import { readRuntimeBool, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 
 const router = Router();
@@ -31,7 +32,7 @@ router.get(
   '/login-config',
   asyncHandler(async (_req: Request, res: Response) => {
     res.jsonSuccess({
-      captchaEnabled: env.LOGIN_CAPTCHA_ENABLED,
+      captchaEnabled: await readRuntimeBool(SYSTEM_CONFIG_KEYS.loginCaptchaEnabled, env.LOGIN_CAPTCHA_ENABLED),
     });
   }),
 );

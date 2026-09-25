@@ -46,6 +46,11 @@ jest.mock('@/agent/runtime/agent-factory', () => ({
 }));
 jest.mock('@/config/env', () => ({
   env: { AI_TOOL_CALL_BUDGET: 5, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
+  // system-config.reader → config/database 模块加载期需要连接对象
+  dbConn: { host: '127.0.0.1', port: 3306, user: 'u', pass: 'p' },
+  acmDbConn: { host: '127.0.0.1', port: 5433, user: 'acm', pass: 'p', database: 'acm' },
+  soapConn: { host: '127.0.0.1', port: 7878, user: 'admin', pass: 'admin' },
+  isDevelopment: false,
 }));
 jest.mock('@/middleware/request-logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },

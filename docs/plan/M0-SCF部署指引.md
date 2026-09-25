@@ -16,16 +16,16 @@
 
 ```bash
 # 仓库根目录
-docker build -f docker/Dockerfile.job -t acm-scf-job:<tag> .
+docker build -f docker/Dockerfile.job -t acore-manager-job:<tag> .
 docker login ccr.ccs.tencentyun.com   # 你的 TCR 实例
-docker tag acm-scf-job:<tag> <TCR仓库>/acm-scf-job:<tag>
-docker push <TCR仓库>/acm-scf-job:<tag>
+docker tag acore-manager-job:<tag> <TCR仓库>/acore-manager-job:<tag>
+docker push <TCR仓库>/acore-manager-job:<tag>
 ```
 
 ## 二、创建 Job 云函数
 
 - 函数类型：**Job 函数**（容器镜像）
-- 镜像：上一步推送的 `<TCR仓库>/acm-scf-job:<tag>`
+- 镜像：上一步推送的 `<TCR仓库>/acore-manager-job:<tag>`
 - 环境变量：
   - 可选 `JOB_FIXTURE_URL=<公网可下载的 tar.gz>`（不设则本地合成 20 个 500 行日志文件，约 300KB）
   - **不要**配 DB/Redis（本次仅验证容器运行时能力）
@@ -65,7 +65,7 @@ docker push <TCR仓库>/acm-scf-job:<tag>
 ## 六、生产 Job 部署清单（M1 消费端落地，控制台操作）
 
 > 前置：CI 已随 app 镜像同步构建 Job 镜像（`docker/Dockerfile.job` →
-> `<TCR>/acm-scf-job:<branch>-<sha>` + `latest`，tag 规则与 app 镜像一致）。
+> `<TCR>/acore-manager-job:<branch>-<sha>` + `latest`，tag 规则与 app 镜像一致）。
 > 上游数据由 acore-deploy 的 `scripts/acore-upload-logs.sh` 每日 04:30 上传至
 > `cos://wow-warden-1259353115/acore-logs/realm2/{date}/`（生产 realm 为 realm2，
 > 本地测试环境为 realm3）。
@@ -73,7 +73,7 @@ docker push <TCR仓库>/acm-scf-job:<tag>
 ### 函数创建
 
 - 函数类型：**Job 函数**（容器镜像）
-- 镜像：`<TCR>/acm-scf-job:latest`（或锁定 `master-<sha>`；TCR 私有仓需在 SCF 配置镜像拉取凭证）
+- 镜像：`<TCR>/acore-manager-job:latest`（或锁定 `master-<sha>`；TCR 私有仓需在 SCF 配置镜像拉取凭证）
 - 内存：1024MB 起步（T0.2 基线为 20 文件 fixture；真实四类日志 + LLM 分析首周观察后调整）
 - 超时：900s 起步（本地全链路实测约 105s，生产日志量更大，留 8 倍余量）
 - 执行方法：镜像 ENTRYPOINT 已固定为 `node dist/job/inspection-job.js`，事件参数无需配置

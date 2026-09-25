@@ -19,6 +19,7 @@ const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
 const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
 const RbacConfigPage = lazy(() => import('@/pages/RbacConfigPage'));
 const ModelConfigPage = lazy(() => import('@/pages/ModelConfigPage'));
+const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
 const AiDiagnosisPage = lazy(() => import('@/pages/AiDiagnosisPage'));
 const AiDiagnosisReportDetailPage = lazy(() => import('@/pages/AiDiagnosisReportDetailPage'));
 const TargetedAnalysisPage = lazy(() => import('@/pages/TargetedAnalysisPage'));
@@ -110,6 +111,7 @@ export const router = createBrowserRouter([
             element: <GmGuard minLevel={3} />,
             children: [
               { path: 'model-config', element: withSuspense(ModelConfigPage) },
+              { path: 'system-config', element: withSuspense(SystemConfigPage) },
             ],
           },
         ],

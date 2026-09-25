@@ -22,6 +22,7 @@ import {
   Bot,
   FileSearch,
   Crosshair,
+  Settings,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -71,7 +72,10 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
   },
   {
     title: '系统',
-    items: [{ path: '/audit-logs', label: '日志审计', icon: ScrollText }],
+    items: [
+      { path: '/audit-logs', label: '日志审计', icon: ScrollText },
+      { path: '/system-config', label: '系统配置', icon: Settings },
+    ],
   },
 ];
 

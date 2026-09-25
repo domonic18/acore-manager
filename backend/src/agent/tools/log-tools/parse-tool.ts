@@ -3,6 +3,7 @@ import { In } from 'typeorm';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { registerTool } from '@/agent/tools/registry';
+import { readDefaultRealm } from '@/config/system-config.reader';
 import { acmDataSource } from '@/config/database';
 import { AiAnticheatExemption } from '@/entities/acm/ai-anticheat-exemption.entity';
 import { runReadOnly } from '@/agent/tools/db-tools/query-guard';
@@ -42,7 +43,7 @@ export function registerParseTool(): void {
     schema: z.object({
       from: z.string().regex(DATE_RE, 'from 需为 YYYY-MM-DD').describe('起始日期（含）'),
       to: z.string().regex(DATE_RE, 'to 需为 YYYY-MM-DD').describe('结束日期（含，跨度 ≤31 天）'),
-      realm: z.string().min(2).default('realm3').describe('realm 目录名'),
+      realm: z.string().min(2).optional().describe('realm 目录名，未传时用系统默认 realm'),
       player: z.string().min(1).optional().describe('按玩家名精确过滤'),
       guid: z.number().int().positive().optional().describe('按角色 guid 过滤'),
       type: z.string().min(3).optional().describe('按归一化违规类型过滤（如 speed / fly）'),
@@ -53,16 +54,17 @@ export function registerParseTool(): void {
         .describe('附加误报解释：查角色当前光环与 GM 豁免白名单，标注 falsePositiveSignals 与 suggestedAction'),
     }),
     handler: async (args) => {
-      const { from, to, realm, player, guid, type, limit, explain } = args as {
+      const { from, to, player, guid, type, limit, explain } = args as {
         from: string;
         to: string;
-        realm: string;
+        realm?: string;
         player?: string;
         guid?: number;
         type?: string;
         limit: number;
         explain: boolean;
       };
+      const realm = (args as { realm?: string }).realm ?? (await readDefaultRealm());
       const violations: { date: string; parsed: ParsedViolation }[] = [];
       let totalLines = 0;
       for (const date of dateRange(from, to)) {

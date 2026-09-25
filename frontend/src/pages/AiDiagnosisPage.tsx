@@ -1,15 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useReports } from '@/features/ai-diagnosis/hooks/useAiDiagnosis';
+import { useDefaultRealm } from '@/features/system-config/hooks/useSystemConfig';
 import { UploadStatusStrip } from '@/features/ai-diagnosis/components/UploadStatusStrip';
 import { ReportCalendar } from '@/features/ai-diagnosis/components/ReportCalendar';
 
 export default function AiDiagnosisPage() {
   const navigate = useNavigate();
-  const [realm, setRealm] = useState('realm3');
-  const [realmInput, setRealmInput] = useState('realm3');
+  const defaultRealm = useDefaultRealm();
+  const [realm, setRealm] = useState('');
+  const [realmInput, setRealmInput] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const { data: reports, isLoading } = useReports(realm || undefined);
+
+  // 系统配置的默认 realm 加载完成后填充（未加载前不发查询，realm 为空）
+  useEffect(() => {
+    if (defaultRealm) {
+      setRealm((prev) => prev || defaultRealm);
+      setRealmInput((prev) => prev || defaultRealm);
+    }
+  }, [defaultRealm]);
 
   const filtered =
     reports?.filter((r) => dateFilter === '' || r.reportDate === dateFilter) ??

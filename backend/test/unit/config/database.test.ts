@@ -8,9 +8,9 @@ describe('config/database readiness state machine', () => {
 
   function importFresh(): Db {
     let mod!: Db;
-    // 动态 import() 在当前 jest CJS 环境不可用，用 isolateModules 取全新模块状态
+    // 动态 import() 在当前 jest CJS 环境不可用，用 isolateModules + requireActual 取全新模块状态
     jest.isolateModules(() => {
-      mod = require('@/config/database');
+      mod = jest.requireActual('@/config/database');
     });
     return mod;
   }

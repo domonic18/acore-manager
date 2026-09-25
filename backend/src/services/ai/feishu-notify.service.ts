@@ -1,19 +1,24 @@
 import { createHmac } from 'crypto';
 import { env } from '@/config/env';
+import { readRuntimeValues, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import type { InspectionReportJson } from './inspection.service';
 import type { InspectionInput } from './inspection.service';
 
 // 飞书群机器人 webhook 通知，AI 域告警统一出口（Token 预算超限 / 巡检失败 / 日志断传等）。
-// 未配置 FEISHU_WEBHOOK_URL 时仅记日志；任何失败都不阻塞业务主链路。
-// 机器人安全设置为"签名校验"时需配 FEISHU_WEBHOOK_SECRET：
+// webhook 地址 / 加签密钥 / Web 基地址优先读系统配置页（acm_system_config），未配置回落环境变量。
+// 未配置 webhook 时仅记日志；任何失败都不阻塞业务主链路。
+// 机器人安全设置为"签名校验"时需配加签密钥：
 // sign = HMAC-SHA256(key = `${timestamp}\n${secret}`, message = '') → base64。
 
 type FeishuCard = Record<string, unknown>;
 type FeishuPayload = Record<string, unknown>;
 
 export type DailyReportCardInput = Pick<InspectionInput, 'realm' | 'date' | 'trigger'> &
-  Pick<InspectionReportJson, 'healthScore' | 'summary' | 'serverHealth' | 'suspiciousPlayers' | 'recommendations'>;
+  Pick<InspectionReportJson, 'healthScore' | 'summary' | 'serverHealth' | 'suspiciousPlayers' | 'recommendations'> & {
+    /** 由调用方注入的系统配置 web 基地址；缺省回落 env.ACM_WEB_BASE_URL */
+    webBaseUrl?: string;
+  };
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 const SEVERITY_LABEL = { high: '高危', medium: '中危', low: '低危' } as const;
@@ -28,18 +33,21 @@ class FeishuNotifyService {
   }
 
   private async post(payload: FeishuPayload, label: string): Promise<boolean> {
-    if (!env.FEISHU_WEBHOOK_URL) {
+    const cfg = await readRuntimeValues([SYSTEM_CONFIG_KEYS.feishuWebhookUrl, SYSTEM_CONFIG_KEYS.feishuWebhookSecret]);
+    const webhookUrl = cfg.get(SYSTEM_CONFIG_KEYS.feishuWebhookUrl) ?? env.FEISHU_WEBHOOK_URL;
+    const webhookSecret = cfg.get(SYSTEM_CONFIG_KEYS.feishuWebhookSecret) ?? env.FEISHU_WEBHOOK_SECRET;
+    if (!webhookUrl) {
       logger.warn(`[feishu] webhook not configured, skip ${label}`);
       return false;
     }
-    if (env.FEISHU_WEBHOOK_SECRET) {
+    if (webhookSecret) {
       const timestamp = Math.floor(Date.now() / 1000);
-      const sign = createHmac('sha256', `${timestamp}\n${env.FEISHU_WEBHOOK_SECRET}`).update('').digest('base64');
+      const sign = createHmac('sha256', `${timestamp}\n${webhookSecret}`).update('').digest('base64');
       payload.timestamp = timestamp;
       payload.sign = sign;
     }
     try {
-      const resp = await fetch(env.FEISHU_WEBHOOK_URL, {
+      const resp = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
@@ -110,7 +118,8 @@ class FeishuNotifyService {
     }
 
     // 报告页由 T4.0 提供；配置了基础地址才渲染跳转按钮
-    if (env.ACM_WEB_BASE_URL) {
+    const webBaseUrl = input.webBaseUrl ?? env.ACM_WEB_BASE_URL;
+    if (webBaseUrl) {
       elements.push({
         tag: 'action',
         actions: [
@@ -118,7 +127,7 @@ class FeishuNotifyService {
             tag: 'button',
             text: { tag: 'plain_text', content: '查看完整报告' },
             type: 'primary',
-            url: `${env.ACM_WEB_BASE_URL.replace(/\/$/, '')}/ai-reports/${realm}/${date}`,
+            url: `${webBaseUrl.replace(/\/$/, '')}/ai-reports/${realm}/${date}`,
           },
         ],
       });
@@ -139,7 +148,9 @@ class FeishuNotifyService {
   }
 
   async sendDailyReportCard(input: DailyReportCardInput): Promise<boolean> {
-    return this.sendCard(this.buildDailyReportCard(input));
+    const cfg = await readRuntimeValues([SYSTEM_CONFIG_KEYS.acmWebBaseUrl]);
+    const webBaseUrl = cfg.get(SYSTEM_CONFIG_KEYS.acmWebBaseUrl);
+    return this.sendCard(this.buildDailyReportCard(webBaseUrl ? { ...input, webBaseUrl } : input));
   }
 
   private field(title: string, content: string): FeishuCard {

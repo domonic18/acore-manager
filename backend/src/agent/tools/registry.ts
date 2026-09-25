@@ -2,6 +2,7 @@ import { tool } from '@langchain/core/tools';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 import { env } from '@/config/env';
+import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { acmDataSource } from '@/config/database';
 import { AiToolAudit } from '@/entities/acm/ai-tool-audit.entity';
@@ -51,7 +52,9 @@ async function runWrapped(def: ToolDefinition, args: unknown, config?: RunnableC
   let rowCount = 0;
   try {
     configurable.budget?.consume(def.name);
-    const result = await withTimeout(Promise.resolve(def.handler(args)), def.timeoutMs ?? env.AI_TOOL_TIMEOUT_MS, def.name);
+    const timeoutMs =
+      def.timeoutMs ?? (await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolTimeoutMs, env.AI_TOOL_TIMEOUT_MS));
+    const result = await withTimeout(Promise.resolve(def.handler(args)), timeoutMs, def.name);
     rowCount = countRows(result);
     void writeAudit({
       refId: configurable.refId ?? '',

@@ -82,8 +82,9 @@ docker push <TCR仓库>/acm-scf-job:<tag>
 
 - 名称：`inspection-daily`；类型：定时触发
 - Cron：`0 0 6 * * * *`（每日 06:00，SCF 触发器时区为 UTC+8）
-- 附加消息（函数入参）：`--realm=realm2 --date=<T-1> --trigger=cron`
-  （date 由 T-1 动态计算；若触发器不支持动态参数，则依赖 JOB 内默认取昨日，确认
+- 附加消息（函数入参）：`--date=<T-1> --trigger=cron`
+  （`--realm` 可不传：Job 在数据源就绪后自动读系统配置页的默认 realm；
+  date 由 T-1 动态计算；若触发器不支持动态参数，则依赖 JOB 内默认取昨日，确认
   `parseJobArgs` 无 date 参数时默认 CST 昨日）
 
 ### 环境变量（与代码 `backend/src/config/env.ts` 键名逐一对应）
@@ -96,8 +97,8 @@ docker push <TCR仓库>/acm-scf-job:<tag>
 | `COS_SECRET_ID` / `COS_SECRET_KEY` | 日志桶读取凭证 |
 | `COS_BUCKET` | `wow-warden-1259353115` |
 | `COS_REGION` | `ap-beijing` |
-| `FEISHU_WEBHOOK_URL` / `FEISHU_WEBHOOK_SECRET` | 日报/断传告警推送（含加签） |
-| `ACM_WEB_BASE_URL` | 日报卡片跳转 Web 基地址 |
+| `FEISHU_WEBHOOK_URL` / `FEISHU_WEBHOOK_SECRET` | 日报/断传告警推送（含加签）；可选，已支持系统配置页维护，DB 值优先 |
+| `ACM_WEB_BASE_URL` | 日报卡片跳转 Web 基地址；可选，已支持系统配置页维护 |
 | `TZ` | 建议值 `Asia/Shanghai`：「昨日」日期计算内建 CST 偏移不依赖时区（`yesterdayCST`），TZ 影响的是函数日志时间戳可读性 |
 
 ### 模型配置前置

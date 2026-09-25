@@ -4,6 +4,7 @@ import { AlertCircle, ChevronDown, Loader2, Wrench, X } from 'lucide-react';
 import { CopyButton } from '@/shared/components/CopyButton';
 import { Markdown } from '@/shared/components/Markdown';
 import { TimeRangeFilter } from '@/shared/components/TimeRangeFilter';
+import { useDefaultRealm } from '@/features/system-config/hooks/useSystemConfig';
 import { streamTargetedAnalysis, type AnalysisConclusion, type TargetedAnalysisInput, type TargetedSubjectType, type ToolResultEvent } from '../api/ai-analysis.api';
 
 // 定向分析发起（T4.6，需求 3.8 申诉研判）：单一对象 + 时间范围，SSE 过程展示，
@@ -147,7 +148,8 @@ export function TargetedAnalysisRunner({ onFinished }: { onFinished?: () => void
 
   const [subjectType, setSubjectType] = useState<TargetedSubjectType>(preset.subjectType ?? 'character');
   const [subjectName, setSubjectName] = useState(preset.subjectName ?? '');
-  const [realm, setRealm] = useState('realm3');
+  const defaultRealm = useDefaultRealm();
+  const [realm, setRealm] = useState('');
   const [timeFrom, setTimeFrom] = useState(localDate(new Date(Date.now() - 6 * 86400000)));
   const [timeTo, setTimeTo] = useState(localDate(new Date()));
   const [banReason, setBanReason] = useState('');
@@ -166,8 +168,13 @@ export function TargetedAnalysisRunner({ onFinished }: { onFinished?: () => void
     if (textRef.current) textRef.current.scrollTop = textRef.current.scrollHeight;
   }, [text, running]);
 
+  useEffect(() => {
+    if (defaultRealm) setRealm((prev) => prev || defaultRealm);
+  }, [defaultRealm]);
+
   const spanDays = Math.round((new Date(timeTo).getTime() - new Date(timeFrom).getTime()) / 86400000);
-  const canSubmit = !running && subjectName.trim() !== '' && spanDays >= 0 && spanDays <= 31;
+  const canSubmit =
+    !running && subjectName.trim() !== '' && realm.trim() !== '' && spanDays >= 0 && spanDays <= 31;
 
   const start = (): void => {
     const input: TargetedAnalysisInput = {

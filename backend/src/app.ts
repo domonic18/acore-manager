@@ -18,6 +18,7 @@ import ipBanRoutes from './routes/ip-ban.routes';
 import banlistRoutes from './routes/banlist.routes';
 import muteRoutes from './routes/mute.routes';
 import rbacRoutes from './routes/rbac.routes';
+import systemConfigRoutes from './routes/system-config.routes';
 import aiModelConfigRoutes from './routes/ai-model-config.routes';
 import aiTokenUsageRoutes from './routes/ai-token-usage.routes';
 import aiDiagnosisRoutes from './routes/ai-diagnosis.routes';
@@ -70,6 +71,7 @@ export function createApp(): Application {
   app.use('/api/audit', auditLogRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/rbac', rbacRoutes);
+  app.use('/api/system-config', systemConfigRoutes);
   app.use('/api/ai/model-configs', aiModelConfigRoutes);
   app.use('/api/ai/token-usage', aiTokenUsageRoutes);
   app.use('/api/ai/diagnosis', aiDiagnosisRoutes);

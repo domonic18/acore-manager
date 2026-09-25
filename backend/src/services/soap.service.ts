@@ -1,6 +1,6 @@
 import { request } from 'http';
-import { soapConn } from '@/config/env';
 import { logger } from '@/middleware/request-logger';
+import { systemConfigService } from '@/services/system-config.service';
 
 // command 注入 SOAP 文本节点：GM 可编辑内容（广播/邮件正文）可能含 & < > 等字符，
 // 不转义会破坏请求 XML；worldserver 收到的是反转义后的原文
@@ -9,14 +9,16 @@ function escapeXml(text: string): string {
 }
 
 export class SoapService {
-  sendCommand(command: string): Promise<string> {
+  async sendCommand(command: string): Promise<string> {
+    // 每次调用读配置（DB 优先，回落 SOAP_URL 环境变量），系统配置页改库即热生效
+    const conn = await systemConfigService.getSoapConn();
     return new Promise((resolve, reject) => {
       const req = request(
         {
-          hostname: soapConn.host,
-          port: soapConn.port,
+          hostname: conn.host,
+          port: conn.port,
           method: 'POST',
-          auth: `${soapConn.user}:${soapConn.pass}`,
+          auth: `${conn.user}:${conn.pass}`,
           timeout: 5000,
         },
         (res) => {

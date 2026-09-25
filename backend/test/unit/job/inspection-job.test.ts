@@ -8,9 +8,13 @@ jest.mock('@/middleware/request-logger', () => ({
 jest.mock('@/services/ai/inspection.service', () => ({
   inspectionService: { run: jest.fn().mockResolvedValue({ ok: true, realm: 'r', date: 'd', reportId: 1, error: null, elapsedMs: 1 }) },
 }));
+jest.mock('@/config/system-config.reader', () => ({
+  readDefaultRealm: jest.fn().mockResolvedValue('realm3'),
+}));
 
 import { inspectionService } from '@/services/ai/inspection.service';
 import { initializeDataSourcesWithRetry } from '@/config/database';
+import { readDefaultRealm } from '@/config/system-config.reader';
 import { parseJobArgs, runJob } from '@/job/inspection-job';
 
 // 上海时区（UTC+8）边界：SCF 06:00 CST 触发时按 CST"昨日"取数，与 UTC 错位一天
@@ -34,8 +38,11 @@ describe('inspection-job: parseJobArgs', () => {
     expect(parseJobArgs(['--realm=realm3'], CST_LAST_MIN).date).toBe('2026-09-21');
   });
 
-  it('rejects missing realm, malformed date, unsupported trigger and unknown args', () => {
-    expect(() => parseJobArgs([], CST_MIDNIGHT)).toThrow(/--realm/);
+  it('allows missing realm (resolved from system config at run time)', () => {
+    expect(parseJobArgs([], CST_MIDNIGHT)).toEqual({ realm: undefined, date: '2026-09-22', trigger: 'cron' });
+  });
+
+  it('rejects malformed date, unsupported trigger and unknown args', () => {
     expect(() => parseJobArgs(['--realm=r', '--date=20260822'], CST_MIDNIGHT)).toThrow(/YYYY-MM-DD/);
     expect(() => parseJobArgs(['--realm=r', '--trigger=chat'], CST_MIDNIGHT)).toThrow(/trigger/);
     expect(() => parseJobArgs(['--realm=r', '--verbose'], CST_MIDNIGHT)).toThrow(/未知参数/);
@@ -63,8 +70,15 @@ describe('inspection-job: runJob exit codes', () => {
   });
 
   it('returns 2 on invalid args without entering the inspection flow', async () => {
-    await expect(runJob([])).resolves.toBe(2);
+    await expect(runJob(['--date=20260822'])).resolves.toBe(2);
     expect(initializeDataSourcesWithRetry).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the system default realm when --realm is omitted', async () => {
+    (inspectionService.run as jest.Mock).mockResolvedValueOnce({ ok: true });
+    await expect(runJob([])).resolves.toBe(0);
+    expect(readDefaultRealm).toHaveBeenCalled();
+    expect(inspectionService.run).toHaveBeenCalledWith({ realm: 'realm3', date: '2026-09-22', trigger: 'cron' });
   });
 
   it('returns 2 when data sources are unreachable', async () => {

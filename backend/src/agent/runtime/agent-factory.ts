@@ -3,6 +3,7 @@ import { cpSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { env } from '@/config/env';
+import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { buildModelClient, modelFingerprint, ResolvedModelConfig } from './model-factory';
 import { getCheckpointer } from './checkpointer';
@@ -33,6 +34,7 @@ const cache = new Map<string, CacheEntry>();
 export async function getAgent(cfg: ResolvedModelConfig, scene: AgentScene): Promise<DeepAgentInstance> {
   const key = `${scene}:${modelFingerprint(cfg)}`;
   evictIdle();
+  const maxSize = await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiAgentCacheSize, env.AI_AGENT_CACHE_SIZE);
 
   const hit = cache.get(key);
   if (hit) {
@@ -44,7 +46,7 @@ export async function getAgent(cfg: ResolvedModelConfig, scene: AgentScene): Pro
 
   const agent = await buildAgent(cfg, scene);
   cache.set(key, { agent, lastUsed: Date.now() });
-  evictOverflow();
+  evictOverflow(maxSize);
   logger.info(`[agent-factory] built agent scene=${scene} config=${cfg.name} cacheSize=${cache.size}`);
   return agent;
 }
@@ -90,8 +92,8 @@ function evictIdle(): void {
   }
 }
 
-function evictOverflow(): void {
-  const max = Math.max(1, env.AI_AGENT_CACHE_SIZE);
+function evictOverflow(maxSize: number): void {
+  const max = Math.max(1, maxSize);
   while (cache.size > max) {
     const oldest = cache.keys().next().value as string | undefined;
     if (!oldest) break;

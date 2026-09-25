@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import '@/config/load-env';
 import { initializeDataSourcesWithRetry } from '@/config/database';
+import { readDefaultRealm } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { inspectionService, InspectionTrigger } from '@/services/ai/inspection.service';
 import { yesterdayCST } from '@/shared/utils/cst-date.util';
@@ -8,9 +9,10 @@ import { yesterdayCST } from '@/shared/utils/cst-date.util';
 // T3.3 Job 函数形态：SCF 定时触发的一次性巡检入口（docker/Dockerfile.job CMD 直接执行）。
 // 退出码语义：0 = 巡检成功；1 = 巡检失败（服务内部已落 failed 行并告警）；2 = 启动致命错误
 // （参数非法 / 数据源不可达），未进入巡检流程。
+// --realm 可省略：数据源就绪后回落读 acm_system_config 的 default_realm（SCF 触发器不便动态传参）。
 
 export interface JobArgs {
-  realm: string;
+  realm: string | undefined;
   date: string;
   trigger: InspectionTrigger;
 }
@@ -31,7 +33,6 @@ export function parseJobArgs(argv: string[], now: Date = new Date()): JobArgs {
       throw new Error(`未知参数 ${arg}（支持 --realm=<realm> --date=YYYY-MM-DD --trigger=cron|manual）`);
     }
   }
-  if (!realm) throw new Error('缺少必填参数 --realm=<realm>');
   if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new Error(`--date 需为 YYYY-MM-DD，收到 ${date}`);
   }
@@ -63,7 +64,10 @@ export async function runJob(argv: string[]): Promise<number> {
     return 2;
   }
 
-  const outcome = await inspectionService.run({ realm: args.realm, date: args.date, trigger: args.trigger });
+  // realm 回落必须在数据源就绪之后（default_realm 存于 acm PG）
+  const realm = args.realm ?? (await readDefaultRealm());
+
+  const outcome = await inspectionService.run({ realm, date: args.date, trigger: args.trigger });
   logger.info(`[inspection-job] realm=${args.realm} date=${args.date} ok=${outcome.ok} reportId=${outcome.reportId} elapsedMs=${outcome.elapsedMs}`);
   return outcome.ok ? 0 : 1;
 }

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import svgCaptcha from 'svg-captcha';
 import { redis } from '@/config/redis';
 import { env } from '@/config/env';
+import { readRuntimeBool, readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 
 export interface CaptchaResult {
@@ -15,12 +16,12 @@ export interface CaptchaVerifyParams {
 }
 
 export class CaptchaService {
-  private get enabled(): boolean {
-    return env.LOGIN_CAPTCHA_ENABLED;
+  private async isEnabled(): Promise<boolean> {
+    return readRuntimeBool(SYSTEM_CONFIG_KEYS.loginCaptchaEnabled, env.LOGIN_CAPTCHA_ENABLED);
   }
 
-  private get ttlSeconds(): number {
-    return env.LOGIN_CAPTCHA_TTL_SECONDS;
+  private async ttlSeconds(): Promise<number> {
+    return readRuntimeNumber(SYSTEM_CONFIG_KEYS.loginCaptchaTtlSeconds, env.LOGIN_CAPTCHA_TTL_SECONDS);
   }
 
   private buildKey(sessionId: string): string {
@@ -28,7 +29,7 @@ export class CaptchaService {
   }
 
   async generate(): Promise<CaptchaResult | null> {
-    if (!this.enabled) {
+    if (!(await this.isEnabled())) {
       return null;
     }
 
@@ -44,7 +45,7 @@ export class CaptchaService {
       });
 
       const sessionId = crypto.randomUUID();
-      await redis.setex(this.buildKey(sessionId), this.ttlSeconds, text.toLowerCase());
+      await redis.setex(this.buildKey(sessionId), await this.ttlSeconds(), text.toLowerCase());
 
       return { sessionId, svg: data };
     } catch (error) {
@@ -54,7 +55,7 @@ export class CaptchaService {
   }
 
   async verify(params: CaptchaVerifyParams): Promise<boolean> {
-    if (!this.enabled) {
+    if (!(await this.isEnabled())) {
       return true;
     }
 

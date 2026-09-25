@@ -5,6 +5,7 @@ import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
 import { env } from '@/config/env';
+import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { ServiceError, llmConfigService } from '@/services/ai/llm-config.service';
 import { ServiceError as SessionServiceError, chatSessionService } from '@/services/ai/chat-session.service';
@@ -44,7 +45,7 @@ async function startRound(req: AuthRequest, res: Response, sessionId: number, me
   const config = {
     configurable: {
       thread_id: session.threadId,
-      budget: new BudgetGuard(env.AI_TOOL_CALL_BUDGET),
+      budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
       refId: session.threadId,
     },
   };

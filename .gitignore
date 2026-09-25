@@ -47,3 +47,5 @@ tmp/
 *.pid
 *.seed
 *.pid.lock
+
+.cc-connect

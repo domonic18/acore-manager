@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { acmDataSource } from '@/config/database';
 import { env } from '@/config/env';
+import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { AiTargetedAnalysis } from '@/entities/acm/ai-targeted-analysis.entity';
 import { streamAgentEvents, type AgentSseEvent } from '@/agent/runtime/wire';
@@ -88,7 +89,7 @@ class TargetedAnalysisService {
       const config = {
         configurable: {
           thread_id: `targeted:${analysisId}:${randomUUID()}`,
-          budget: new BudgetGuard(env.AI_TOOL_CALL_BUDGET),
+          budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
           refId: `analysis:${analysisId}`,
         },
       };

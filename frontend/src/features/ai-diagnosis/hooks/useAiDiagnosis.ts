@@ -72,6 +72,13 @@ export function useCreateExemption() {
   });
 }
 
+export function useTriggerInspection() {
+  // 受理即返回，报告 1-2 分钟后才生成，故不做查询失效（toast 提示手动刷新）
+  return useMutation({
+    mutationFn: aiDiagnosisApi.triggerInspection,
+  });
+}
+
 export function useMailTemplate(enabled: boolean) {
   return useQuery({
     queryKey: ['ai-diagnosis', 'mail-template'],

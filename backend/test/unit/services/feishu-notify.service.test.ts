@@ -78,8 +78,13 @@ describe('feishu-notify: sign and business code', () => {
   });
 });
 
-describe('feishu-notify: daily report card', () => {
-  it('posts an interactive card with metrics, top risks and note', async () => {
+describe('feishu-notify: daily report card (JSON 2.0 markdown)', () => {
+  const mdContents = (card: ReturnType<typeof feishuNotifyService.buildDailyReportCard>): string[] =>
+    ((card.body as { elements: Array<{ tag: string; content?: string }> }).elements ?? [])
+      .filter((e) => e.tag === 'markdown')
+      .map((e) => e.content ?? '');
+
+  it('posts a GM briefing: verdict, metrics list, top players and recommendations', async () => {
     const card = feishuNotifyService.buildDailyReportCard(baseInput);
     await expect(feishuNotifyService.sendDailyReportCard(baseInput)).resolves.toBe(true);
 
@@ -88,28 +93,30 @@ describe('feishu-notify: daily report card', () => {
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"msg_type":"interactive"') }),
     );
 
-    // 夹具含 high 玩家 → 红 header；纯绿场景见下方"无可疑玩家"用例
-    expect(card.header).toMatchObject({ template: 'red', title: { content: 'realm3 每日巡检报告（2026-08-22）' } });
-    const fields = (card.elements as Array<{ tag: string; fields?: unknown[] }>)[0].fields as Array<{ text: { content: string } }>;
-    expect(fields.map((f) => f.text.content)).toEqual([
-      expect.stringContaining('82'),
-      expect.stringContaining('2 名'),
-      expect.stringContaining('1'),
-      expect.stringContaining('2'),
-      expect.stringContaining('0'),
-    ]);
-    const texts = (card.elements as Array<{ tag: string; text?: { content: string } }>)
-      .filter((e) => e.tag === 'div' && e.text)
-      .map((e) => e.text!.content);
-    const joined = texts.join('\n');
-    // 每名玩家一个结构化块：风险标签 + 建议处置，高危排前
-    expect(joined).toContain('【高危】HighGuy');
-    expect(joined).toContain('建议处置：**ban**');
+    // 卡片 JSON 2.0：schema 2.0 + header + body.elements；夹具含 high 玩家 → 红 header
+    expect(card).toMatchObject({ schema: '2.0' });
+    expect(card.header).toMatchObject({ template: 'red', title: { content: 'realm3 每日巡检简报（2026-08-22）' } });
+
+    const mds = mdContents(card);
+    const joined = mds.join('\n');
+    // 总体研判 + summary 进卡片，红色高亮（高危 → red）
+    expect(joined).toContain("<font color='red'>**总体研判：发现 1 名高危玩家，建议今日处置**</font>");
+    expect(joined).toContain('总体平稳');
+    // 指标清单：健康评分 / 风险玩家分布 / 建议封禁 / 崩溃错误 / 认证异常 / 数据完整性
+    expect(joined).toContain("**82 / 100**"); // 82 ≥ 80 → 绿
+    expect(joined).toContain("**2 名**（<font color='red'>高 1</font> · 中 0 · 低 1）");
+    expect(joined).toContain("<font color='red'>**1 名**</font>");
+    expect(joined).toContain('- **崩溃 / 错误**：1 / 2');
+    expect(joined).toContain('- **认证异常**：0');
+    expect(joined).toContain("<font color='green'>四类日志齐全</font>");
+    // 每名玩家一个结构化块：风险标签（红/橙/灰着色）+ 中文处置 + 依据，高危排前
+    expect(joined).toContain("<font color='red'>**【高危】HighGuy**</font> · 建议：**封禁**");
+    expect(joined).toContain("<font color='grey'>**【低危】LowGuy**</font> · 建议：**提醒**");
+    expect(joined).toContain('依据：穿墙');
     expect(joined.indexOf('HighGuy')).toBeLessThan(joined.indexOf('LowGuy'));
-    expect(joined).toContain('处置建议');
-    expect(joined).toContain('优先处置 HighGuy');
-    // 整段 summary 文字不再进卡片
-    expect(joined).not.toContain('总体平稳');
+    expect(joined).toContain('**处置建议**');
+    expect(joined).toContain('- 优先处置 HighGuy');
+    // 未配置 web 基地址 → 无跳转按钮
     expect(JSON.stringify(card)).not.toContain('查看完整报告');
   });
 
@@ -119,13 +126,68 @@ describe('feishu-notify: daily report card', () => {
       suspiciousPlayers: [{ ...baseInput.suspiciousPlayers[1], falsePositiveSignals: ['平均延迟 131.7 ms > 100 ms'] }],
     });
     expect(JSON.stringify(card)).toContain('误报信号 1 项');
-    expect(JSON.stringify(card)).toContain('不建议直接封禁');
+    expect(JSON.stringify(card)).toContain('处置前请人工复核');
   });
 
-  it('turns the header red on high severity or low health score', () => {
+  it('lists data gaps and flags potentially understated conclusions', () => {
+    const card = feishuNotifyService.buildDailyReportCard({ ...baseInput, dataGaps: ['worldserver 日志缺失'] });
+    const text = JSON.stringify(card);
+    expect(text).toContain("<font color='red'>缺失：worldserver 日志缺失</font>");
+    expect(text).toContain('相关结论可能低估');
+    expect(card.header).toMatchObject({ template: 'red' }); // 高危玩家仍在 → 红
+  });
+
+  it('colors verdict and health score by tier (red / orange / green)', () => {
+    // 高危 → verdict 红色；低分 → 评分红色
+    const red = mdContents(feishuNotifyService.buildDailyReportCard({ ...baseInput, healthScore: 55 })).join('\n');
+    expect(red).toContain("<font color='red'>**总体研判：发现 1 名高危玩家");
+    expect(red).toContain("<font color='red'>**55 / 100**</font>");
+    // 中危 → verdict 橙色；80 分 → 评分橙色
+    const mediumOnly = feishuNotifyService.buildDailyReportCard({
+      ...baseInput,
+      healthScore: 75,
+      suspiciousPlayers: [{ character: 'MidGuy', severity: 'medium', suggestedAction: 'investigate', reasons: [], evidence: [], falsePositiveSignals: [] }],
+    });
+    const yellow = mdContents(mediumOnly).join('\n');
+    expect(yellow).toContain("<font color='orange'>**总体研判：发现 1 名可疑玩家");
+    expect(yellow).toContain("<font color='orange'>**75 / 100**</font>");
+    // 全净 → verdict 绿色
+    const calm = mdContents(
+      feishuNotifyService.buildDailyReportCard({
+        ...baseInput,
+        healthScore: 90,
+        suspiciousPlayers: [],
+        serverHealth: { crashes: [], errors: [], authAnomalies: [] },
+        recommendations: [],
+      }),
+    ).join('\n');
+    expect(calm).toContain("<font color='green'>**总体研判：服务器运行平稳，未发现风险**</font>");
+  });
+
+  it('uses the three-tier header: red for high risk, yellow for attention, green for calm', () => {
+    // 红色：健康分低
     expect(feishuNotifyService.buildDailyReportCard({ ...baseInput, healthScore: 55 }).header).toMatchObject({ template: 'red' });
-    const card = feishuNotifyService.buildDailyReportCard({ ...baseInput, healthScore: 90 });
-    expect(card.header).toMatchObject({ template: 'red' }); // high 玩家仍触发红色
+    // 红色：高危玩家
+    expect(feishuNotifyService.buildDailyReportCard({ ...baseInput, healthScore: 90 }).header).toMatchObject({ template: 'red' });
+    // 黄色：仅中危玩家、健康分高
+    const mediumOnly = feishuNotifyService.buildDailyReportCard({
+      ...baseInput,
+      healthScore: 90,
+      suspiciousPlayers: [{ character: 'MidGuy', severity: 'medium', suggestedAction: 'investigate', reasons: [], evidence: [], falsePositiveSignals: [] }],
+    });
+    expect(mediumOnly.header).toMatchObject({ template: 'yellow' });
+    // 黄色：无玩家但有数据缺口
+    const gapOnly = feishuNotifyService.buildDailyReportCard({ ...baseInput, healthScore: 90, suspiciousPlayers: [], dataGaps: ['crash 日志缺失'] });
+    expect(gapOnly.header).toMatchObject({ template: 'yellow' });
+    // 绿色：全净
+    const calm = feishuNotifyService.buildDailyReportCard({
+      ...baseInput,
+      healthScore: 90,
+      suspiciousPlayers: [],
+      serverHealth: { crashes: [], errors: [], authAnomalies: [] },
+      recommendations: [],
+    });
+    expect(calm.header).toMatchObject({ template: 'green' });
   });
 
   it('renders the report link button only when the web base url is configured', async () => {
@@ -135,8 +197,14 @@ describe('feishu-notify: daily report card', () => {
   });
 
   it('shows a calm line when no suspicious players', () => {
-    const card = feishuNotifyService.buildDailyReportCard({ ...baseInput, suspiciousPlayers: [], healthScore: 90 });
-    expect(JSON.stringify(card)).toContain('本日无可疑玩家');
+    const card = feishuNotifyService.buildDailyReportCard({
+      ...baseInput,
+      suspiciousPlayers: [],
+      healthScore: 90,
+      serverHealth: { crashes: [], errors: [], authAnomalies: [] },
+    });
+    expect(JSON.stringify(card)).toContain('本日未发现可疑玩家');
+    expect(JSON.stringify(card)).toContain('服务器运行平稳，未发现风险');
     expect(card.header).toMatchObject({ template: 'green' });
   });
 });

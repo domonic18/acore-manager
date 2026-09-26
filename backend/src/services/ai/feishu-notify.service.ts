@@ -2,7 +2,7 @@ import { createHmac } from 'crypto';
 import { env } from '@/config/env';
 import { readRuntimeValues, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
-import type { InspectionReportJson } from './inspection.service';
+import type { InspectionReportJson } from '@/agent/tools/report-tools';
 import type { InspectionInput } from './inspection.service';
 
 // 飞书群机器人 webhook 通知，AI 域告警统一出口（Token 预算超限 / 巡检失败 / 日志断传等）。
@@ -16,12 +16,22 @@ type FeishuPayload = Record<string, unknown>;
 
 export type DailyReportCardInput = Pick<InspectionInput, 'realm' | 'date' | 'trigger'> &
   Pick<InspectionReportJson, 'healthScore' | 'summary' | 'serverHealth' | 'suspiciousPlayers' | 'recommendations'> & {
+    /** 当日日志缺口（manifest 缺失 / 某类日志断传），有缺口时简报明示"结论可能低估" */
+    dataGaps?: string[];
     /** 由调用方注入的系统配置 web 基地址；缺省回落 env.ACM_WEB_BASE_URL */
     webBaseUrl?: string;
   };
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 const SEVERITY_LABEL = { high: '高危', medium: '中危', low: '低危' } as const;
+const SEVERITY_COLOR = { high: 'red', medium: 'orange', low: 'grey' } as const;
+const ACTION_LABEL = { ban: '封禁', investigate: '人工核查', warning: '提醒' } as const;
+const ACTION_ORDER = { ban: 0, investigate: 1, warning: 2 } as const;
+const TOP_PLAYERS_IN_CARD = 5;
+
+// 卡片 JSON 2.0 的 markdown 组件：支持标准 Markdown 与 <font color> 着色
+const mdEl = (content: string): FeishuCard => ({ tag: 'markdown', content });
+const fontColor = (color: string, text: string): string => `<font color='${color}'>${text}</font>`;
 
 class FeishuNotifyService {
   async sendText(text: string): Promise<boolean> {
@@ -70,80 +80,113 @@ class FeishuNotifyService {
     }
   }
 
+  // GM 简报卡片（JSON 2.0，markdown 组件排版 + 颜色高亮）：
+  // 研判结论 → 关键指标清单 → 今日重点关注（TOP 玩家）→ 处置建议 → 报告跳转。
+  // 头部颜色三档：红=需立即处置（高危玩家或低健康分）、黄=需关注（有可疑/异常/数据缺口）、绿=平稳。
+  // 颜色语义：红=高危/封禁/缺失，橙=中危/低分需关注，绿=健康/齐全。
   buildDailyReportCard(input: DailyReportCardInput): FeishuCard {
     const { realm, date, healthScore } = input;
+    const players = [...(input.suspiciousPlayers ?? [])].sort(
+      (a, b) =>
+        SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
+        (ACTION_ORDER[a.suggestedAction] ?? 9) - (ACTION_ORDER[b.suggestedAction] ?? 9),
+    );
+    const high = players.filter((p) => p.severity === 'high').length;
+    const medium = players.filter((p) => p.severity === 'medium').length;
+    const low = players.length - high - medium;
+    const banCount = players.filter((p) => p.suggestedAction === 'ban').length;
     const crashes = input.serverHealth.crashes?.length ?? 0;
     const errors = input.serverHealth.errors?.length ?? 0;
     const authAnomalies = input.serverHealth.authAnomalies?.length ?? 0;
-    const suspicious = input.suspiciousPlayers.length;
+    const dataGaps = input.dataGaps ?? [];
 
-    const top = [...input.suspiciousPlayers]
-      .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
-      .slice(0, 3);
-    const risky = top.some((p) => p.severity === 'high') || healthScore < 60;
+    const template =
+      high > 0 || healthScore < 60
+        ? 'red'
+        : players.length > 0 || crashes + errors + authAnomalies > 0 || dataGaps.length > 0
+          ? 'yellow'
+          : 'green';
+    const verdict =
+      high > 0
+        ? `发现 ${high} 名高危玩家，建议今日处置`
+        : players.length > 0
+          ? `发现 ${players.length} 名可疑玩家，建议关注`
+          : crashes + errors + authAnomalies > 0
+            ? '服务器存在异常记录，未发现作弊风险'
+            : '服务器运行平稳，未发现风险';
+
+    const summaryText = (input.summary ?? '').trim();
+    const summaryLine = summaryText.length > 200 ? `${summaryText.slice(0, 200)}…` : summaryText;
+    const verdictColor = template === 'red' ? 'red' : template === 'yellow' ? 'orange' : 'green';
+    const scoreColor = healthScore < 60 ? 'red' : healthScore < 80 ? 'orange' : 'green';
+
+    const metricLines = [
+      `- **健康评分**：${fontColor(scoreColor, `**${healthScore} / 100**`)}`,
+      `- **风险玩家**：**${players.length} 名**（${high > 0 ? fontColor('red', `高 ${high}`) : `高 ${high}`} · ${
+        medium > 0 ? fontColor('orange', `中 ${medium}`) : `中 ${medium}`
+      } · 低 ${low}）`,
+      `- **建议封禁**：${banCount > 0 ? fontColor('red', `**${banCount} 名**`) : '0 名'}`,
+      `- **崩溃 / 错误**：${crashes} / ${errors}`,
+      `- **认证异常**：${authAnomalies}`,
+      `- **数据完整性**：${dataGaps.length > 0 ? fontColor('red', `缺失：${dataGaps.join('、')}`) : fontColor('green', '四类日志齐全')}`,
+    ];
 
     const elements: FeishuCard[] = [
-      {
-        tag: 'div',
-        fields: [
-          this.field('健康分', String(healthScore)),
-          this.field('可疑玩家', `${suspicious} 名`),
-          this.field('崩溃', String(crashes)),
-          this.field('错误', String(errors)),
-          this.field('认证异常', String(authAnomalies)),
-        ],
-      },
+      mdEl([fontColor(verdictColor, `**总体研判：${verdict}**`), summaryLine].filter(Boolean).join('\n')),
+      { tag: 'hr' },
+      mdEl(metricLines.join('\n')),
       { tag: 'hr' },
     ];
 
-    // 每名玩家一个结构化块：风险级别 → 处置 → 误报信号 → 首条依据，替代整段 summary 文字
-    if (top.length === 0) {
-      elements.push({ tag: 'div', text: { tag: 'lark_md', content: '**本日无可疑玩家**' } });
+    // 每名玩家一个结构化块：风险级别 → 建议处置 → 依据 → 误报提醒，按严重度与处置力度排序
+    if (players.length === 0) {
+      elements.push(mdEl('本日未发现可疑玩家。'));
+    } else {
+      elements.push(mdEl(`**今日重点关注（TOP ${Math.min(players.length, TOP_PLAYERS_IN_CARD)}）**`));
+      const blocks = players.slice(0, TOP_PLAYERS_IN_CARD).map((p) => {
+        const fp = p.falsePositiveSignals?.length ?? 0;
+        const lines = [
+          `${fontColor(SEVERITY_COLOR[p.severity] ?? 'grey', `**【${SEVERITY_LABEL[p.severity] ?? p.severity}】${p.character}**`)} · 建议：**${
+            ACTION_LABEL[p.suggestedAction] ?? p.suggestedAction
+          }**`,
+        ];
+        if (p.account) lines.push(`账号：${p.account}`);
+        const reason = (p.reasons?.[0] ?? '').slice(0, 100);
+        const evidenceCount = p.evidence?.length ?? 0;
+        lines.push(`依据：${reason}${evidenceCount > 1 ? `（另有证据 ${evidenceCount - 1} 条）` : ''}`);
+        if (fp > 0) lines.push(`注意：误报信号 ${fp} 项，处置前请人工复核`);
+        return lines.join('\n');
+      });
+      elements.push(mdEl(blocks.join('\n\n')));
     }
-    for (const p of top) {
-      const fp = p.falsePositiveSignals?.length ?? 0;
-      const lines = [
-        `**【${SEVERITY_LABEL[p.severity] ?? p.severity}】${p.character}** 建议处置：**${p.suggestedAction}**`,
-      ];
-      if (fp > 0) lines.push(`误报信号 ${fp} 项（不建议直接封禁）`);
-      lines.push(`依据：${(p.reasons?.[0] ?? '').slice(0, 90)}`);
-      elements.push({ tag: 'div', text: { tag: 'lark_md', content: lines.join('\n') } });
+    if (dataGaps.length > 0) {
+      elements.push(mdEl(`**数据不完整**：${fontColor('red', dataGaps.join('、'))}（相关结论可能低估）`));
     }
     if (input.recommendations?.length) {
       elements.push({ tag: 'hr' });
-      elements.push({
-        tag: 'div',
-        text: { tag: 'lark_md', content: `**处置建议**\n${input.recommendations.slice(0, 2).map((r) => `- ${r.slice(0, 90)}`).join('\n')}` },
-      });
+      elements.push(mdEl([`**处置建议**`, ...input.recommendations.slice(0, 3).map((r) => `- ${r.slice(0, 100)}`)].join('\n')));
     }
 
-    // 报告页由 T4.0 提供；配置了基础地址才渲染跳转按钮
+    // 报告页由 T4.0 提供；配置了基础地址才渲染跳转按钮（2.0 按钮跳转走 behaviours.open_url）
     const webBaseUrl = input.webBaseUrl ?? env.ACM_WEB_BASE_URL;
     if (webBaseUrl) {
       elements.push({
-        tag: 'action',
-        actions: [
-          {
-            tag: 'button',
-            text: { tag: 'plain_text', content: '查看完整报告' },
-            type: 'primary',
-            url: `${webBaseUrl.replace(/\/$/, '')}/ai-reports/${realm}/${date}`,
-          },
-        ],
+        tag: 'button',
+        type: 'primary',
+        text: { tag: 'plain_text', content: '查看完整报告' },
+        behaviours: { open_url: { default_url: `${webBaseUrl.replace(/\/$/, '')}/ai-reports/${realm}/${date}` } },
       });
     }
-    elements.push({
-      tag: 'note',
-      elements: [{ tag: 'plain_text', content: `ACM AI 巡检自动生成 · trigger=${input.trigger} · ${date}` }],
-    });
+    // 2.0 不再支持 note 组件，脚注用灰色 markdown 文字代替
+    elements.push(mdEl(fontColor('grey', `ACM AI 巡检自动生成 · trigger=${input.trigger} · ${date}`)));
 
     return {
-      config: { wide_screen_mode: true },
+      schema: '2.0',
       header: {
-        template: risky ? 'red' : 'green',
-        title: { tag: 'plain_text', content: `${realm} 每日巡检报告（${date}）` },
+        template,
+        title: { tag: 'plain_text', content: `${realm} 每日巡检简报（${date}）` },
       },
-      elements,
+      body: { elements },
     };
   }
 
@@ -151,10 +194,6 @@ class FeishuNotifyService {
     const cfg = await readRuntimeValues([SYSTEM_CONFIG_KEYS.acmWebBaseUrl]);
     const webBaseUrl = cfg.get(SYSTEM_CONFIG_KEYS.acmWebBaseUrl);
     return this.sendCard(this.buildDailyReportCard(webBaseUrl ? { ...input, webBaseUrl } : input));
-  }
-
-  private field(title: string, content: string): FeishuCard {
-    return { is_short: true, text: { tag: 'lark_md', content: `**${title}**\n${content}` } };
   }
 }
 

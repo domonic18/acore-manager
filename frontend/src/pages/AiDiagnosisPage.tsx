@@ -4,6 +4,7 @@ import { useReports } from '@/features/ai-diagnosis/hooks/useAiDiagnosis';
 import { useDefaultRealm } from '@/features/system-config/hooks/useSystemConfig';
 import { UploadStatusStrip } from '@/features/ai-diagnosis/components/UploadStatusStrip';
 import { ReportCalendar } from '@/features/ai-diagnosis/components/ReportCalendar';
+import { TriggerInspectionButton } from '@/features/ai-diagnosis/components/TriggerInspectionButton';
 
 export default function AiDiagnosisPage() {
   const navigate = useNavigate();
@@ -64,6 +65,7 @@ export default function AiDiagnosisPage() {
             >
               筛选
             </button>
+            <TriggerInspectionButton realm={realmInput.trim() || undefined} date={dateFilter || undefined} />
           </div>
 
           {realm && <UploadStatusStrip realm={realm} />}

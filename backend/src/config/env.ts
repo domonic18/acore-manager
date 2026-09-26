@@ -171,6 +171,15 @@ export const env = {
   COS_BUCKET: getEnv('COS_BUCKET', ''),
   COS_REGION: getEnv('COS_REGION', ''),
 
+  // Tencent SCF (Job 函数异步触发，控制面专用；四项主配置缺任一则触发接口快速失败)
+  TENCENT_SECRET_ID: getEnv('TENCENT_SECRET_ID', ''),
+  TENCENT_SECRET_KEY: getEnv('TENCENT_SECRET_KEY', ''),
+  SCF_REGION: getEnv('SCF_REGION', ''),
+  SCF_NAMESPACE: getEnv('SCF_NAMESPACE', 'default'),
+  SCF_JOB_FUNCTION_NAME: getEnv('SCF_JOB_FUNCTION_NAME', ''),
+  // 留空 = 腾讯云真实端点；本地容器联调指向 scf-mock（同 AWS_ENDPOINT_URL 的端点覆盖惯例，非模式开关）
+  SCF_ENDPOINT: getEnv('SCF_ENDPOINT', ''),
+
 
   // Redis (connection via REDIS_URL)
   REDIS_EXPIRE_TIME: getEnvInt('REDIS_EXPIRE_TIME', 300),

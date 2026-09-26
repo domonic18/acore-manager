@@ -1,0 +1,33 @@
+# 本地 Docker 全链路验证叠加文件（不改动生产 docker-compose.yml）：
+# web 容器 →（TC3 签名 Invoke，SCF_ENDPOINT 指向 scf-mock）→ scf-mock 复核签名并派生 job 容器。
+# 用法：
+#   cp .env.e2e.example .env.e2e   # 把连接串 host 换成 host.docker.internal
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build app scf-mock
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml logs -f scf-mock
+services:
+  scf-mock:
+    build: docker/scf-mock
+    ports:
+      - "9011:9011" # 便于绕过 web 直接 curl 调试
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # sibling 容器派生
+      - .:/repo:ro # job 镜像缺失时的自动构建上下文
+    env_file:
+      - .env # job 白名单 env 的基础来源
+      - .env.e2e # 容器可达性覆盖（host.docker.internal），后文件胜出
+    environment:
+      - TENCENT_SECRET_ID=local-mock-id # 与 app 一致的哑凭证（签名复核用，非真实密钥）
+      - TENCENT_SECRET_KEY=local-mock-key
+      - JOB_IMAGE=acore-manager-job:local
+    restart: unless-stopped
+
+  app:
+    env_file:
+      - .env # 显式双文件（叠加合并语义下后文件胜出）
+      - .env.e2e
+    environment:
+      - SCF_ENDPOINT=http://scf-mock:9011 # 唯一路由开关：留空/删除即恢复真实腾讯云端点
+      - SCF_REGION=ap-guangzhou # 触发前校验四项必填之一（端点已覆盖，仅作占位）
+      - SCF_JOB_FUNCTION_NAME=acore-manager-job
+      - TENCENT_SECRET_ID=local-mock-id
+      - TENCENT_SECRET_KEY=local-mock-key

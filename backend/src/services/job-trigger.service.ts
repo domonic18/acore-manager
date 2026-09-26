@@ -1,18 +1,12 @@
 import { env } from '@/config/env';
 import { invokeScfFunction } from '@/shared/utils/scf-invoke.util';
 import type { JobTaskName } from '@/shared/enums/job-task';
+import { ServiceError } from '@/shared/errors/service-error';
 
 // 控制面通用 Job 触发器：组 JSON 事件 → SCF Invoke（InvocationType=Event 异步受理）→ 返回 RequestId。
 // 执行一律在 SCF Job 函数，Web 进程不承载任务本体；未来新任务复用本服务，无需改结构。
 
-export class ServiceError extends Error {
-  constructor(
-    message: string,
-    public status: number = 400,
-  ) {
-    super(message);
-  }
-}
+export { ServiceError };
 
 const REQUIRED_ENV_KEYS = ['TENCENT_SECRET_ID', 'TENCENT_SECRET_KEY', 'SCF_REGION', 'SCF_JOB_FUNCTION_NAME'] as const;
 

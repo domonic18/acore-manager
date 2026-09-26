@@ -8,7 +8,7 @@ import type { AgentSseEvent } from '@/agent/runtime/wire';
 import { getAgent } from '@/agent/runtime/agent-factory';
 import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { auditLogService } from '@/services/audit-log.service';
-import { ServiceError } from './anticheat-exemption.service';
+import { ServiceError } from '@/shared/errors/service-error';
 import { llmConfigService } from './llm-config.service';
 import { tokenUsageService } from './token-usage.service';
 import { emptyTokens, sumTokens, watchAgentEvents, type RoundAccumulator } from './agent-round.util';

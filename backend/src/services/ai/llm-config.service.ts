@@ -2,17 +2,14 @@ import { acmDataSource } from '@/config/database';
 import { AiModelConfig } from '@/entities/acm/ai-model-config.entity';
 import { auditLogService } from '@/services/audit-log.service';
 import { decryptToken, encryptToken, maskToken } from '@/shared/utils/aes.util';
+import { ServiceError } from '@/shared/errors/service-error';
 
 // T2.2 最小切片（M0 提前实施）：模型出口配置管理。
 // 行为规则参考 ai-invest-assisstant llm_config_service：
 //   设默认清除其他默认行；删除默认行自动提升首个 active 行；
 //   api_key 编辑留空 = 保留原值（write-only）；接口回显仅掩码；无环境变量兜底。
 
-export class ServiceError extends Error {
-  constructor(message: string, public status: number) {
-    super(message);
-  }
-}
+export { ServiceError };
 
 export interface ModelConfigView {
   id: number;

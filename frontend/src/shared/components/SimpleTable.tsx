@@ -10,7 +10,7 @@ export interface SimpleColumn<Row> {
 interface SimpleTableProps<Row> {
   columns: SimpleColumn<Row>[];
   rows: Row[];
-  rowKey: (row: Row) => string | number;
+  rowKey: (row: Row, index: number) => string | number;
   onRowClick?: (row: Row) => void;
   loading?: boolean;
   emptyText?: string;
@@ -58,9 +58,9 @@ export function SimpleTable<Row>({
               </td>
             </tr>
           ) : (
-            rows.map((row) => (
+            rows.map((row, i) => (
               <tr
-                key={rowKey(row)}
+                key={rowKey(row, i)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={`border-b border-border ${onRowClick ? 'hover:bg-accent/50 cursor-pointer' : ''}`}
               >

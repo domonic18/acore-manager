@@ -4,23 +4,23 @@ import { env } from '@/config/env';
 import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { AiTargetedAnalysis } from '@/entities/acm/ai-targeted-analysis.entity';
-import { streamAgentEvents, type AgentSseEvent } from '@/agent/runtime/wire';
+import type { AgentSseEvent } from '@/agent/runtime/wire';
 import { getAgent } from '@/agent/runtime/agent-factory';
 import { BudgetGuard } from '@/agent/runtime/budget-guard';
-import { extractJson } from '@/shared/utils/extract-json.util';
-import { ServiceError } from './anticheat-exemption.service';
-
-export { ServiceError };
 import { auditLogService } from '@/services/audit-log.service';
+import { ServiceError } from './anticheat-exemption.service';
 import { llmConfigService } from './llm-config.service';
 import { tokenUsageService } from './token-usage.service';
+import { emptyTokens, sumTokens, watchAgentEvents, type RoundAccumulator } from './agent-round.util';
+import { describeIssues, enforceFalsePositiveRule, parseConclusion, type AnalysisConclusion } from './targeted-analysis.conclusion';
+
+export { ServiceError };
+export type { AnalysisConclusion, AnalysisSuggestion } from './targeted-analysis.conclusion';
 
 // 定向分析编排（arch 5.1 / 需求 3.8，账号申诉场景）：单一角色/账号 + 时间范围，
 // 复用巡检同款白名单工具取证，结论 JSON 校验（失败追问一轮）后追加落库 ai_targeted_analysis
 // （同一对象可多轮分析，不覆盖历史）。误报信号非空时强制 manual_review（确定性降级兜底）。
-
-const SUGGESTIONS = ['maintain', 'lift', 'downgrade', 'manual_review'] as const;
-export type AnalysisSuggestion = (typeof SUGGESTIONS)[number];
+// 结论 JSON 契约（解析/校验/降级）在 targeted-analysis.conclusion，事件流消费复用 agent-round.util。
 
 export interface TargetedAnalysisInput {
   realm: string;
@@ -33,18 +33,6 @@ export interface TargetedAnalysisInput {
   operatorName: string;
 }
 
-export interface AnalysisConclusion {
-  subjectType: string;
-  subjectName: string;
-  timeRange: { from: string; to: string };
-  violations: { type: string; count: number; confirmed: boolean; note?: string }[];
-  falsePositiveSignals: string[];
-  evidence: { source: string; quote: string }[];
-  suggestion: AnalysisSuggestion;
-  suggestionReason: string;
-  markdown?: string;
-}
-
 export type TargetedAnalysisEvent = AgentSseEvent;
 
 class TargetedAnalysisError extends Error {
@@ -54,10 +42,6 @@ class TargetedAnalysisError extends Error {
   ) {
     super(message);
   }
-}
-
-function normalizeText(v: unknown): string {
-  return String(v ?? '').trim();
 }
 
 class TargetedAnalysisService {
@@ -93,49 +77,36 @@ class TargetedAnalysisService {
           refId: `analysis:${analysisId}`,
         },
       };
+      const makeError = (message: string, code: string): Error => new TargetedAnalysisError(message, code);
+      const acc: RoundAccumulator = { text: '', tokens: emptyTokens() };
 
-      let text = '';
-      let tokens = { prompt: 0, completion: 0, total: 0 };
-      async function* consume(agentInput: unknown): AsyncGenerator<TargetedAnalysisEvent> {
-        for await (const ev of streamAgentEvents(agent, agentInput, config)) {
-          if (ev.event === 'delta') {
-            text += String(ev.data.text ?? '');
-            yield { event: 'delta', data: ev.data };
-          } else if (ev.event === 'done') {
-            const t = ev.data.tokens as { prompt?: number; completion?: number; total?: number } | undefined;
-            tokens = { prompt: t?.prompt ?? 0, completion: t?.completion ?? 0, total: t?.total ?? 0 };
-          } else if (ev.event === 'error') {
-            throw new TargetedAnalysisError(String(ev.data.message ?? 'agent error'), String(ev.data.code ?? 'agent_error'));
-          } else {
-            yield { event: ev.event, data: ev.data };
-          }
-        }
-      }
-      for await (const ev of consume({ messages: [{ role: 'user', content: this.buildTaskPrompt(input) }] })) yield ev;
+      for await (const ev of watchAgentEvents(agent, { messages: [{ role: 'user', content: this.buildTaskPrompt(input) }] }, config, acc, makeError)) yield ev;
 
-      let conclusion = this.parseConclusion(text, input);
+      let tokens = acc.tokens;
+      let conclusion = parseConclusion(acc.text, input);
       if (!conclusion) {
         // schema 校验失败追问一轮：同 thread 携带具体错误要求重出完整 JSON（巡检同款）
-        const issues = this.describeIssues(text, input);
+        const issues = describeIssues(acc.text, input);
         logger.warn(`[analysis] schema repair round for #${analysisId}: ${issues}`);
-        const firstRoundTokens = { ...tokens };
-        text = '';
-        for await (const ev of consume({
-          messages: [{ role: 'user', content: `上一次输出未通过校验：${issues}。请重新输出完整的结论 JSON 对象（包含全部字段，markdown 字段为全文）。` }],
-        })) {
+        const firstRoundTokens = tokens;
+        acc.text = '';
+        acc.tokens = emptyTokens();
+        for await (const ev of watchAgentEvents(
+          agent,
+          { messages: [{ role: 'user', content: `上一次输出未通过校验：${issues}。请重新输出完整的结论 JSON 对象（包含全部字段，markdown 字段为全文）。` }] },
+          config,
+          acc,
+          makeError,
+        )) {
           yield ev;
         }
         // 计量口径与巡检一致：修复轮 tokens 累加，不覆盖
-        tokens = {
-          prompt: firstRoundTokens.prompt + tokens.prompt,
-          completion: firstRoundTokens.completion + tokens.completion,
-          total: firstRoundTokens.total + tokens.total,
-        };
-        conclusion = this.parseConclusion(text, input);
+        tokens = sumTokens(firstRoundTokens, acc.tokens);
+        conclusion = parseConclusion(acc.text, input);
       }
       if (!conclusion) throw new TargetedAnalysisError('结论 JSON 两轮校验均未通过', 'schema_mismatch');
 
-      conclusion = this.enforceFalsePositiveRule(conclusion);
+      conclusion = enforceFalsePositiveRule(conclusion);
       await this.persistSuccess(analysisId, input, conclusion, tokens, Date.now() - startedAt, cfg.modelName);
       yield { event: 'done', data: { analysisId, conclusion, tokens } };
     } catch (err) {
@@ -182,64 +153,6 @@ class TargetedAnalysisService {
       `证据必须来自工具返回原文摘录并注明来源工具；无数据支撑的维度如实写"无数据"。`,
     ].join('\n');
     return content;
-  }
-
-  parseConclusion(text: string, input: TargetedAnalysisInput): AnalysisConclusion | null {
-    const obj = extractJson(text);
-    if (!obj || typeof obj !== 'object') {
-      logger.warn(`[analysis] no JSON object in agent output (len=${text.length})`);
-      return null;
-    }
-    if (this.validate(obj as Partial<AnalysisConclusion>, input).length > 0) return null;
-    const c = obj as AnalysisConclusion;
-    return this.enforceFalsePositiveRule({
-      subjectType: normalizeText(c.subjectType),
-      subjectName: normalizeText(c.subjectName),
-      timeRange: { from: normalizeText(c.timeRange?.from), to: normalizeText(c.timeRange?.to) },
-      violations: Array.isArray(c.violations) ? c.violations : [],
-      falsePositiveSignals: Array.isArray(c.falsePositiveSignals) ? c.falsePositiveSignals.map(normalizeText).filter(Boolean) : [],
-      evidence: Array.isArray(c.evidence) ? c.evidence : [],
-      suggestion: c.suggestion,
-      suggestionReason: normalizeText(c.suggestionReason),
-      markdown: typeof c.markdown === 'string' ? c.markdown : undefined,
-    });
-  }
-
-  describeIssues(text: string, input: TargetedAnalysisInput): string {
-    const obj = extractJson(text);
-    if (!obj || typeof obj !== 'object') return '未找到 JSON 对象（需要以 { 开始、} 结束的完整 JSON）';
-    const issues = this.validate(obj as Partial<AnalysisConclusion>, input);
-    return issues.length > 0 ? issues.join('；') : 'JSON 解析失败';
-  }
-
-  // 宽容校验：仅拒绝语义性错误（echo 不一致、枚举越界、缺关键字段）
-  private validate(c: Partial<AnalysisConclusion>, input: TargetedAnalysisInput): string[] {
-    const issues: string[] = [];
-    if (normalizeText(c.subjectType) !== input.subjectType) issues.push(`subjectType 必须为 "${input.subjectType}"`);
-    if (normalizeText(c.subjectName) !== input.subjectName) issues.push(`subjectName 必须为 "${input.subjectName}"`);
-    if (normalizeText(c.timeRange?.from) !== input.timeFrom || normalizeText(c.timeRange?.to) !== input.timeTo) {
-      issues.push(`timeRange 必须为 {from: "${input.timeFrom}", to: "${input.timeTo}"}`);
-    }
-    if (!SUGGESTIONS.includes(c.suggestion as AnalysisSuggestion)) {
-      issues.push(`suggestion 必须为 ${SUGGESTIONS.join('/')}`);
-    }
-    if (!normalizeText(c.suggestionReason)) issues.push('suggestionReason 不能为空');
-    if (!Array.isArray(c.violations)) issues.push('violations 必须为数组');
-    if (!Array.isArray(c.falsePositiveSignals)) issues.push('falsePositiveSignals 必须为数组');
-    if (!Array.isArray(c.evidence)) issues.push('evidence 必须为数组');
-    return issues;
-  }
-
-  // 确定性降级（需求 3.8 / arch 8.3）：存在未排除误报信号时不得建议维持封禁
-  enforceFalsePositiveRule(c: AnalysisConclusion): AnalysisConclusion {
-    if (c.falsePositiveSignals.length > 0 && c.suggestion === 'maintain') {
-      return {
-        ...c,
-        suggestion: 'manual_review',
-        suggestionReason: `${c.suggestionReason}（存在未排除的误报信号，已按规则由 maintain 降级为 manual_review）`,
-      };
-    }
-    return c;
   }
 
   private async persistSuccess(

@@ -66,7 +66,7 @@ class ChatService {
 
     async function* events(): AsyncGenerator<AgentEventLike> {
       let reply = '';
-      let tokens: RoundTokens = { prompt: 0, completion: 0, total: 0 };
+      let tokens: RoundTokens;
       for await (const ev of streamAgentEvents(agent, input, config)) {
         if (ev.event === 'delta') {
           reply += String(ev.data.text ?? '');

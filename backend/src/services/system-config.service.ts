@@ -3,7 +3,7 @@ import { env, soapConn } from '@/config/env';
 import { DEFAULT_REALM_FALLBACK, loadConfigValues, readDefaultRealm, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { AcmSystemConfig } from '@/entities/acm/system-config.entity';
 import { auditLogService } from '@/services/audit-log.service';
-import { ServiceError } from '@/services/ai/llm-config.service';
+import { ServiceError } from '@/shared/errors/service-error';
 import { encryptToken, maskToken } from '@/shared/utils/aes.util';
 
 // 系统级配置（KV）：默认 realm 名 + SOAP 连接 + 飞书通知 + AI 参数 + 登录安全。
@@ -152,128 +152,15 @@ class SystemConfigService {
     };
   }
 
+  // 五配置组按序生效：defaultRealm → soap → feishu → ai → login；任一组校验失败即中止
+  //（已生效的组不回滚——KV 单键写入天然原子，审计只记录实际变更的键）
   async update(input: SystemConfigInput, operatorId: number, operatorName: string): Promise<SystemConfigView> {
     const changedKeys: string[] = [];
-
-    if (input.defaultRealm !== undefined) {
-      if (!/^[a-zA-Z0-9_-]{2,32}$/.test(input.defaultRealm)) {
-        throw new ServiceError('realm 名需为 2-32 位字母/数字/中划线/下划线 / invalid realm name', 400);
-      }
-      await this.upsert(SYSTEM_CONFIG_KEYS.defaultRealm, input.defaultRealm, false, operatorName);
-      changedKeys.push(SYSTEM_CONFIG_KEYS.defaultRealm);
-    }
-
-    if (input.soap) {
-      const soap = input.soap;
-      if (soap.host !== undefined) {
-        await this.upsert(SYSTEM_CONFIG_KEYS.soapHost, soap.host, false, operatorName);
-        changedKeys.push(SYSTEM_CONFIG_KEYS.soapHost);
-      }
-      if (soap.port !== undefined) {
-        if (!Number.isInteger(soap.port) || soap.port < 1 || soap.port > 65535) {
-          throw new ServiceError('端口需为 1-65535 整数 / invalid port', 400);
-        }
-        await this.upsert(SYSTEM_CONFIG_KEYS.soapPort, String(soap.port), false, operatorName);
-        changedKeys.push(SYSTEM_CONFIG_KEYS.soapPort);
-      }
-      if (soap.username !== undefined) {
-        await this.upsert(SYSTEM_CONFIG_KEYS.soapUsername, soap.username, false, operatorName);
-        changedKeys.push(SYSTEM_CONFIG_KEYS.soapUsername);
-      }
-      // 留空 = 保留原密码（write-only，与 llm-config api_key 同规则）
-      if (soap.password) {
-        await this.upsert(SYSTEM_CONFIG_KEYS.soapPassword, encryptToken(soap.password), true, operatorName);
-        changedKeys.push(SYSTEM_CONFIG_KEYS.soapPassword);
-      }
-    }
-
-    if (input.feishu) {
-      const feishu = input.feishu;
-      if (feishu.webhookUrl !== undefined) {
-        await this.saveOrClear(SYSTEM_CONFIG_KEYS.feishuWebhookUrl, feishu.webhookUrl, operatorName, {
-          pattern: /^https:\/\/\S+$/,
-          message: 'webhook 地址需为 https URL / invalid webhook url',
-        });
-        changedKeys.push(SYSTEM_CONFIG_KEYS.feishuWebhookUrl);
-      }
-      if (feishu.webhookSecret !== undefined) {
-        // 空串 = 清除加签密钥（回落环境变量 / 不签名）
-        await this.saveOrClear(SYSTEM_CONFIG_KEYS.feishuWebhookSecret, feishu.webhookSecret, operatorName, {
-          encrypt: true,
-          maxLength: 256,
-          message: '加签密钥过长 / invalid webhook secret',
-        });
-        changedKeys.push(SYSTEM_CONFIG_KEYS.feishuWebhookSecret);
-      }
-      if (feishu.webBaseUrl !== undefined) {
-        await this.saveOrClear(SYSTEM_CONFIG_KEYS.acmWebBaseUrl, feishu.webBaseUrl, operatorName, {
-          pattern: /^https?:\/\/\S+$/,
-          message: 'Web 基地址需为 http(s) URL / invalid web base url',
-        });
-        changedKeys.push(SYSTEM_CONFIG_KEYS.acmWebBaseUrl);
-      }
-    }
-
-    if (input.ai) {
-      const ai = input.ai;
-      const numberChecks: [string, number | null | undefined, number, number][] = [
-        [SYSTEM_CONFIG_KEYS.aiDailyTokenBudget, ai.dailyTokenBudget, 1_000, 1_000_000_000],
-        [SYSTEM_CONFIG_KEYS.aiAgentCacheSize, ai.agentCacheSize, 1, 50],
-        [SYSTEM_CONFIG_KEYS.aiToolCallBudget, ai.toolCallBudget, 1, 200],
-        [SYSTEM_CONFIG_KEYS.aiToolTimeoutMs, ai.toolTimeoutMs, 1_000, 600_000],
-      ];
-      for (const [key, value, min, max] of numberChecks) {
-        if (value === undefined) continue;
-        if (value === null) {
-          await this.repo.delete(key);
-          changedKeys.push(key);
-          continue;
-        }
-        if (!this.checkInt(value, min, max)) {
-          throw new ServiceError(`${key} 需为 ${min}-${max} 整数 / invalid ${key}`, 400);
-        }
-        await this.saveOrClear(key, value, operatorName);
-        changedKeys.push(key);
-      }
-    }
-
-    if (input.login) {
-      const login = input.login;
-      for (const [key, value] of [
-        [SYSTEM_CONFIG_KEYS.loginBruteForceEnabled, login.bruteForceEnabled],
-        [SYSTEM_CONFIG_KEYS.loginCaptchaEnabled, login.captchaEnabled],
-      ] as const) {
-        if (value === undefined) continue;
-        if (value === null) {
-          await this.repo.delete(key);
-          changedKeys.push(key);
-          continue;
-        }
-        if (value !== 'true' && value !== 'false') {
-          throw new ServiceError(`${key} 仅接受 true/false / invalid ${key}`, 400);
-        }
-        await this.upsert(key, value, false, operatorName);
-        changedKeys.push(key);
-      }
-      const numberChecks: [string, number | null | undefined, number, number][] = [
-        [SYSTEM_CONFIG_KEYS.loginMaxAttempts, login.maxAttempts, 1, 100],
-        [SYSTEM_CONFIG_KEYS.loginLockoutMinutes, login.lockoutMinutes, 1, 1440],
-        [SYSTEM_CONFIG_KEYS.loginCaptchaTtlSeconds, login.captchaTtlSeconds, 60, 3600],
-      ];
-      for (const [key, value, min, max] of numberChecks) {
-        if (value === undefined) continue;
-        if (value === null) {
-          await this.repo.delete(key);
-          changedKeys.push(key);
-          continue;
-        }
-        if (!this.checkInt(value, min, max)) {
-          throw new ServiceError(`${key} 需为 ${min}-${max} 整数 / invalid ${key}`, 400);
-        }
-        await this.saveOrClear(key, value, operatorName);
-        changedKeys.push(key);
-      }
-    }
+    if (input.defaultRealm !== undefined) await this.applyDefaultRealm(input.defaultRealm, changedKeys, operatorName);
+    if (input.soap) await this.applySoap(input.soap, changedKeys, operatorName);
+    if (input.feishu) await this.applyFeishu(input.feishu, changedKeys, operatorName);
+    if (input.ai) await this.applyAi(input.ai, changedKeys, operatorName);
+    if (input.login) await this.applyLogin(input.login, changedKeys, operatorName);
 
     if (changedKeys.length > 0) {
       await auditLogService.record({
@@ -285,6 +172,125 @@ class SystemConfigService {
       });
     }
     return this.getView();
+  }
+
+  private async applyDefaultRealm(realm: string, changedKeys: string[], operatorName: string): Promise<void> {
+    if (!/^[a-zA-Z0-9_-]{2,32}$/.test(realm)) {
+      throw new ServiceError('realm 名需为 2-32 位字母/数字/中划线/下划线 / invalid realm name', 400);
+    }
+    await this.upsert(SYSTEM_CONFIG_KEYS.defaultRealm, realm, false, operatorName);
+    changedKeys.push(SYSTEM_CONFIG_KEYS.defaultRealm);
+  }
+
+  private async applySoap(soap: NonNullable<SystemConfigInput['soap']>, changedKeys: string[], operatorName: string): Promise<void> {
+    if (soap.host !== undefined) {
+      await this.upsert(SYSTEM_CONFIG_KEYS.soapHost, soap.host, false, operatorName);
+      changedKeys.push(SYSTEM_CONFIG_KEYS.soapHost);
+    }
+    if (soap.port !== undefined) {
+      if (!Number.isInteger(soap.port) || soap.port < 1 || soap.port > 65535) {
+        throw new ServiceError('端口需为 1-65535 整数 / invalid port', 400);
+      }
+      await this.upsert(SYSTEM_CONFIG_KEYS.soapPort, String(soap.port), false, operatorName);
+      changedKeys.push(SYSTEM_CONFIG_KEYS.soapPort);
+    }
+    if (soap.username !== undefined) {
+      await this.upsert(SYSTEM_CONFIG_KEYS.soapUsername, soap.username, false, operatorName);
+      changedKeys.push(SYSTEM_CONFIG_KEYS.soapUsername);
+    }
+    // 留空 = 保留原密码（write-only，与 llm-config api_key 同规则）
+    if (soap.password) {
+      await this.upsert(SYSTEM_CONFIG_KEYS.soapPassword, encryptToken(soap.password), true, operatorName);
+      changedKeys.push(SYSTEM_CONFIG_KEYS.soapPassword);
+    }
+  }
+
+  private async applyFeishu(feishu: NonNullable<SystemConfigInput['feishu']>, changedKeys: string[], operatorName: string): Promise<void> {
+    if (feishu.webhookUrl !== undefined) {
+      await this.saveOrClear(SYSTEM_CONFIG_KEYS.feishuWebhookUrl, feishu.webhookUrl, operatorName, {
+        pattern: /^https:\/\/\S+$/,
+        message: 'webhook 地址需为 https URL / invalid webhook url',
+      });
+      changedKeys.push(SYSTEM_CONFIG_KEYS.feishuWebhookUrl);
+    }
+    if (feishu.webhookSecret !== undefined) {
+      // 空串 = 清除加签密钥（回落环境变量 / 不签名）
+      await this.saveOrClear(SYSTEM_CONFIG_KEYS.feishuWebhookSecret, feishu.webhookSecret, operatorName, {
+        encrypt: true,
+        maxLength: 256,
+        message: '加签密钥过长 / invalid webhook secret',
+      });
+      changedKeys.push(SYSTEM_CONFIG_KEYS.feishuWebhookSecret);
+    }
+    if (feishu.webBaseUrl !== undefined) {
+      await this.saveOrClear(SYSTEM_CONFIG_KEYS.acmWebBaseUrl, feishu.webBaseUrl, operatorName, {
+        pattern: /^https?:\/\/\S+$/,
+        message: 'Web 基地址需为 http(s) URL / invalid web base url',
+      });
+      changedKeys.push(SYSTEM_CONFIG_KEYS.acmWebBaseUrl);
+    }
+  }
+
+  private async applyAi(ai: NonNullable<SystemConfigInput['ai']>, changedKeys: string[], operatorName: string): Promise<void> {
+    await this.applyNumberChecks(
+      [
+        [SYSTEM_CONFIG_KEYS.aiDailyTokenBudget, ai.dailyTokenBudget, 1_000, 1_000_000_000],
+        [SYSTEM_CONFIG_KEYS.aiAgentCacheSize, ai.agentCacheSize, 1, 50],
+        [SYSTEM_CONFIG_KEYS.aiToolCallBudget, ai.toolCallBudget, 1, 200],
+        [SYSTEM_CONFIG_KEYS.aiToolTimeoutMs, ai.toolTimeoutMs, 1_000, 600_000],
+      ],
+      changedKeys,
+      operatorName,
+    );
+  }
+
+  private async applyLogin(login: NonNullable<SystemConfigInput['login']>, changedKeys: string[], operatorName: string): Promise<void> {
+    for (const [key, value] of [
+      [SYSTEM_CONFIG_KEYS.loginBruteForceEnabled, login.bruteForceEnabled],
+      [SYSTEM_CONFIG_KEYS.loginCaptchaEnabled, login.captchaEnabled],
+    ] as const) {
+      if (value === undefined) continue;
+      if (value === null) {
+        await this.repo.delete(key);
+        changedKeys.push(key);
+        continue;
+      }
+      if (value !== 'true' && value !== 'false') {
+        throw new ServiceError(`${key} 仅接受 true/false / invalid ${key}`, 400);
+      }
+      await this.upsert(key, value, false, operatorName);
+      changedKeys.push(key);
+    }
+    await this.applyNumberChecks(
+      [
+        [SYSTEM_CONFIG_KEYS.loginMaxAttempts, login.maxAttempts, 1, 100],
+        [SYSTEM_CONFIG_KEYS.loginLockoutMinutes, login.lockoutMinutes, 1, 1440],
+        [SYSTEM_CONFIG_KEYS.loginCaptchaTtlSeconds, login.captchaTtlSeconds, 60, 3600],
+      ],
+      changedKeys,
+      operatorName,
+    );
+  }
+
+  /** 数字组统一处理：undefined 跳过 / null 删行回落 env / 区间校验后保存 */
+  private async applyNumberChecks(
+    rows: readonly [string, number | null | undefined, number, number][],
+    changedKeys: string[],
+    operatorName: string,
+  ): Promise<void> {
+    for (const [key, value, min, max] of rows) {
+      if (value === undefined) continue;
+      if (value === null) {
+        await this.repo.delete(key);
+        changedKeys.push(key);
+        continue;
+      }
+      if (!this.checkInt(value, min, max)) {
+        throw new ServiceError(`${key} 需为 ${min}-${max} 整数 / invalid ${key}`, 400);
+      }
+      await this.saveOrClear(key, value, operatorName);
+      changedKeys.push(key);
+    }
   }
 
   private checkInt(value: number | null, min: number, max: number): value is number {

@@ -104,28 +104,36 @@ function parseSoapUrl(url?: string): SoapConn | null {
   };
 }
 
-export const dbConn = parseMysqlUrl(process.env.DB_URL) ?? {
+// 未显式配置而回落开发默认的连接键；生产环境据此 fail-fast（见文件末尾守卫）
+const devFallbackConnKeys: string[] = [];
+
+function fallbackConn<T>(key: string, conn: T): T {
+  devFallbackConnKeys.push(key);
+  return conn;
+}
+
+export const dbConn = parseMysqlUrl(process.env.DB_URL) ?? fallbackConn('DB_URL', {
   host: '127.0.0.1',
   port: 3306,
   user: 'acore',
   pass: 'acore',
-};
+});
 
 // acm 自有库连接（PostgreSQL），与游戏 MySQL（DB_URL）隔离
-export const acmDbConn = parsePgUrl(process.env.ACM_DB_URL) ?? {
+export const acmDbConn = parsePgUrl(process.env.ACM_DB_URL) ?? fallbackConn('ACM_DB_URL', {
   host: '127.0.0.1',
   port: 5433,
   user: 'acm',
   pass: 'acm',
   database: 'acm',
-};
+});
 
-export const redisConn = parseRedisUrl(process.env.REDIS_URL) ?? {
+export const redisConn = parseRedisUrl(process.env.REDIS_URL) ?? fallbackConn('REDIS_URL', {
   host: '127.0.0.1',
   port: 6379,
   password: '',
   db: 0,
-};
+});
 
 // SOAP 连接已支持系统配置页（acm_system_config）管理，DB 优先；此处 SOAP_URL 仅作未录入配置时的回落
 export const soapConn = parseSoapUrl(process.env.SOAP_URL) ?? {
@@ -203,3 +211,19 @@ export const env = {
 
 export const isDevelopment = env.NODE_ENV === 'development';
 export const isProduction = env.NODE_ENV === 'production';
+
+// 生产环境 fail-fast：密钥与数据源连接串必须显式提供，弱开发默认禁止静默生效。
+// NODE_ENV 缺省即 production，存量部署漏配将在此启动失败（期望行为，报错含修复指引）。
+// SOAP_URL 不列入：SOAP 已由系统配置页（acm_system_config）DB 优先管理，env 仅作开发回落。
+if (isProduction) {
+  const missing: string[] = [];
+  if (!process.env.JWT_SECRET) missing.push('JWT_SECRET');
+  if (!process.env.LLM_AES_KEY) missing.push('LLM_AES_KEY');
+  missing.push(...devFallbackConnKeys);
+  if (missing.length > 0) {
+    throw new Error(
+      `[config] 生产环境缺少必需配置: ${missing.join(', ')}——请在环境变量中显式提供（参考 .env.example），弱开发默认值已被拒绝` +
+        ` / Missing required production configuration: ${missing.join(', ')}. Set them explicitly via environment variables (see .env.example).`,
+    );
+  }
+}

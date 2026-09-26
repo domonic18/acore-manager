@@ -1,75 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown } from 'lucide-react';
-import type { SuspiciousPlayer } from '../api/ai-diagnosis.api';
-import { useExemptionsByGuids } from '../hooks/useAiDiagnosis';
+import type { SuspiciousPlayer } from '@/features/ai-diagnosis/api/ai-diagnosis.api';
+import { useExemptionsByGuids } from '@/features/ai-diagnosis/hooks/useAiDiagnosis';
+import { useRowSelection } from '@/shared/hooks/useRowSelection';
 import { MarkFalsePositiveDialog, type MarkFalsePositiveTarget } from './MarkFalsePositiveDialog';
 import { SendWarningMailDialog } from './SendWarningMailDialog';
+import { AiAdviceCell, ACTION_LABEL, SEVERITY_LABEL, SEVERITY_STYLE } from './AiAdviceCell';
 
 // 可疑玩家处置表（T4.3）：卡片列表升级为可勾选表格，角色/账号富化 ID 跳转详情，
 // 行内/批量标记误报（豁免白名单落库）。guid 缺失（已删除角色）降级纯文本且不可勾选。
 
-const SEVERITY_STYLE: Record<string, string> = {
-  high: 'bg-red-500/20 text-red-400',
-  medium: 'bg-amber-500/20 text-amber-400',
-  low: 'bg-green-500/20 text-green-400',
-};
-
-const SEVERITY_LABEL: Record<string, string> = { high: '高危', medium: '中危', low: '低危' };
-
-const ACTION_LABEL: Record<string, string> = { ban: '建议封禁', investigate: '建议人工核查', warning: '建议警告观察' };
-
-function AiAdviceCell({ player }: { player: SuspiciousPlayer }) {
-  const reasons = player.reasons ?? [];
-  const evidence = player.evidence ?? [];
-  const hasDetail = reasons.length > 0 || evidence.length > 0 || Boolean(player.suggestion);
-  if (!hasDetail) return <span className="text-xs text-muted-foreground">—</span>;
-  return (
-    <details className="min-w-0">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
-        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLE[player.suggestedAction] ?? 'bg-accent'}`}>
-          {ACTION_LABEL[player.suggestedAction] ?? `建议：${player.suggestedAction}`}
-        </span>
-        <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-      </summary>
-      <div className="mt-2 space-y-2 font-mono text-xs">
-        {player.suggestion && (
-          <div>
-            <div className="mb-0.5 font-sans font-semibold text-muted-foreground">AI 处置建议</div>
-            <p className="font-sans leading-relaxed text-muted-foreground">{player.suggestion}</p>
-          </div>
-        )}
-        {reasons.length > 0 && (
-          <div>
-            <div className="mb-0.5 font-sans font-semibold text-muted-foreground">依据（{reasons.length}）</div>
-            <ol className="list-decimal space-y-0.5 pl-4">
-              {reasons.map((r, i) => (
-                <li key={i} className="break-all text-muted-foreground">
-                  {r}
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-        {evidence.length > 0 && (
-          <div>
-            <div className="mb-0.5 font-sans font-semibold text-muted-foreground">证据（{evidence.length}）</div>
-            <div className="space-y-1">
-              {evidence.slice(0, 10).map((e, i) => (
-                <div key={i} className="break-all rounded bg-accent/40 px-1.5 py-0.5">
-                  {e}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </details>
-  );
-}
-
 export function SuspiciousPlayerTable({ players, realm, reportDate }: { players: SuspiciousPlayer[]; realm: string; reportDate: string }) {
-  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [mailOpen, setMailOpen] = useState(false);
@@ -83,33 +24,21 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
     [players],
   );
 
+  const selectableRows = useMemo(() => ordered.filter((p) => p.characterGuid != null), [ordered]);
   const selectable = useMemo(
     () =>
       new Map(
-        ordered
-          .filter((p) => p.characterGuid != null)
-          .map((p) => [p.characterGuid as number, p.character]),
+        selectableRows.map((p) => [p.characterGuid as number, p.character]),
       ),
-    [ordered],
+    [selectableRows],
   );
-  const guids = useMemo(() => [...selectable.keys()], [selectable]);
-  const { data: exemptions } = useExemptionsByGuids(guids);
+  const selection = useRowSelection(selectableRows, (p) => p.characterGuid as number);
+  const { selected } = selection;
+
+  const { data: exemptions } = useExemptionsByGuids([...selectable.keys()]);
   const exemptedGuids = useMemo(() => new Set((exemptions ?? []).map((e) => e.characterGuid)), [exemptions]);
 
-  const allSelected = guids.length > 0 && guids.every((g) => selected.has(g));
-  const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(guids));
-  };
-  const toggleOne = (guid: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(guid)) next.delete(guid);
-      else next.add(guid);
-      return next;
-    });
-  };
-
-  const targets: MarkFalsePositiveTarget[] = [...selected].map((g) => ({ guid: g, name: selectable.get(g) ?? `#${g}` }));
+  const targets: MarkFalsePositiveTarget[] = [...selected].map((g) => ({ guid: Number(g), name: selectable.get(Number(g)) ?? `#${g}` }));
 
   const openDialog = (batch: boolean) => {
     setBatchMode(batch);
@@ -146,7 +75,7 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
           >
             发送警告邮件
           </button>
-          <button onClick={() => setSelected(new Set())} className="text-xs text-muted-foreground hover:text-foreground">
+          <button onClick={() => selection.clear()} className="text-xs text-muted-foreground hover:text-foreground">
             清除选择
           </button>
         </div>
@@ -159,9 +88,9 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                  disabled={guids.length === 0}
+                  checked={selection.allSelected}
+                  onChange={selection.toggleAll}
+                  disabled={selectableRows.length === 0}
                   aria-label="全选可标记角色"
                   className="h-4 w-4 accent-primary"
                 />
@@ -184,8 +113,8 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
                     {p.characterGuid != null ? (
                       <input
                         type="checkbox"
-                        checked={selected.has(p.characterGuid)}
-                        onChange={() => toggleOne(p.characterGuid as number)}
+                        checked={selection.isSelected(p.characterGuid)}
+                        onChange={() => selection.toggleOne(p.characterGuid as number)}
                         aria-label={`选择 ${p.character}`}
                         className="h-4 w-4 accent-primary"
                       />
@@ -246,7 +175,7 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
                       <div className="flex gap-1.5">
                         <button
                           onClick={() => {
-                            setSelected(new Set([p.characterGuid as number]));
+                            selection.selectOnly(p.characterGuid as number);
                             openDialog(false);
                           }}
                           className="whitespace-nowrap rounded-md border border-sky-500/40 px-2 py-1 text-xs font-medium text-sky-400 hover:bg-sky-500/10"
@@ -255,7 +184,7 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
                         </button>
                         <button
                           onClick={() => {
-                            setSelected(new Set([p.characterGuid as number]));
+                            selection.selectOnly(p.characterGuid as number);
                             setMailOpen(true);
                           }}
                           className="whitespace-nowrap rounded-md border border-amber-500/40 px-2 py-1 text-xs font-medium text-amber-400 hover:bg-amber-500/10"
@@ -278,7 +207,7 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
         targets={batchMode ? targets : targets.slice(0, 1)}
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        onDone={() => setSelected(new Set())}
+        onDone={() => selection.clear()}
       />
 
       <SendWarningMailDialog

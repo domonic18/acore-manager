@@ -1,110 +1,20 @@
-import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  useCharacterDetail,
-  useUnbanCharacter,
-  useBanCharacter,
-  useMuteCharacter,
-  useUnmuteCharacter,
-} from '@/features/character/hooks/useCharacter';
-import { Dialog } from '@/shared/components/Dialog';
-import { raceMap, classMap, banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
-import { AI_QUICK_ANALYZE_EVENT, type QuickAnalyzePayload } from '@/features/ai-assistant/components/AiAssistantDock';
+import { useCharacterDetail } from '@/features/character/hooks/useCharacter';
+import { useCharacterDetailActions } from '@/features/character/hooks/useCharacterDetailActions';
+import { CharacterDetailInfo } from '@/features/character/components/CharacterDetailInfo';
+import { CharacterDetailActions } from '@/features/character/components/CharacterDetailActions';
+import { MuteDialog } from '@/features/character/components/MuteDialog';
+import { CharacterUnmuteConfirmDialog } from '@/features/character/components/CharacterUnmuteConfirmDialog';
+import { BanFlowDialogs } from '@/shared/components/BanFlowDialogs';
+import { BanHistoryTable } from '@/shared/components/BanHistoryTable';
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 
 export default function CharacterDetailPage() {
   const { guid } = useParams<{ guid: string }>();
   const navigate = useNavigate();
   const characterGuid = parseInt(guid || '0');
   const { data: character, isLoading } = useCharacterDetail(characterGuid);
-  const unbanMutation = useUnbanCharacter();
-  const banMutation = useBanCharacter();
-  const muteMutation = useMuteCharacter();
-  const unmuteMutation = useUnmuteCharacter();
-
-  const [showBanDialog, setShowBanDialog] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [banDuration, setBanDuration] = useState('1d');
-  const [banReasonType, setBanReasonType] = useState('违规');
-  const [customReason, setCustomReason] = useState('');
-
-  const [showMuteDialog, setShowMuteDialog] = useState(false);
-  const [muteDuration, setMuteDuration] = useState('1h');
-  const [muteReasonType, setMuteReasonType] = useState('恶意刷屏');
-  const [muteCustomReason, setMuteCustomReason] = useState('');
-
-  const [showUnbanConfirmDialog, setShowUnbanConfirmDialog] = useState(false);
-  const [showUnmuteConfirmDialog, setShowUnmuteConfirmDialog] = useState(false);
-
-  const isCustomReason = banReasonType === '__custom__';
-  const finalBanReason = isCustomReason ? customReason : banReasonType;
-  const canProceed = !isCustomReason || customReason.trim().length > 0;
-
-  const isMuteCustomReason = muteReasonType === '__custom__';
-  const finalMuteReason = isMuteCustomReason ? muteCustomReason : muteReasonType;
-  const canMuteProceed = !isMuteCustomReason || muteCustomReason.trim().length > 0;
-
-  const handleOpenBanDialog = () => {
-    setBanDuration('1d');
-    setBanReasonType('违规');
-    setCustomReason('');
-    setShowBanDialog(true);
-  };
-
-  const handleProceedToConfirm = () => {
-    if (!canProceed) return;
-    setShowBanDialog(false);
-    setShowConfirmDialog(true);
-  };
-
-  const handleExecuteBan = () => {
-    banMutation.mutate(
-      { guid: characterGuid, data: { duration: banDuration, reason: finalBanReason } },
-      {
-        onSuccess: () => {
-          setShowConfirmDialog(false);
-        },
-      }
-    );
-  };
-
-  const handleOpenUnbanConfirm = () => {
-    setShowUnbanConfirmDialog(true);
-  };
-
-  const handleExecuteUnban = () => {
-    unbanMutation.mutate(characterGuid, {
-      onSuccess: () => setShowUnbanConfirmDialog(false),
-    });
-  };
-
-  const handleOpenMuteDialog = () => {
-    setMuteDuration('1h');
-    setMuteReasonType('恶意刷屏');
-    setMuteCustomReason('');
-    setShowMuteDialog(true);
-  };
-
-  const handleExecuteMute = () => {
-    if (!canMuteProceed) return;
-    muteMutation.mutate(
-      { guid: characterGuid, data: { duration: muteDuration, reason: finalMuteReason } },
-      {
-        onSuccess: () => {
-          setShowMuteDialog(false);
-        },
-      }
-    );
-  };
-
-  const handleOpenUnmuteConfirm = () => {
-    setShowUnmuteConfirmDialog(true);
-  };
-
-  const handleExecuteUnmute = () => {
-    unmuteMutation.mutate(characterGuid, {
-      onSuccess: () => setShowUnmuteConfirmDialog(false),
-    });
-  };
+  const actions = useCharacterDetailActions(characterGuid);
 
   if (isLoading) {
     return (
@@ -117,11 +27,6 @@ export default function CharacterDetailPage() {
       <div className="text-center py-12 text-muted-foreground">角色不存在</div>
     );
   }
-
-  const gold = Math.floor(character.money / 10000);
-  const silver = Math.floor((character.money % 10000) / 100);
-  const copper = character.money % 100;
-  const activeBans = character.bans?.filter((b) => b.active) || [];
 
   return (
     <div className="space-y-6">
@@ -136,408 +41,55 @@ export default function CharacterDetailPage() {
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">{character.name}</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() =>
-              window.dispatchEvent(
-                new CustomEvent(AI_QUICK_ANALYZE_EVENT, {
-                  detail: {
-                    subjectType: 'character',
-                    name: character.name,
-                    guid: character.guid,
-                    accountName: character.accountUsername,
-                  } satisfies QuickAnalyzePayload,
-                }),
-              )
-            }
-            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
-          >
-            快速分析
-          </button>
-          <button
-            onClick={() =>
-              navigate('/ai-diagnosis/targeted', { state: { subjectType: 'character', subjectName: character.name } })
-            }
-            className="px-4 py-2 rounded-md border border-blue-600 text-blue-400 text-sm font-medium hover:bg-blue-600/10"
-          >
-            AI 定向分析
-          </button>
-          <button
-            onClick={handleOpenMuteDialog}
-            className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
-          >
-            禁言聊天
-          </button>
-          <button
-            onClick={handleOpenUnmuteConfirm}
-            disabled={unmuteMutation.isPending}
-            className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {unmuteMutation.isPending ? '处理中...' : '解禁聊天'}
-          </button>
-          {activeBans.length > 0 ? (
-            <button
-              onClick={handleOpenUnbanConfirm}
-              disabled={unbanMutation.isPending}
-              className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              {unbanMutation.isPending ? '处理中...' : '解禁角色'}
-            </button>
-          ) : (
-            <button
-              onClick={handleOpenBanDialog}
-              className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700"
-            >
-              封禁角色
-            </button>
-          )}
-        </div>
+        <CharacterDetailActions
+          character={character}
+          unmutePending={actions.unmutePending}
+          unbanPending={actions.unbanPending}
+          onOpenBan={actions.banFlow.openForm}
+          onOpenUnban={() => actions.setShowUnbanConfirmDialog(true)}
+          onOpenMute={() => actions.setShowMuteDialog(true)}
+          onOpenUnmute={() => actions.setShowUnmuteConfirmDialog(true)}
+        />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoCard title="基本信息">
-          <InfoRow label="GUID" value={character.guid} />
-          <InfoRow label="名称" value={character.name} />
-          <InfoRow label="等级" value={character.level} />
-          <InfoRow label="种族" value={raceMap[character.race] || '未知'} />
-          <InfoRow label="职业" value={classMap[character.class] || '未知'} />
-          <InfoRow
-            label="状态"
-            value={character.online ? <span className="text-green-400">在线</span> : '离线'}
-          />
-          <InfoRow label="所属账号" value={character.accountUsername} />
-        </InfoCard>
+      <CharacterDetailInfo character={character} />
+      <BanHistoryTable bans={character.bans} />
 
-        <InfoCard title="属性与进度">
-          <InfoRow label="经验值" value={character.xp.toLocaleString()} />
-          <InfoRow
-            label="金币"
-            value={`${gold}金 ${silver}银 ${copper}铜`}
-          />
-          <InfoRow label="竞技场点数" value={character.arenaPoints} />
-          <InfoRow label="荣誉点数" value={character.totalHonorPoints} />
-          <InfoRow label="总击杀数" value={character.totalKills} />
-          <InfoRow
-            label="总在线时长"
-            value={`${Math.floor(character.totalTime / 3600)} 小时`}
-          />
-        </InfoCard>
-      </div>
-
-      {character.bans && character.bans.length > 0 && (
-        <InfoCard title="封禁记录">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-3 py-2 text-left text-muted-foreground">封禁时间</th>
-                  <th className="px-3 py-2 text-left text-muted-foreground">解封时间</th>
-                  <th className="px-3 py-2 text-left text-muted-foreground">操作人</th>
-                  <th className="px-3 py-2 text-left text-muted-foreground">原因</th>
-                  <th className="px-3 py-2 text-left text-muted-foreground">状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                {character.bans.map((ban, index) => (
-                  <tr key={index} className="border-b border-border">
-                    <td className="px-3 py-2">
-                      {new Date(ban.banDate).toLocaleString('zh-CN')}
-                    </td>
-                    <td className="px-3 py-2">
-                      {new Date(ban.banDate).getTime() === new Date(ban.unbanDate).getTime() ? (
-                        <span className="text-red-400">永久</span>
-                      ) : (
-                        new Date(ban.unbanDate).toLocaleString('zh-CN')
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{ban.bannedBy}</td>
-                    <td className="px-3 py-2">{ban.banReason}</td>
-                    <td className="px-3 py-2">
-                      {ban.active ? (
-                        <span className="text-red-400">生效中</span>
-                      ) : (
-                        <span className="text-green-400">已解除</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </InfoCard>
-      )}
-
-      <Dialog
-        open={showBanDialog}
-        onClose={() => setShowBanDialog(false)}
+      <BanFlowDialogs
+        flow={actions.banFlow}
         title="封禁角色"
-        footer={
-          <>
-            <button
-              onClick={() => setShowBanDialog(false)}
-              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleProceedToConfirm}
-              disabled={!canProceed}
-              className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-            >
-              下一步
-            </button>
-          </>
-        }
-      >
-        <div className="bg-muted/50 rounded-md p-3 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">目标角色</span>
-            <span className="font-medium">{character.name}</span>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-muted-foreground">角色GUID</span>
-            <span>{character.guid}</span>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1.5">封禁时长</label>
-          <select
-            value={banDuration}
-            onChange={(e) => setBanDuration(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="1h">1小时</option>
-            <option value="1d">1天</option>
-            <option value="3d">3天</option>
-            <option value="7d">7天</option>
-            <option value="30d">30天</option>
-            <option value="-1">永久</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1.5">封禁原因</label>
-          <select
-            value={banReasonType}
-            onChange={(e) => setBanReasonType(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {banReasonOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {isCustomReason && (
-          <div>
-            <label className="block text-sm font-medium mb-1.5">自定义原因</label>
-            <input
-              type="text"
-              value={customReason}
-              onChange={(e) => setCustomReason(e.target.value)}
-              placeholder="请输入封禁原因"
-              className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-        )}
-      </Dialog>
-
-      <Dialog
-        open={showConfirmDialog}
-        onClose={() => setShowConfirmDialog(false)}
-        title="确认封禁"
-        footer={
-          <>
-            <button
-              onClick={() => {
-                setShowConfirmDialog(false);
-                setShowBanDialog(true);
-              }}
-              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
-            >
-              返回修改
-            </button>
-            <button
-              onClick={handleExecuteBan}
-              disabled={banMutation.isPending}
-              className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-            >
-              {banMutation.isPending ? '处理中...' : '确认封禁'}
-            </button>
-          </>
-        }
-      >
-        <div className="text-sm text-muted-foreground mb-4">
-          请再次确认以下封禁信息，操作后将立即生效：
-        </div>
-
-        <div className="space-y-3 bg-muted/50 rounded-md p-4 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">目标角色</span>
-            <span className="font-medium">{character.name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">封禁时长</span>
-            <span className="font-medium text-red-400">{durationLabels[banDuration]}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">封禁原因</span>
-            <span className="font-medium">{finalBanReason}</span>
-          </div>
-        </div>
-      </Dialog>
-
-      {/* 禁言对话框 */}
-      <Dialog
-        open={showMuteDialog}
-        onClose={() => setShowMuteDialog(false)}
-        title="禁言角色"
-        footer={
-          <>
-            <button
-              onClick={() => setShowMuteDialog(false)}
-              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleExecuteMute}
-              disabled={!canMuteProceed || muteMutation.isPending}
-              className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
-            >
-              {muteMutation.isPending ? '处理中...' : '确认禁言'}
-            </button>
-          </>
-        }
-      >
-        <div className="bg-muted/50 rounded-md p-3 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">目标角色</span>
-            <span className="font-medium">{character.name}</span>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-muted-foreground">角色GUID</span>
-            <span>{character.guid}</span>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1.5">禁言时长</label>
-          <select
-            value={muteDuration}
-            onChange={(e) => setMuteDuration(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="10m">10分钟</option>
-            <option value="1h">1小时</option>
-            <option value="1d">1天</option>
-            <option value="3d">3天</option>
-            <option value="7d">7天</option>
-            <option value="30d">30天</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1.5">禁言原因</label>
-          <select
-            value={muteReasonType}
-            onChange={(e) => setMuteReasonType(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {banReasonOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {isMuteCustomReason && (
-          <div>
-            <label className="block text-sm font-medium mb-1.5">自定义原因</label>
-            <input
-              type="text"
-              value={muteCustomReason}
-              onChange={(e) => setMuteCustomReason(e.target.value)}
-              placeholder="请输入禁言原因"
-              className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-        )}
-      </Dialog>
-
-      {/* 解禁角色确认对话框 */}
-      <Dialog
-        open={showUnbanConfirmDialog}
-        onClose={() => setShowUnbanConfirmDialog(false)}
+        target={{ label: '目标角色', name: character.name, metaLabel: '角色GUID', metaValue: character.guid }}
+        onConfirm={actions.handleExecuteBan}
+        pending={actions.banPending}
+      />
+      <MuteDialog
+        open={actions.showMuteDialog}
+        onClose={() => actions.setShowMuteDialog(false)}
+        characterName={character.name}
+        characterGuid={character.guid}
+        pending={actions.mutePending}
+        onSubmit={actions.handleExecuteMute}
+      />
+      <ConfirmDialog
+        open={actions.showUnbanConfirmDialog}
+        onClose={() => actions.setShowUnbanConfirmDialog(false)}
         title="确认解禁角色"
-        footer={
-          <>
-            <button
-              onClick={() => setShowUnbanConfirmDialog(false)}
-              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleExecuteUnban}
-              disabled={unbanMutation.isPending}
-              className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              {unbanMutation.isPending ? '处理中...' : '确认解禁'}
-            </button>
-          </>
-        }
+        tone="success"
+        confirmText="确认解禁"
+        pending={actions.unbanPending}
+        onConfirm={actions.handleExecuteUnban}
       >
         <div className="text-sm text-muted-foreground">
           确认要解禁角色 <span className="font-medium text-foreground">{character?.name}</span> 吗？
         </div>
-      </Dialog>
-
-      {/* 解除禁言确认对话框 */}
-      <Dialog
-        open={showUnmuteConfirmDialog}
-        onClose={() => setShowUnmuteConfirmDialog(false)}
-        title="确认解除禁言"
-        footer={
-          <>
-            <button
-              onClick={() => setShowUnmuteConfirmDialog(false)}
-              className="px-4 py-2 rounded-md border border-border text-sm hover:bg-accent"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleExecuteUnmute}
-              disabled={unmuteMutation.isPending}
-              className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {unmuteMutation.isPending ? '处理中...' : '确认解除'}
-            </button>
-          </>
-        }
-      >
-        <div className="text-sm text-muted-foreground">
-          确认要解除角色 <span className="font-medium text-foreground">{character?.name}</span> 的聊天禁言吗？
-        </div>
-      </Dialog>
-    </div>
-  );
-}
-
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-6">
-      <h2 className="text-lg font-semibold mb-4">{title}</h2>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span>{value}</span>
+      </ConfirmDialog>
+      <CharacterUnmuteConfirmDialog
+        open={actions.showUnmuteConfirmDialog}
+        onClose={() => actions.setShowUnmuteConfirmDialog(false)}
+        characterName={character.name}
+        pending={actions.unmutePending}
+        onConfirm={actions.handleExecuteUnmute}
+      />
     </div>
   );
 }

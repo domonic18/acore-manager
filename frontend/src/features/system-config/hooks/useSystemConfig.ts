@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { SystemConfig, systemConfigReadApi } from '@/shared/api/system-config.api';
 import { SystemConfigPayload, systemConfigApi } from '../api/system-config.api';
 
 const KEY = ['system-config'];
 
 export function useSystemConfig() {
-  return useQuery({ queryKey: KEY, queryFn: () => systemConfigApi.get() });
+  return useQuery({ queryKey: KEY, queryFn: systemConfigReadApi.get });
 }
 
 export function useUpdateSystemConfig() {
@@ -19,8 +20,4 @@ export function useSoapTest() {
   return useMutation({ mutationFn: () => systemConfigApi.soapTest() });
 }
 
-// 供诊断页等消费默认 realm：加载前返回 ''（调用方以 falsy 判断未就绪）
-export function useDefaultRealm(): string {
-  const { data } = useSystemConfig();
-  return data?.defaultRealm ?? '';
-}
+export type { SystemConfig };

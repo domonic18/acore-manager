@@ -28,6 +28,7 @@ const FORWARD_ENV_KEYS = [
   'DB_ACM',
   'ACM_DB_URL',
   'REDIS_URL',
+  'JWT_SECRET',
   'LLM_AES_KEY',
   'COS_SECRET_ID',
   'COS_SECRET_KEY',

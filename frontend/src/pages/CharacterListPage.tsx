@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCharacterList } from '@/features/character/hooks/useCharacter';
-import { raceMap, classMap } from '@/shared/constants/game.constants';
+import { CharacterTable } from '@/features/character/components/CharacterTable';
+import { PaginationBar } from '@/shared/components/PaginationBar';
 
 const ONLINE_ONLY_KEY = 'acm.characters.onlineOnly';
 
@@ -10,7 +10,6 @@ function readOnlineOnlyPref(): boolean {
 }
 
 export default function CharacterListPage() {
-  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -80,104 +79,9 @@ export default function CharacterListPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-border overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead>
-            <tr className="border-b border-border bg-card">
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">名称</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">所属账号</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">等级</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">种族</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">职业</th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">加载中...</td>
-              </tr>
-            ) : data?.items.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">暂无数据</td>
-              </tr>
-            ) : (
-              data?.items.map((char) => {
-                const isDeleted = !char.name;
-                return (
-                  <tr
-                    key={char.guid}
-                    className={`border-b border-border cursor-pointer ${
-                      isDeleted ? 'bg-red-50/50 dark:bg-red-950/20' : 'hover:bg-accent/50'
-                    }`}
-                    onClick={() => !isDeleted && navigate(`/characters/${char.guid}`)}
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap font-medium">
-                      {isDeleted ? (
-                        <span className="text-muted-foreground line-through italic">
-                          已删除（GUID: {char.guid}）
-                        </span>
-                      ) : (
-                        char.name
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {isDeleted ? (
-                        <span className="text-muted-foreground">-</span>
-                      ) : (
-                        <button
-                          className="text-primary hover:underline text-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/accounts/${char.accountId}`);
-                          }}
-                        >
-                          {char.accountUsername}
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{char.level}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{raceMap[char.race] || '未知'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{classMap[char.class] || '未知'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {isDeleted ? (
-                        <span className="text-red-400 text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30">已删除</span>
-                      ) : char.online ? (
-                        <span className="text-green-400">在线</span>
-                      ) : (
-                        <span className="text-muted-foreground">离线</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <CharacterTable rows={data?.items ?? []} loading={isLoading} />
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">共 {data?.total} 条记录</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
-            >
-              上一页
-            </button>
-            <span className="px-3 py-1.5 text-sm text-muted-foreground">第 {page} / {totalPages} 页</span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="px-3 py-1.5 rounded-md border border-border text-sm disabled:opacity-50 hover:bg-accent"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} />
     </div>
   );
 }

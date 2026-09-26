@@ -1,6 +1,7 @@
 // streamEvents(v2) → SSE 逻辑事件映射（arch 3.2.4 / 5.2）。
 // 输出为与传输无关的事件序列；ai-assistant / ai-analysis 路由负责序列化为 SSE 帧
 // 并在 done 事件中补充 sessionId / messageId 等会话信息。
+// 映射为表驱动：每类 LangChain 回调事件一个 handler，返回待下发的逻辑事件数组。
 
 export type AgentSseEventName = 'delta' | 'tool_call' | 'tool_result' | 'step' | 'question' | 'done' | 'error';
 
@@ -22,81 +23,81 @@ interface UsageLike {
   total_tokens?: number;
 }
 
+interface WireContext {
+  toolStartAt: Map<string, number>;
+  usage: { prompt: number; completion: number; total: number };
+}
+
+type RawEventHandler = (ev: StreamEventLike, ctx: WireContext) => AgentSseEvent[];
+
+const HANDLERS: Record<string, RawEventHandler> = {
+  on_chat_model_stream: (ev) => {
+    const chunk = ev.data.chunk as { content?: unknown } | undefined;
+    const text = contentText(chunk?.content);
+    return text ? [{ event: 'delta', data: { text } }] : [];
+  },
+  on_chat_model_end: (ev, ctx) => {
+    const meta = extractUsage(ev.data.output);
+    ctx.usage.prompt += meta.input_tokens ?? 0;
+    ctx.usage.completion += meta.output_tokens ?? 0;
+    ctx.usage.total += meta.total_tokens ?? 0;
+    return [];
+  },
+  on_tool_start: (ev, ctx) => {
+    if (ev.run_id) ctx.toolStartAt.set(ev.run_id, Date.now());
+    return [{ event: 'tool_call', data: { name: ev.name, args: ev.data.input } }];
+  },
+  on_tool_end: (ev, ctx) => {
+    const output = ev.data.output as { error?: unknown } | undefined;
+    const failed = typeof output?.error === 'string';
+    const events: AgentSseEvent[] = [];
+    const question = extractQuestionMarker(ev.data.output);
+    if (question) events.push({ event: 'question', data: question });
+    events.push(toolResultEvent(ev, ctx, failed ? (output?.error as string) : undefined));
+    return events;
+  },
+  on_tool_error: (ev, ctx) => {
+    const raw = ev.data.error;
+    return [toolResultEvent(ev, ctx, raw instanceof Error ? raw.message : String(raw ?? 'tool error'))];
+  },
+};
+
 export async function* streamAgentEvents(
   agent: { streamEvents: (input: unknown, options: Record<string, unknown>) => AsyncIterable<StreamEventLike> },
   input: unknown,
   config: Record<string, unknown>,
 ): AsyncGenerator<AgentSseEvent> {
-  const toolStartAt = new Map<string, number>();
-  const usage = { prompt: 0, completion: 0, total: 0 };
+  const ctx: WireContext = { toolStartAt: new Map(), usage: { prompt: 0, completion: 0, total: 0 } };
   try {
     const stream = agent.streamEvents(input, { version: 'v2', ...config });
     for await (const ev of stream) {
-      switch (ev.event) {
-        case 'on_chat_model_stream': {
-          const chunk = ev.data.chunk as { content?: unknown } | undefined;
-          const text = contentText(chunk?.content);
-          if (text) yield { event: 'delta', data: { text } };
-          break;
-        }
-        case 'on_chat_model_end': {
-          const meta = extractUsage(ev.data.output);
-          usage.prompt += meta.input_tokens ?? 0;
-          usage.completion += meta.output_tokens ?? 0;
-          usage.total += meta.total_tokens ?? 0;
-          break;
-        }
-        case 'on_tool_start': {
-          if (ev.run_id) toolStartAt.set(ev.run_id, Date.now());
-          yield { event: 'tool_call', data: { name: ev.name, args: ev.data.input } };
-          break;
-        }
-        case 'on_tool_end': {
-          const startedAt = ev.run_id ? toolStartAt.get(ev.run_id) : undefined;
-          if (ev.run_id) toolStartAt.delete(ev.run_id);
-          const output = ev.data.output as { error?: unknown } | undefined;
-          const failed = typeof output?.error === 'string';
-          const question = extractQuestionMarker(ev.data.output);
-          if (question) {
-            yield { event: 'question', data: question };
-          }
-          yield {
-            event: 'tool_result',
-            data: {
-              name: ev.name,
-              rowCount: failed ? null : countOutputRows(ev.data.output),
-              durationMs: startedAt ? Date.now() - startedAt : null,
-              ...(failed ? { error: output?.error } : {}),
-            },
-          };
-          break;
-        }
-        case 'on_tool_error': {
-          // 工具失败必须闭环 tool_result，否则前端该行永远停留在"运行中"
-          const startedAt = ev.run_id ? toolStartAt.get(ev.run_id) : undefined;
-          if (ev.run_id) toolStartAt.delete(ev.run_id);
-          const raw = ev.data.error;
-          yield {
-            event: 'tool_result',
-            data: {
-              name: ev.name,
-              rowCount: null,
-              durationMs: startedAt ? Date.now() - startedAt : null,
-              error: raw instanceof Error ? raw.message : String(raw ?? 'tool error'),
-            },
-          };
-          break;
-        }
-        default:
-          break;
+      const handler = HANDLERS[ev.event];
+      if (handler) {
+        for (const out of handler(ev, ctx)) yield out;
       }
     }
-    yield { event: 'done', data: { tokens: usage } };
+    yield { event: 'done', data: { tokens: ctx.usage } };
   } catch (err) {
     const message = (err as Error).message ?? String(err);
     const code = (err as { code?: string }).code ?? 'agent_error';
     yield { event: 'error', data: { message, code } };
   }
+}
+
+// tool_call/tool_result 配对收尾：取回该 run 的开始时间算耗时；error 事件与失败的工具返回
+// 都必须闭环为带 error 的 tool_result，否则前端该行永远停留在"运行中"
+function toolResultEvent(ev: StreamEventLike, ctx: WireContext, error?: string): AgentSseEvent {
+  const startedAt = ev.run_id ? ctx.toolStartAt.get(ev.run_id) : undefined;
+  if (ev.run_id) ctx.toolStartAt.delete(ev.run_id);
+  return {
+    event: 'tool_result',
+    data: {
+      name: ev.name,
+      rowCount: error === undefined ? countOutputRows(ev.data.output) : null,
+      durationMs: startedAt ? Date.now() - startedAt : null,
+      ...(error !== undefined ? { error } : {}),
+    },
+  };
 }
 
 function extractUsage(output: unknown): UsageLike {

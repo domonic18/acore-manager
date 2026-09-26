@@ -180,13 +180,14 @@ export const env = {
   COS_REGION: getEnv('COS_REGION', ''),
 
   // Tencent SCF (Job 函数异步触发，控制面专用；四项主配置缺任一则触发接口快速失败)
+  // 键名带 TENCENT_ 前缀：SCF_* 是腾讯云 SCF 运行时注入的保留前缀，用户配置同名会冲突报错（仿 SquadSight TENCENT_SCF_*）
   TENCENT_SECRET_ID: getEnv('TENCENT_SECRET_ID', ''),
   TENCENT_SECRET_KEY: getEnv('TENCENT_SECRET_KEY', ''),
-  SCF_REGION: getEnv('SCF_REGION', ''),
-  SCF_NAMESPACE: getEnv('SCF_NAMESPACE', 'default'),
-  SCF_JOB_FUNCTION_NAME: getEnv('SCF_JOB_FUNCTION_NAME', ''),
-  // 留空 = 腾讯云真实端点；本地容器联调指向 scf-mock（同 AWS_ENDPOINT_URL 的端点覆盖惯例，非模式开关）
-  SCF_ENDPOINT: getEnv('SCF_ENDPOINT', ''),
+  TENCENT_SCF_REGION: getEnv('TENCENT_SCF_REGION', ''),
+  TENCENT_SCF_NAMESPACE: getEnv('TENCENT_SCF_NAMESPACE', 'default'),
+  TENCENT_SCF_JOB_FUNCTION_NAME: getEnv('TENCENT_SCF_JOB_FUNCTION_NAME', ''),
+  // 留空 = 腾讯云真实端点；联调云测试函数时可按需覆盖（同 AWS_ENDPOINT_URL 的端点覆盖惯例，非模式开关）
+  TENCENT_SCF_ENDPOINT: getEnv('TENCENT_SCF_ENDPOINT', ''),
 
 
   // Redis (connection via REDIS_URL)

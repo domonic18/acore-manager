@@ -2,10 +2,10 @@ jest.mock('@/config/env', () => ({
   env: {
     TENCENT_SECRET_ID: 'id-1',
     TENCENT_SECRET_KEY: 'key-1',
-    SCF_REGION: 'ap-guangzhou',
-    SCF_NAMESPACE: 'default',
-    SCF_JOB_FUNCTION_NAME: 'acore-manager-job',
-    SCF_ENDPOINT: 'http://scf-mock:9011',
+    TENCENT_SCF_REGION: 'ap-guangzhou',
+    TENCENT_SCF_NAMESPACE: 'default',
+    TENCENT_SCF_JOB_FUNCTION_NAME: 'acore-manager-job',
+    TENCENT_SCF_ENDPOINT: 'http://127.0.0.1:9011',
   },
 }));
 jest.mock('@/shared/utils/scf-invoke.util', () => ({
@@ -21,10 +21,22 @@ const invokeMock = invokeScfFunction as jest.Mock;
 describe('listMissingScfEnv', () => {
   it('lists every missing required variable by name', () => {
     expect(
-      listMissingScfEnv({ TENCENT_SECRET_KEY: 'key-1', SCF_NAMESPACE: 'default', SCF_JOB_FUNCTION_NAME: 'fn' }),
-    ).toEqual(['TENCENT_SECRET_ID', 'SCF_REGION']);
-    expect(listMissingScfEnv({})).toEqual(['TENCENT_SECRET_ID', 'TENCENT_SECRET_KEY', 'SCF_REGION', 'SCF_JOB_FUNCTION_NAME']);
-    expect(listMissingScfEnv({ TENCENT_SECRET_ID: 'i', TENCENT_SECRET_KEY: 'k', SCF_REGION: 'r', SCF_JOB_FUNCTION_NAME: 'f' })).toEqual([]);
+      listMissingScfEnv({ TENCENT_SECRET_KEY: 'key-1', TENCENT_SCF_NAMESPACE: 'default', TENCENT_SCF_JOB_FUNCTION_NAME: 'fn' }),
+    ).toEqual(['TENCENT_SECRET_ID', 'TENCENT_SCF_REGION']);
+    expect(listMissingScfEnv({})).toEqual([
+      'TENCENT_SECRET_ID',
+      'TENCENT_SECRET_KEY',
+      'TENCENT_SCF_REGION',
+      'TENCENT_SCF_JOB_FUNCTION_NAME',
+    ]);
+    expect(
+      listMissingScfEnv({
+        TENCENT_SECRET_ID: 'i',
+        TENCENT_SECRET_KEY: 'k',
+        TENCENT_SCF_REGION: 'r',
+        TENCENT_SCF_JOB_FUNCTION_NAME: 'f',
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -44,7 +56,7 @@ describe('triggerJob', () => {
     expect(opts.region).toBe('ap-guangzhou');
     expect(opts.secretId).toBe('id-1');
     expect(opts.secretKey).toBe('key-1');
-    expect(opts.endpoint).toBe('http://scf-mock:9011');
+    expect(opts.endpoint).toBe('http://127.0.0.1:9011');
     expect(JSON.parse(opts.clientContext)).toEqual({ task: 'inspection', params });
   });
 

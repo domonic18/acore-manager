@@ -8,11 +8,11 @@ const GOLDEN_AUTHORIZATION =
   'TC3-HMAC-SHA256 Credential=AKIDexample1234567890/2024-09-22/scf/tc3_request, ' +
   'SignedHeaders=content-type;host;x-tc-action, ' +
   'Signature=f2c649733e9a66b2147c5791c7862336a85cfeb905845aee206ece7530051afc';
-// host 覆盖（本地 scf-mock）下的黄金值：签名覆盖自定义 host（含端口），与官方域签名不同
-const GOLDEN_AUTHORIZATION_MOCK_HOST =
+// host 覆盖（自定义 host 含端口）下的黄金值：签名覆盖 host，与官方域签名不同
+const GOLDEN_AUTHORIZATION_CUSTOM_HOST =
   'TC3-HMAC-SHA256 Credential=AKIDexample1234567890/2024-09-22/scf/tc3_request, ' +
   'SignedHeaders=content-type;host;x-tc-action, ' +
-  'Signature=880645bcb6b5c6a81e93ae4365684ce98ea176f943a4c5c90e6802fdd600845f';
+  'Signature=bb5fa0594bc6f389499b9c34a4112c820d5f28f70f876145fa8f13069a8bf4e5';
 
 describe('buildInvokeHeaders', () => {
   it('matches the independently computed golden signature', () => {
@@ -51,11 +51,11 @@ describe('buildInvokeHeaders', () => {
       secretId: 'AKIDexample1234567890',
       secretKey: 'secretKeyExample/2026',
       timestamp: 1727000000,
-      host: 'scf-mock:9011',
+      host: '127.0.0.1:9011',
     });
 
-    expect(headers.Host).toBe('scf-mock:9011');
-    expect(headers.Authorization).toBe(GOLDEN_AUTHORIZATION_MOCK_HOST);
+    expect(headers.Host).toBe('127.0.0.1:9011');
+    expect(headers.Authorization).toBe(GOLDEN_AUTHORIZATION_CUSTOM_HOST);
   });
 });
 
@@ -92,11 +92,11 @@ describe('invokeScfFunction', () => {
   it('posts to the overridden endpoint and signs its host', async () => {
     const fetchMock = jest.fn().mockResolvedValue(jsonImpl({ Response: { RequestId: 'req-2' } })());
 
-    await invokeScfFunction({ ...baseOpts, endpoint: 'http://scf-mock:9011', fetchImpl: fetchMock as unknown as typeof fetch });
+    await invokeScfFunction({ ...baseOpts, endpoint: 'http://127.0.0.1:9011', fetchImpl: fetchMock as unknown as typeof fetch });
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('http://scf-mock:9011');
-    expect(init.headers.Host).toBe('scf-mock:9011');
+    expect(url).toBe('http://127.0.0.1:9011');
+    expect(init.headers.Host).toBe('127.0.0.1:9011');
   });
 
   it('throws ScfInvokeError carrying the API error code', async () => {

@@ -69,7 +69,7 @@ export interface InvokeScfOptions {
   secretId: string;
   secretKey: string;
   clientContext: string;
-  endpoint?: string; // 端点覆盖（本地容器联调指向 scf-mock）；缺省为腾讯云真实端点
+  endpoint?: string; // 端点覆盖（联调云测试函数时按需指向测试端点）；缺省为腾讯云真实端点
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }

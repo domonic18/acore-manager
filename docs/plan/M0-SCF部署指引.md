@@ -111,14 +111,15 @@ docker push <TCR仓库>/acore-manager-job:<tag>
 ### Web 函数前置（「立即巡检」按钮 → SCF Invoke 控制面触发）
 
 > 巡检执行一律在 Job 函数，Web 端通过 SCF Invoke API（`InvocationType=Event`，TC3 自签名）
-> 异步受理，不重、不降级。Web 函数需新增以下环境变量（与 `backend/src/config/env.ts` 对应）：
+> 异步受理，不重、不降级。Web 函数需新增以下环境变量（与 `backend/src/config/env.ts` 对应；
+> 键名带 `TENCENT_` 前缀，因 `SCF_*` 是腾讯云 SCF 运行时注入的保留前缀，配置同名会冲突报错）：
 
 | 键 | 说明 |
 | --- | --- |
 | `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` | CAM 子账号密钥，需授权 `scf:InvokeFunction`（建议自定义策略把资源限定到 `qcs::scf:<region>:uin/<主账号UIN>:namespace/<ns>/function/<函数名>`） |
-| `SCF_REGION` | Job 函数所在地域（如 `ap-guangzhou`） |
-| `SCF_NAMESPACE` | Job 函数所在命名空间，默认 `default` |
-| `SCF_JOB_FUNCTION_NAME` | Job 函数名 |
+| `TENCENT_SCF_REGION` | Job 函数所在地域（如 `ap-guangzhou`） |
+| `TENCENT_SCF_NAMESPACE` | Job 函数所在命名空间，默认 `default` |
+| `TENCENT_SCF_JOB_FUNCTION_NAME` | Job 函数名 |
 
 - 四项主配置缺任一：触发接口快速失败并报缺失变量名，不做本地直跑回退
 - 常见错误码：`AuthFailure.SignatureFailure`（密钥错）/ `AuthFailure.UnauthorizedOperation`（未授权
@@ -134,43 +135,13 @@ docker push <TCR仓库>/acore-manager-job:<tag>
 
 ---
 
-## 七、本地 Docker 全链路验证（web 容器 → scf-mock → job 容器）
+## 七、云函数全链路验证
 
-> 不依赖腾讯云，在本机用容器验证「立即巡检」真实链路：web 容器发出**真实 TC3 签名 Invoke**
-> → `scf-mock` 容器（模拟 `scf.<region>.tencentcloudapi.com`，见 `docker/scf-mock/server.mjs`）
-> 复核签名并按 Event 语义返回 RequestId → 派生 **job 容器**（真实 `docker/Dockerfile.job` 镜像，
-> 事件经 `SCF_CUSTOM_CONTAINER_EVENT` 注入）执行巡检。接入方式 = `SCF_ENDPOINT` 端点覆盖
-> （同 AWS_ENDPOINT_URL 惯例，代码路径与生产完全一致，无本地直跑分支）。
+> 本地 scf-mock 模拟链路已移除（原 `docker-compose.e2e.yml` + `docker/scf-mock/`），全链路验证
+> 改在腾讯云测试环境进行：按 §二 / §六 把 Job 函数与 Web 函数部署到测试命名空间，
+> 用 §六「上线验证」清单逐项实测，Job 执行观测方法见 §三（SCF 控制台日志 / coscli 拉取）。
 
 ### 步骤
 
-1. 准备环境覆盖：`cp .env.e2e.example .env.e2e`，把其中各连接串的 host 改为
-   `host.docker.internal`（端口/库名/凭证照抄 `.env`；本地 acm PG 容器已发布 5433）
-2. 起栈（首次会自动构建 web 与 job 镜像，job 镜像由 scf-mock 按需构建）：
-
-   ```bash
-   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build app scf-mock
-   ```
-
-3. 浏览器 http://localhost:9010 → AI 诊断 →「立即巡检」：toast 成功且响应含 requestId
-4. 观察执行（等价 SCF 控制台日志）：
-
-   ```bash
-   docker compose -f docker-compose.yml -f docker-compose.e2e.yml logs -f scf-mock
-   # 期望：签名复核通过 → [job acm-job-xxxx] 巡检日志 → 完成 exit=0 elapsed=…
-   ```
-
-5. 报告页刷新可见 `trigger=manual` 新报告；验证完清理：`docker compose -f docker-compose.yml -f docker-compose.e2e.yml down`
-
-### 排障
-
-- toast 报 `AuthFailure.SignatureFailure`：两侧密钥须一致（compose 注入的哑凭证
-  `local-mock-id/local-mock-key`）；报 `SignatureExpire` 先查宿主机时钟
-- `[job acm-job-…] 派生失败`：确认 Docker Desktop 已启动、docker.sock 挂载成功
-- job 内数据源连接失败（exit=2）：核对 `.env.e2e` 的 host 是否已全部换成 `host.docker.internal`
-- 直接 curl 调试 mock（无签名头应被拒）：
-
-  ```bash
-  curl -s http://localhost:9011 -X POST -H 'Content-Type: application/json' -d '{"InvocationType":"Event","ClientContext":"{\"task\":\"ping\"}"}'
-  # 期望 {"Response":{"Error":{"Code":"AuthFailure.SignatureFailure",…}}}
-  ```
+按 §六「上线验证」清单在测试命名空间逐项执行；原本地 Docker 栈步骤随 `docker-compose.e2e.yml`
+与 `docker/scf-mock/` 一并移除。

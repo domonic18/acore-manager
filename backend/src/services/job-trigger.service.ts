@@ -6,9 +6,12 @@ import { ServiceError } from '@/shared/errors/service-error';
 // 控制面通用 Job 触发器：组 JSON 事件 → SCF Invoke（InvocationType=Event 异步受理）→ 返回 RequestId。
 // 执行一律在 SCF Job 函数，Web 进程不承载任务本体；未来新任务复用本服务，无需改结构。
 
-export { ServiceError };
-
-const REQUIRED_ENV_KEYS = ['TENCENT_SECRET_ID', 'TENCENT_SECRET_KEY', 'SCF_REGION', 'SCF_JOB_FUNCTION_NAME'] as const;
+const REQUIRED_ENV_KEYS = [
+  'TENCENT_SECRET_ID',
+  'TENCENT_SECRET_KEY',
+  'TENCENT_SCF_REGION',
+  'TENCENT_SCF_JOB_FUNCTION_NAME',
+] as const;
 
 // 列出缺失的 SCF 必需配置（供快速失败报错与运维诊断）
 export function listMissingScfEnv(config: Partial<Record<(typeof REQUIRED_ENV_KEYS)[number], string>> = env): string[] {
@@ -26,13 +29,13 @@ export async function triggerJob(
 
   try {
     const { requestId } = await invokeScfFunction({
-      functionName: env.SCF_JOB_FUNCTION_NAME,
-      namespace: env.SCF_NAMESPACE,
-      region: env.SCF_REGION,
+      functionName: env.TENCENT_SCF_JOB_FUNCTION_NAME,
+      namespace: env.TENCENT_SCF_NAMESPACE,
+      region: env.TENCENT_SCF_REGION,
       secretId: env.TENCENT_SECRET_ID,
       secretKey: env.TENCENT_SECRET_KEY,
       clientContext: JSON.stringify({ task, params }),
-      endpoint: env.SCF_ENDPOINT || undefined,
+      endpoint: env.TENCENT_SCF_ENDPOINT || undefined,
     });
     return { requestId };
   } catch (err) {

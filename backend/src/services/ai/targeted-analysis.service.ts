@@ -14,7 +14,6 @@ import { tokenUsageService } from './token-usage.service';
 import { emptyTokens, sumTokens, watchAgentEvents, type RoundAccumulator } from './agent-round.util';
 import { describeIssues, enforceFalsePositiveRule, parseConclusion, type AnalysisConclusion } from './targeted-analysis.conclusion';
 
-export { ServiceError };
 export type { AnalysisConclusion, AnalysisSuggestion } from './targeted-analysis.conclusion';
 
 // 定向分析编排（arch 5.1 / 需求 3.8，账号申诉场景）：单一角色/账号 + 时间范围，

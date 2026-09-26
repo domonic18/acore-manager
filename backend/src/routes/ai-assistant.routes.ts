@@ -3,8 +3,8 @@ import { body, param, validationResult } from 'express-validator';
 import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
-import { ServiceError } from '@/services/ai/llm-config.service';
-import { ServiceError as SessionServiceError, chatSessionService } from '@/services/ai/chat-session.service';
+import { ServiceError } from '@/shared/errors/service-error';
+import { chatSessionService } from '@/services/ai/chat-session.service';
 import { chatService } from '@/services/ai/chat.service';
 
 // AI GM 助手（arch 5.2）：POST /chat SSE 流式对话（Accept 协商降级非流式）。
@@ -12,7 +12,7 @@ import { chatService } from '@/services/ai/chat.service';
 const router = Router();
 
 function handleServiceError(res: Response, err: unknown): void {
-  if (err instanceof ServiceError || err instanceof SessionServiceError) {
+  if (err instanceof ServiceError) {
     res.jsonError(err.message, err.status);
     return;
   }

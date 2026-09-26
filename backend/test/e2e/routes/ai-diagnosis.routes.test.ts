@@ -1,12 +1,4 @@
 jest.mock('@/services/ai/anticheat-exemption.service', () => ({
-  ServiceError: class ServiceError extends Error {
-    constructor(
-      message: string,
-      public status = 400,
-    ) {
-      super(message);
-    }
-  },
   anticheatExemptionService: {
     list: jest.fn().mockResolvedValue([]),
     listByGuids: jest.fn().mockResolvedValue([]),
@@ -15,14 +7,6 @@ jest.mock('@/services/ai/anticheat-exemption.service', () => ({
   },
 }));
 jest.mock('@/services/job-trigger.service', () => ({
-  ServiceError: class ServiceError extends Error {
-    constructor(
-      message: string,
-      public status = 400,
-    ) {
-      super(message);
-    }
-  },
   triggerJob: jest.fn().mockResolvedValue({ requestId: 'req-1' }),
 }));
 jest.mock('@/services/ai/report.service', () => ({
@@ -52,8 +36,8 @@ import express, { Application } from 'express';
 import request from 'supertest';
 import { responseFormatter } from '@/middleware/response-formatter';
 import aiDiagnosisRoutes from '@/routes/ai-diagnosis.routes';
-import { ServiceError as ReportedServiceError } from '@/services/ai/anticheat-exemption.service';
-import { triggerJob, ServiceError as TriggerServiceError } from '@/services/job-trigger.service';
+import { triggerJob } from '@/services/job-trigger.service';
+import { ServiceError } from '@/shared/errors/service-error';
 import { JOB_TASK } from '@/shared/enums/job-task';
 import { reportService } from '@/services/ai/report.service';
 import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
@@ -108,11 +92,11 @@ describe('AI Diagnosis Routes: manual inspection trigger', () => {
   });
 
   it('maps trigger ServiceError status (e.g. 502 when SCF is unconfigured)', async () => {
-    (triggerJob as jest.Mock).mockRejectedValueOnce(new TriggerServiceError('SCF 触发未配置：缺少环境变量 SCF_REGION（见 .env.example）', 502));
+    (triggerJob as jest.Mock).mockRejectedValueOnce(new ServiceError('SCF 触发未配置：缺少环境变量 TENCENT_SCF_REGION（见 .env.example）', 502));
     const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: 'realm3' });
 
     expect(res.status).toBe(502);
-    expect(res.body.error).toContain('SCF_REGION');
+    expect(res.body.error).toContain('TENCENT_SCF_REGION');
   });
 });
 
@@ -213,7 +197,7 @@ describe('AI Diagnosis Routes: report query (T4.1)', () => {
     expect(res.body.data).toEqual({ success: true });
     expect(reportService.remove).toHaveBeenCalledWith('realm3', '2026-08-23', 0, '');
 
-    (reportService.remove as jest.Mock).mockRejectedValueOnce(new ReportedServiceError('报告不存在', 404));
+    (reportService.remove as jest.Mock).mockRejectedValueOnce(new ServiceError('报告不存在', 404));
     const missing = await request(app).delete('/api/ai/diagnosis/reports/realm3/2026-08-23');
     expect(missing.status).toBe(404);
   });
@@ -260,7 +244,7 @@ describe('AI Diagnosis Routes: PUT /reports/:realm/:date (T4.7)', () => {
   });
 
   it('maps ServiceError 404 when the report is absent', async () => {
-    (reportService.update as jest.Mock).mockRejectedValueOnce(new ReportedServiceError('报告不存在', 404));
+    (reportService.update as jest.Mock).mockRejectedValueOnce(new ServiceError('报告不存在', 404));
     const res = await request(app).put('/api/ai/diagnosis/reports/realm3/2001-01-01').send({ gmRemark: 'x' });
     expect(res.status).toBe(404);
   });

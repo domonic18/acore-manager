@@ -9,8 +9,6 @@ import { ServiceError } from '@/shared/errors/service-error';
 //   设默认清除其他默认行；删除默认行自动提升首个 active 行；
 //   api_key 编辑留空 = 保留原值（write-only）；接口回显仅掩码；无环境变量兜底。
 
-export { ServiceError };
-
 export interface ModelConfigView {
   id: number;
   name: string;

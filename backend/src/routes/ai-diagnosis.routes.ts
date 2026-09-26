@@ -3,9 +3,10 @@ import { body, param, query, validationResult } from 'express-validator';
 import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
-import { ServiceError, anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
+import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
 import { reportService } from '@/services/ai/report.service';
-import { ServiceError as JobTriggerServiceError, triggerJob } from '@/services/job-trigger.service';
+import { triggerJob } from '@/services/job-trigger.service';
+import { ServiceError } from '@/shared/errors/service-error';
 import { JOB_TASK } from '@/shared/enums/job-task';
 import { logger } from '@/middleware/request-logger';
 import { VIOLATION_TYPES } from '@/agent/tools/log-tools/anticheat-parser';
@@ -14,7 +15,7 @@ import { VIOLATION_TYPES } from '@/agent/tools/log-tools/anticheat-parser';
 const router = Router();
 
 function handleServiceError(res: Response, err: unknown): void {
-  if (err instanceof ServiceError || err instanceof JobTriggerServiceError) {
+  if (err instanceof ServiceError) {
     res.jsonError(err.message, err.status);
     return;
   }

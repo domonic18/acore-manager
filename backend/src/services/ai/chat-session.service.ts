@@ -8,8 +8,6 @@ import { ServiceError } from '@/shared/errors/service-error';
 // 对话正本管理（arch 3.2.3）：acm PG ai_chat_session / ai_chat_message 为会话正本，
 // LangGraph checkpoint（PostgresSaver）承载中间状态；删除会话 = 正本行 + checkpoint deleteThread 双清。
 
-export { ServiceError };
-
 export class ChatSessionService {
   async list(userId: number): Promise<AiChatSession[]> {
     return acmDataSource

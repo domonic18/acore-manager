@@ -8,8 +8,6 @@ import { ServiceError } from '@/shared/errors/service-error';
 // 误报白名单（arch 4.6）：GM 在报告页标注的反作弊豁免，(guid, type, mapId) 唯一（mapId 可空=不限地图）。
 // explain 引擎与 get_anticheat_record 只读此表；写入/移除均记审计。
 
-export { ServiceError };
-
 export interface ExemptionInput {
   characterGuid: number;
   violationType: string;

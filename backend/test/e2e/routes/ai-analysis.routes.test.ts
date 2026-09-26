@@ -1,12 +1,4 @@
 jest.mock('@/services/ai/targeted-analysis.service', () => ({
-  ServiceError: class ServiceError extends Error {
-    constructor(
-      message: string,
-      public status = 400,
-    ) {
-      super(message);
-    }
-  },
   targetedAnalysisService: {
     stream: jest.fn(),
     list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -33,7 +25,8 @@ import express, { Application } from 'express';
 import request from 'supertest';
 import { responseFormatter } from '@/middleware/response-formatter';
 import aiAnalysisRoutes from '@/routes/ai-analysis.routes';
-import { ServiceError, targetedAnalysisService } from '@/services/ai/targeted-analysis.service';
+import { ServiceError } from '@/shared/errors/service-error';
+import { targetedAnalysisService } from '@/services/ai/targeted-analysis.service';
 
 const streamMock = targetedAnalysisService.stream as jest.Mock;
 

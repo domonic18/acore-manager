@@ -8,7 +8,8 @@ jest.mock('@/agent/runtime/checkpointer', () => ({
 import { acmDataSource } from '@/config/database';
 import { deleteThread } from '@/agent/runtime/checkpointer';
 import { AiChatSession } from '@/entities/acm/ai-chat-session.entity';
-import { ServiceError, chatSessionService } from '@/services/ai/chat-session.service';
+import { ServiceError } from '@/shared/errors/service-error';
+import { chatSessionService } from '@/services/ai/chat-session.service';
 
 const getRepository = acmDataSource.getRepository as jest.Mock;
 

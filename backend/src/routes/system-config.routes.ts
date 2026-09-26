@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
-import { ServiceError } from '@/services/ai/llm-config.service';
+import { ServiceError } from '@/shared/errors/service-error';
 import { systemConfigService } from '@/services/system-config.service';
 import { soapService } from '@/services/soap.service';
 

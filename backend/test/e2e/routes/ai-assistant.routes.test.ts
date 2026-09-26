@@ -2,42 +2,24 @@ import request from 'supertest';
 import express, { Application } from 'express';
 import { responseFormatter } from '@/middleware/response-formatter';
 import aiAssistantRoutes from '@/routes/ai-assistant.routes';
-import { chatSessionService, ServiceError as SessionServiceError } from '@/services/ai/chat-session.service';
-import { llmConfigService, ServiceError as LlmServiceError } from '@/services/ai/llm-config.service';
+import { chatSessionService } from '@/services/ai/chat-session.service';
+import { llmConfigService } from '@/services/ai/llm-config.service';
 import { getAgent } from '@/agent/runtime/agent-factory';
+import { ServiceError } from '@/shared/errors/service-error';
 
-jest.mock('@/services/ai/llm-config.service', () => {
-  class ServiceError extends Error {
-    constructor(
-      message: string,
-      public status = 400,
-    ) {
-      super(message);
-    }
-  }
-  return { ServiceError, llmConfigService: { resolveDefault: jest.fn() } };
-});
-jest.mock('@/services/ai/chat-session.service', () => {
-  class ServiceError extends Error {
-    constructor(
-      message: string,
-      public status = 400,
-    ) {
-      super(message);
-    }
-  }
-  return {
-    ServiceError,
-    chatSessionService: {
-      getOwned: jest.fn(),
-      appendRound: jest.fn(),
-      list: jest.fn(),
-      create: jest.fn(),
-      messages: jest.fn(),
-      remove: jest.fn(),
-    },
-  };
-});
+jest.mock('@/services/ai/llm-config.service', () => ({
+  llmConfigService: { resolveDefault: jest.fn() },
+}));
+jest.mock('@/services/ai/chat-session.service', () => ({
+  chatSessionService: {
+    getOwned: jest.fn(),
+    appendRound: jest.fn(),
+    list: jest.fn(),
+    create: jest.fn(),
+    messages: jest.fn(),
+    remove: jest.fn(),
+  },
+}));
 jest.mock('@/services/ai/token-usage.service', () => ({
   tokenUsageService: { record: jest.fn().mockResolvedValue(undefined) },
 }));
@@ -129,7 +111,7 @@ describe('AI Assistant Routes', () => {
     });
 
     it('returns a service error when no default model is configured', async () => {
-      (llmConfigService.resolveDefault as jest.Mock).mockRejectedValue(new LlmServiceError('未配置默认 LLM 模型', 500));
+      (llmConfigService.resolveDefault as jest.Mock).mockRejectedValue(new ServiceError('未配置默认 LLM 模型', 500));
 
       const res = await request(app).post('/api/ai/assistant/chat').send({ sessionId: 1, message: 'hi' });
 
@@ -159,7 +141,7 @@ describe('AI Assistant Routes', () => {
     });
 
     it('maps session-not-found to a 404 JSON error', async () => {
-      (chatSessionService.getOwned as jest.Mock).mockRejectedValue(new SessionServiceError('会话不存在', 404));
+      (chatSessionService.getOwned as jest.Mock).mockRejectedValue(new ServiceError('会话不存在', 404));
       const res = await request(app).get('/api/ai/assistant/sessions/88/messages');
       expect(res.status).toBe(404);
     });

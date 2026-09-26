@@ -3,7 +3,8 @@ import { body, param, query, validationResult } from 'express-validator';
 import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
-import { ServiceError, targetedAnalysisService, type TargetedAnalysisInput } from '@/services/ai/targeted-analysis.service';
+import { ServiceError } from '@/shared/errors/service-error';
+import { targetedAnalysisService, type TargetedAnalysisInput } from '@/services/ai/targeted-analysis.service';
 
 // 定向分析（T4.0 / arch 5.1）：POST /targeted SSE 流式发起（Accept 协商降级非流式），
 // 结论追加落库 ai_targeted_analysis；发起 gmlevel≥2（改/删归 T4.7 再开放）。

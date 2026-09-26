@@ -3,7 +3,8 @@ import { body, param, validationResult } from 'express-validator';
 import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
-import { ServiceError, llmConfigService } from '@/services/ai/llm-config.service';
+import { ServiceError } from '@/shared/errors/service-error';
+import { llmConfigService } from '@/services/ai/llm-config.service';
 
 // 模型出口配置管理（gmlevel=3 最高管理员）：列表（掩码 Key）/ 新增 / 编辑 / 删除 / 设默认 / 测试连接
 const router = Router();

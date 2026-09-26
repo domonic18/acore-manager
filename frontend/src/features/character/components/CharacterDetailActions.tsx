@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { AI_QUICK_ANALYZE_EVENT, type QuickAnalyzePayload } from '@/features/ai-assistant/components/AiAssistantDock';
+import { AI_QUICK_ANALYZE_EVENT, type QuickAnalyzePayload } from '@/shared/lib/ai-quick-analyze';
 import type { CharacterDetail } from '@/features/character/api/character.api';
 
 interface CharacterDetailActionsProps {

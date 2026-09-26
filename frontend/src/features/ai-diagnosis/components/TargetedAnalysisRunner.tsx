@@ -4,7 +4,7 @@ import { AlertCircle, ChevronDown, Loader2, Wrench, X } from 'lucide-react';
 import { CopyButton } from '@/shared/components/CopyButton';
 import { Markdown } from '@/shared/components/Markdown';
 import { TimeRangeFilter } from '@/shared/components/TimeRangeFilter';
-import { useDefaultRealm } from '@/features/system-config/hooks/useSystemConfig';
+import { useDefaultRealm } from '@/shared/hooks/useDefaultRealm';
 import { streamTargetedAnalysis, type AnalysisConclusion, type TargetedAnalysisInput, type TargetedSubjectType, type ToolResultEvent } from '../api/ai-analysis.api';
 
 // 定向分析发起（T4.6，需求 3.8 申诉研判）：单一对象 + 时间范围，SSE 过程展示，

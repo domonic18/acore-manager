@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useReports } from '@/features/ai-diagnosis/hooks/useAiDiagnosis';
-import { useDefaultRealm } from '@/features/system-config/hooks/useSystemConfig';
+import { useDefaultRealm } from '@/shared/hooks/useDefaultRealm';
 import type { TimeRange } from '@/shared/components/TimeRangeFilter';
 
 export function useReportFilters() {

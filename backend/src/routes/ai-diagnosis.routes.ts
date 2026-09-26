@@ -4,41 +4,54 @@ import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
 import { ServiceError, anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
-import { inspectionService } from '@/services/ai/inspection.service';
 import { reportService } from '@/services/ai/report.service';
-import { yesterdayCST } from '@/shared/utils/cst-date.util';
+import { ServiceError as JobTriggerServiceError, triggerJob } from '@/services/job-trigger.service';
+import { JOB_TASK } from '@/shared/enums/job-task';
+import { logger } from '@/middleware/request-logger';
 import { VIOLATION_TYPES } from '@/agent/tools/log-tools/anticheat-parser';
 
 // AI 诊断管理面（gmlevel≥2）：误报白名单标注 + 手动触发巡检（gmlevel=3，T3.4）
 const router = Router();
 
 function handleServiceError(res: Response, err: unknown): void {
-  if (err instanceof ServiceError) {
+  if (err instanceof ServiceError || err instanceof JobTriggerServiceError) {
     res.jsonError(err.message, err.status);
     return;
   }
   throw err;
 }
 
-// 手动触发巡检（T3.4，arch 4.2 gmlevel=3）：巡检耗时 1-2 分钟，受理即返回，结果经
-// 飞书推送与报告页查询；同 (realm, date) 并发由服务内 inflight 去重，重复触发安全。
+// 手动触发巡检（T3.4，arch 4.2 gmlevel=3）：控制面只受理触发，执行一律在 SCF Job 函数
+//（SCF Invoke 异步受理即返回，1-2 分钟后经飞书推送与报告页可见；重复触发由 ai_report
+// 按 (realm, date) 幂等 upsert 兜底）。realm/date 可选透传，缺省值由任务处理器定义。
 router.post(
   '/inspection/trigger',
   authMiddleware,
   requireGmLevel(3),
-  [body('realm').isString().trim().notEmpty(), body('date').optional().matches(/^\d{4}-\d{2}-\d{2}$/)],
+  [
+    body('realm').optional().isString().trim().notEmpty().custom((v) => !/\s/.test(v)),
+    body('date').optional().matches(/^\d{4}-\d{2}-\d{2}$/),
+  ],
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       res.jsonError('Invalid request parameters / 请求参数不合法', 400);
       return;
     }
-    const realm = (req.body.realm as string).trim();
-    const date = (req.body.date as string | undefined) ?? yesterdayCST();
-    void inspectionService
-      .run({ realm, date, trigger: 'manual' })
-      .catch(() => undefined); // 失败已由服务落 failed 行并飞书告警，此处仅避免 unhandled rejection
-    res.jsonSuccess({ accepted: true, realm, date });
+    const realm = (req.body.realm as string | undefined)?.trim();
+    const date = req.body.date as string | undefined;
+    try {
+      const { requestId } = await triggerJob(JOB_TASK.INSPECTION, {
+        realm,
+        ...(date ? { date } : {}),
+        trigger: 'manual',
+      });
+      logger.info(`[inspection-trigger] user=${req.user?.username} realm=${realm ?? '-'} date=${date ?? '-'} requestId=${requestId ?? '-'}`);
+      res.jsonSuccess({ accepted: true, requestId, realm: realm ?? null, date: date ?? null });
+    } catch (err) {
+      logger.error(`[inspection-trigger] user=${req.user?.username} 触发失败：${(err as Error).message}`);
+      handleServiceError(res, err);
+    }
   }),
 );
 

@@ -73,7 +73,7 @@
 ### 2.2 与现有架构的关系
 
 - **进程内扩展，不新增常驻服务**：Agent 运行时是 Express 进程内的一个模块族（`backend/src/agent/`），复用现有 JWT 鉴权、GM 等级守卫、pino 日志与 TypeORM 连接管理；Redis 仅作缓存（ranking 共享实例）
-- **镜像分工**：Web 形态沿用前后端合一的单镜像（基座 **node:22-alpine**——deepagents 传递依赖 openai@7 要求 node≥22，见 M0-Spike结论；CMD `node dist/server.js`，监听 9000，无需额外入口脚本）；Job 形态按腾讯云 Job 函数要求使用**独立镜像** `docker/Dockerfile.job`（复用同一份后端构建产物，不含前端静态资源与字体依赖，CMD `node dist/job/inspection-job.js`，一次性执行后退出）
+- **镜像分工**：Web 形态沿用前后端合一的单镜像（基座 **node:22-alpine**——deepagents 传递依赖 openai@7 要求 node≥22，见 M0-Spike结论；CMD `node dist/server.js`，监听 9000，无需额外入口脚本）；Job 形态按腾讯云 Job 函数要求使用**独立镜像** `docker/Dockerfile.job`（复用同一份后端构建产物，不含前端静态资源与字体依赖，ENTRYPOINT `node dist/job/job-entry.js`，按事件注入的 `SCF_CUSTOM_CONTAINER_EVENT` JSON 契约 `{"task":...}` 经 `job/tasks/registry.ts` 路由到对应任务，一次性执行后退出）
 - **新增外部依赖三类**：COS（已有腾讯云生态）、LLM API（按配置协议分派：openai 兼容或 anthropic 兼容端点）与 acm PostgreSQL（新实例，本地 compose `acm-postgres`，生产腾讯云托管 PG）；Redis / AzerothCore MySQL 复用现有实例
 
 ---
@@ -87,51 +87,67 @@
 ```
 backend/src/
 ├── agent/                          # AI Agent 运行时机制（与业务编排分离）
-│   ├── core/                       # 提示词加载、skills 目录加载器
+│   ├── core/
+│   │   └── prompt-loader.ts        # 系统提示词加载（agent/prompts YAML）
 │   ├── runtime/
 │   │   ├── model-factory.ts        # 按协议分派模型客户端（openai→ChatOpenAI / anthropic→ChatAnthropic）
-│   │   ├── agent-factory.ts        # createDeepAgent 组装 + 指纹 LRU 缓存
+│   │   ├── agent-factory.ts        # createDeepAgent 组装 + 指纹 LRU 缓存 + skills 同步（syncSkills）
 │   │   ├── checkpointer.ts         # PostgresSaver 单例（acm PG 库）
 │   │   ├── budget-guard.ts         # 工具调用预算器（单任务实例）
 │   │   └── wire.ts                 # streamEvents → SSE 事件映射
 │   ├── tools/
+│   │   ├── index.ts                # exportTools() 汇总出口
 │   │   ├── registry.ts             # 工具注册表（name/schema/handler/审计包装）
-│   │   ├── db-tools/               # 10 个数据库白名单工具（SQL 写死）
-│   │   ├── log-tools/              # manifest / fetch / anticheat 解析(explain)
+│   │   ├── db-tools/               # 数据库白名单工具（SQL 写死）：account/character/anticheat/metrics 四组 + query-guard 护栏
+│   │   ├── log-tools/              # manifest / fetch / parse + anticheat-parser + log-workspace
+│   │   ├── report-tools/           # 报告产出工具（sections / draft-store / final-json / markdown / register）
 │   │   ├── false-positive/         # 误报研判知识（工具富化用，非运行时机制）
 │   │   │   ├── aura-rules.ts       # 移动类光环对照表（代码内置初稿）
 │   │   │   └── explain.ts          # 误报解释引擎（aura/地图/延迟/白名单）
+│   │   ├── ask-user.tool.ts        # agent 主动向 GM 追问
+│   │   ├── time-tool.ts            # 时间/日期工具
 │   │   └── inspection-tools.ts     # 触发巡检（对话场景）
 │   ├── prompts/                    # 系统提示词（YAML）：assistant / inspection / analysis
-│   └── skills/                     # grep-first 日志检索方法论（对 agent 只读）
+│   └── skills/log-search/          # grep-first 日志检索方法论（对 agent 只读）
 ├── services/ai/                    # AI 域业务编排（域分组）
-│   ├── inspection.service.ts       # 巡检编排（触发/重试/落库/推送）
+│   ├── inspection.service.ts       # 巡检编排（触发/重试/推送）
+│   ├── inspection-prompt.ts        # 巡检任务指令构建（buildInspectionTaskPrompt）
+│   ├── inspection-persist.ts       # 巡检结果落库 / COS 归档 / 飞书通知
 │   ├── targeted-analysis.service.ts # 定向分析编排（账号申诉分析，SSE）
-│   ├── ai-report.service.ts        # 报告查询 / 幂等 upsert / 管理
-│   ├── llm-config.service.ts       # 模型出口配置（加密存取/指纹/测试连接）✅ 已建
-│   ├── chat-session.service.ts     # 会话与消息正本 ✅ 已建
-│   ├── token-usage.service.ts      # Token 计量与日预算告警 ✅ 已建
-│   ├── feishu-notify.service.ts    # 飞书群机器人告警出口（预算/巡检失败/断传）✅ 已建
-│   ├── cos.service.ts              # COS 读写（日志包 / 报告归档）→ 实现调整：跨层基础设施，实为 shared/utils/cos.util.ts（agent 禁 import services）
-│   └── anticheat-exemption.service.ts  # 误报白名单 CRUD ✅ 已建
+│   ├── targeted-analysis.conclusion.ts # 结论解析 / 误报强制降级纯函数模块
+│   ├── agent-round.util.ts         # Agent 单轮运行共享 helper（流消费 / token 累加）
+│   ├── report.service.ts           # 报告查询 / 幂等 upsert / 管理
+│   ├── chat.service.ts             # 对话编排（runRound 事件流）
+│   ├── chat-session.service.ts     # 会话与消息正本
+│   ├── llm-config.service.ts       # 模型出口配置（加密存取/指纹/测试连接）
+│   ├── token-usage.service.ts      # Token 计量与日预算告警
+│   ├── feishu-notify.service.ts    # 飞书群机器人告警出口（预算/巡检失败/断传）
+│   └── anticheat-exemption.service.ts  # 误报白名单 CRUD
 ├── entities/acm/                   # acm 库 TypeORM 实体（新增数据源）
 │   ├── ai-report.entity.ts
-│   ├── ai-model-config.entity.ts   # ✅ 已建
+│   ├── ai-model-config.entity.ts
 │   ├── ai-token-usage.entity.ts
 │   ├── ai-chat-session.entity.ts
 │   ├── ai-chat-message.entity.ts
 │   ├── ai-tool-audit.entity.ts
 │   ├── ai-targeted-analysis.entity.ts
-│   └── ai-anticheat-exemption.entity.ts
+│   ├── ai-anticheat-exemption.entity.ts
+│   ├── operation-log.entity.ts
+│   └── system-config.entity.ts
 ├── job/
-│   └── inspection-job.ts           # SCF Job 形态入口（一次性执行）
+│   ├── job-entry.ts                # SCF Job 形态固定入口（按事件 task 路由）
+│   └── tasks/
+│       ├── registry.ts             # task 注册表（task 名 → 处理器）
+│       └── inspection-task.ts      # 巡检任务（一次性执行后退出）
 └── routes/                         # 薄路由：保持扁平 + ai- 前缀
     ├── ai-assistant.routes.ts      # SSE 对话 / 会话管理
     ├── ai-diagnosis.routes.ts      # 报告 / 手动触发 / 误报标注 / 上传状态
     ├── ai-analysis.routes.ts       # 定向分析（SSE 流式 / 历史查询）
-    ├── ai-model-config.routes.ts   # 模型配置（gmlevel=3）✅ 已建
-    └── ai-token-usage.routes.ts    # Token 用量报表（gmlevel=3）✅ 已建
+    ├── ai-model-config.routes.ts   # 模型配置（gmlevel=3）
+    └── ai-token-usage.routes.ts    # Token 用量报表（gmlevel=3）
 ```
+
+> COS 读写原设计为 `services/ai/cos.service.ts`，实现时调整为跨层基础设施 `shared/utils/cos.util.ts`（`agent/` 禁 import `services/`）。
 
 依赖方向（单向，禁止反向）：`routes/` → `services/ai/` → `agent/` → `entities/` / `shared/`；`agent/` 内部不 import `services/`。
 
@@ -472,22 +488,26 @@ frontend/src/features/
 | 形态 | 触发 | 镜像与入口 | 生命周期 |
 |------|------|------|---------|
 | Web 函数 | HTTPS | 单体镜像 `docker/Dockerfile` → `node dist/server.js`（监听 9000） | 常驻，承载 API + 静态资源 + SSE 对话 |
-| Job 函数 | 定时触发器（06:00）+ 手动触发端点 | Job 专用镜像 `docker/Dockerfile.job` → `node dist/job/inspection-job.js` | 一次性：执行巡检 → 退出 |
+| Job 函数 | 定时触发器（06:00）+ 手动触发端点 | Job 专用镜像 `docker/Dockerfile.job` → `node dist/job/job-entry.js` | 一次性：执行巡检 → 退出 |
 
 两镜像共享同一份后端构建产物与业务代码，仅入口与打包内容不同；TCR 分 tag 管理。
 
 ### 7.2 资源与环境变量增量
 
 ```bash
-# 部署增量环境变量
-ACM_SYSTEM_DB=acm             # 系统库名
-COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION
+# 部署增量环境变量（完整模板见 .env.example）
+LLM_AES_KEY                   # ai_model_config.api_key 加解密密钥（生产必填，fail-fast）
+COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION   # 日志包与报告归档桶
+TENCENT_SECRET_ID / TENCENT_SECRET_KEY / SCF_*             # 控制面异步触发 Job 函数
+FEISHU_WEBHOOK_URL / FEISHU_WEBHOOK_SECRET / ACM_WEB_BASE_URL  # 告警出口（系统配置页 DB 值优先，env 仅回落）
+ACM_WEB_BASE_URL              # 飞书日报卡片报告链接
+AI_DAILY_TOKEN_BUDGET=5000000 # Token 日预算（告警阈值）
+AI_AGENT_CACHE_SIZE=4         # agent 指纹 LRU 容量
 AI_TOOL_CALL_BUDGET=20        # 单任务工具调用预算
-AI_TOKEN_DAILY_BUDGET=500000  # Token 日预算（告警阈值）
-AI_AGENT_CACHE_SIZE=4
-FEISHU_WEBHOOK / FEISHU_SECRET
-LLM_AES_KEY                   # ai_model_config.api_key 加密密钥
+AI_TOOL_TIMEOUT_MS=5000       # 单工具调用超时
 ```
+
+运行参数（飞书通知 / AI 参数 / 登录安全 / SOAP 连接 / 默认 Realm）可迁至 Web「系统配置」页维护（`acm_system_config` 表，DB 值优先，env 回落）。
 
 - Job 函数：内存 ≥ 1GB（日志解压 + agent 上下文）、超时以实测为准（开放问题 3；超限则按日志类型拆多次 Job）、/tmp 需容纳解压后日志
 - Web 函数：验证 SSE 支持（开放问题 2），不支持则前端降级非流式
@@ -517,7 +537,7 @@ GM 浏览器                Web 函数(Express)                LLM / acm PG / My
 ### 8.2 每日巡检（Job）
 
 ```
-SCF Timer 06:00 → Job 容器(ENTRY_MODE=job)
+SCF Timer 06:00 → Job 容器(job-entry, task=inspection)
   → 断传检查(COS manifest)
   → getAgent(默认模型)
   → agent.invoke: get_log_manifest → fetch_log_archive → parse(explain)

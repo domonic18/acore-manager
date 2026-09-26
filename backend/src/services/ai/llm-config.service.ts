@@ -50,6 +50,11 @@ export interface TestConnectionResult {
   error: string | null;
 }
 
+// update 可表驱动直赋的透传字段；特例单独处理：apiKey（write-only，留空保留原值）、
+// isDefault（需清除其他默认行并强制激活）
+const SIMPLE_FIELDS = ['name', 'provider', 'protocol', 'baseUrl', 'modelName', 'temperature', 'maxTokens', 'isActive'] as const;
+type SimpleField = (typeof SIMPLE_FIELDS)[number];
+
 function toView(row: AiModelConfig): ModelConfigView {
   return {
     id: row.id,
@@ -111,15 +116,11 @@ class LlmConfigService {
     if (!row) throw new ServiceError('配置不存在 / model config not found', 404);
     if (input.name && input.name !== row.name) await this.ensureNameAvailable(input.name, id);
 
-    if (input.name !== undefined) row.name = input.name;
-    if (input.provider !== undefined) row.provider = input.provider;
-    if (input.protocol !== undefined) row.protocol = input.protocol;
-    if (input.baseUrl !== undefined) row.baseUrl = input.baseUrl;
-    if (input.modelName !== undefined) row.modelName = input.modelName;
+    for (const field of SIMPLE_FIELDS) {
+      const value = input[field];
+      if (value !== undefined) (row as Record<SimpleField, unknown>)[field] = value;
+    }
     if (input.apiKey) row.apiKeyEncrypted = encryptToken(input.apiKey);
-    if (input.temperature !== undefined) row.temperature = input.temperature;
-    if (input.maxTokens !== undefined) row.maxTokens = input.maxTokens;
-    if (input.isActive !== undefined) row.isActive = input.isActive;
     if (input.isDefault === true) {
       await this.repo.update({ isDefault: true }, { isDefault: false });
       row.isDefault = true;
@@ -167,23 +168,8 @@ class LlmConfigService {
     let ok = false;
     let error: string | null = null;
     try {
-      if (row.protocol === 'anthropic') {
-        const resp = await fetch(`${row.baseUrl.replace(/\/$/, '')}/v1/messages`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: row.modelName, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-      } else {
-        const resp = await fetch(`${row.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ model: row.modelName, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-      }
+      if (row.protocol === 'anthropic') await this.pingAnthropic(row.baseUrl, apiKey, row.modelName);
+      else await this.pingOpenAI(row.baseUrl, apiKey, row.modelName);
       ok = true;
     } catch (err) {
       error = (err as Error).message ?? String(err);
@@ -197,6 +183,27 @@ class LlmConfigService {
     });
     await this.audit(operatorId, operatorName, 'ai.model-config.test', row.name, ok ? `ok ${latencyMs}ms` : `failed: ${error?.slice(0, 120)}`);
     return { ok, latencyMs, error };
+  }
+
+  // Anthropic Messages API 探活：1 token 的 ping 请求，HTTP 非 2xx 即失败（响应体截断 200 字符定位）
+  private async pingAnthropic(baseUrl: string, apiKey: string, modelName: string): Promise<void> {
+    const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: modelName, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+  }
+
+  private async pingOpenAI(baseUrl: string, apiKey: string, modelName: string): Promise<void> {
+    const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: modelName, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
   }
 
   async resolveDefault(): Promise<{ id: number; name: string; provider: string; protocol: string; baseUrl: string; modelName: string; apiKey: string; temperature: number | null; maxTokens: number | null }> {

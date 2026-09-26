@@ -122,6 +122,15 @@ describe('getView', () => {
     expect(view.soap.passwordMasked).toBe('***1234');
     expect(view.updatedAt).toBe('2026-09-25T00:00:00.000Z');
   });
+
+  it('配置库故障时回落环境变量默认值且 updatedAt 为 null（不抛 500）', async () => {
+    find.mockRejectedValue(new Error('relation "acm_system_config" does not exist'));
+    const view = await systemConfigService.getView();
+    expect(view.defaultRealm).toBe(DEFAULT_REALM_FALLBACK);
+    expect(view.soap.source).toBe('env');
+    expect(view.soap.passwordMasked).toBeNull();
+    expect(view.updatedAt).toBeNull();
+  });
 });
 
 describe('update', () => {

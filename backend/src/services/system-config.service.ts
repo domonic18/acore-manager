@@ -5,6 +5,7 @@ import { AcmSystemConfig } from '@/entities/acm/system-config.entity';
 import { auditLogService } from '@/services/audit-log.service';
 import { ServiceError } from '@/shared/errors/service-error';
 import { encryptToken, maskToken } from '@/shared/utils/aes.util';
+import { logger } from '@/middleware/request-logger';
 
 // 系统级配置（KV）：默认 realm 名 + SOAP 连接 + 飞书通知 + AI 参数 + 登录安全。
 // 读取策略：DB 优先，未录入/不完整时回落环境变量（SOAP 需整条齐全才走 DB），
@@ -103,12 +104,26 @@ class SystemConfigService {
   }
 
   async getView(): Promise<SystemConfigView> {
-    const [values, soap, latestRows] = await Promise.all([
-      loadConfigValues(),
-      this.getSoapConn(),
-      this.repo.find({ order: { updatedAt: 'DESC' }, take: 1 }),
-    ]);
-    const latest = latestRows[0];
+    // 配置库不可用（未跑迁移 / PG 抖动）时不阻断查询：回落环境变量默认值、updatedAt 置 null，
+    // 与 readRuntimeValues 同语义；写路径 update() 仍如实抛错
+    try {
+      const [values, soap, latestRows] = await Promise.all([
+        loadConfigValues(),
+        this.getSoapConn(),
+        this.repo.find({ order: { updatedAt: 'DESC' }, take: 1 }),
+      ]);
+      return this.buildView(values, soap, latestRows[0] ?? null);
+    } catch (err) {
+      logger.warn({ err }, '[system-config] 配置视图读取失败，回落环境变量默认值');
+      return this.buildView(
+        new Map(),
+        { host: soapConn.host, port: soapConn.port, user: soapConn.user, pass: soapConn.pass, source: 'env' },
+        null,
+      );
+    }
+  }
+
+  private buildView(values: Map<string, string>, soap: SoapConnConfig, latest: AcmSystemConfig | null): SystemConfigView {
     const dbString = (key: string): string | undefined => values.get(key);
     const dbInt = (key: string): number | undefined => {
       const raw = values.get(key);

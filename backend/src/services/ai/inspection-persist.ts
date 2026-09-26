@@ -51,7 +51,8 @@ export async function persistInspection(
   );
   const reportId = Number((saved as unknown as { identifiers?: { id: number }[] })?.identifiers?.[0]?.id ?? 0) || (await findReportId(input));
 
-  void tokenUsageService
+  // Job 形态下进程在 persist 后立即退出，等待落库/归档完成，否则这些副作用会与进程退出竞态丢失
+  await tokenUsageService
     .record({
       scene: 'inspection',
       refId: `${input.realm}/${input.date}`,
@@ -63,7 +64,7 @@ export async function persistInspection(
     })
     .catch((err: unknown) => logger.error(`[inspection] token record failed: ${(err as Error).message}`));
 
-  void archiveAndNotify(input, report, markdown, dataGaps).catch((err: unknown) => logger.error(`[inspection] archive/notify failed: ${(err as Error).message}`));
+  await archiveAndNotify(input, report, markdown, dataGaps).catch((err: unknown) => logger.error(`[inspection] archive/notify failed: ${(err as Error).message}`));
   logger.info(`[inspection] report persisted ${input.realm}/${input.date} healthScore=${report.healthScore} id=${reportId}`);
   return reportId;
 }

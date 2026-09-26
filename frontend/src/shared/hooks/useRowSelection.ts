@@ -7,6 +7,7 @@ export interface RowSelectionController {
   isSelected: (key: string | number) => boolean;
   toggleOne: (key: string | number) => void;
   toggleAll: () => void;
+  selectOnly: (key: string | number) => void;
   clear: () => void;
 }
 
@@ -31,6 +32,10 @@ export function useRowSelection<T>(
     );
   }, [rows, getKey]);
 
+  const selectOnly = useCallback((key: string | number) => {
+    setSelected(new Set([key]));
+  }, []);
+
   const clear = useCallback(() => setSelected(new Set()), []);
 
   return {
@@ -40,6 +45,7 @@ export function useRowSelection<T>(
     isSelected: (key) => selected.has(key),
     toggleOne,
     toggleAll,
+    selectOnly,
     clear,
   };
 }

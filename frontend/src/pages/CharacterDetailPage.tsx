@@ -9,6 +9,7 @@ import {
 } from '@/features/character/hooks/useCharacter';
 import { Dialog } from '@/shared/components/Dialog';
 import { raceMap, classMap, banReasonOptions, durationLabels } from '@/shared/constants/game.constants';
+import { formatGold } from '@/shared/utils/gold.util';
 import { AI_QUICK_ANALYZE_EVENT, type QuickAnalyzePayload } from '@/features/ai-assistant/components/AiAssistantDock';
 
 export default function CharacterDetailPage() {
@@ -118,9 +119,6 @@ export default function CharacterDetailPage() {
     );
   }
 
-  const gold = Math.floor(character.money / 10000);
-  const silver = Math.floor((character.money % 10000) / 100);
-  const copper = character.money % 100;
   const activeBans = character.bans?.filter((b) => b.active) || [];
 
   return (
@@ -212,7 +210,7 @@ export default function CharacterDetailPage() {
           <InfoRow label="经验值" value={character.xp.toLocaleString()} />
           <InfoRow
             label="金币"
-            value={`${gold}金 ${silver}银 ${copper}铜`}
+            value={formatGold(character.money)}
           />
           <InfoRow label="竞技场点数" value={character.arenaPoints} />
           <InfoRow label="荣誉点数" value={character.totalHonorPoints} />

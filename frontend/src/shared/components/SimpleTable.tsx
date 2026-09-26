@@ -50,11 +50,18 @@ export function SimpleTable<Row>({
         </thead>
         <tbody>
           {loading ? (
-            <tr>
-              <td colSpan={colSpan} className="px-4 py-8 text-center text-muted-foreground">
-                加载中...
-              </td>
-            </tr>
+            Array.from({ length: 6 }, (_, row) => (
+              <tr key={row} className="border-b border-border" aria-busy="true" aria-label="数据加载中">
+                {columns.map((col, colIdx) => (
+                  <td key={col.key} className={`${pad} ${col.className ?? ''}`}>
+                    <div
+                      className="h-4 animate-pulse rounded bg-muted"
+                      style={{ width: `${[72, 48, 60, 84, 55, 66][colIdx % 6]}%` }}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))
           ) : rows.length === 0 ? (
             <tr>
               <td colSpan={colSpan} className="px-4 py-8 text-center text-muted-foreground">

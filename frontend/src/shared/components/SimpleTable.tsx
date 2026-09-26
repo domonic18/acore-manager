@@ -15,6 +15,8 @@ interface SimpleTableProps<Row> {
   loading?: boolean;
   emptyText?: string;
   dense?: boolean;
+  tableClassName?: string;
+  rowClassName?: (row: Row, index: number) => string;
 }
 
 // 列表页/详情页通用表格：统一 rounded-lg border 容器与单元格留白（dense = 详情页紧凑态）
@@ -26,12 +28,14 @@ export function SimpleTable<Row>({
   loading = false,
   emptyText = '暂无数据',
   dense = false,
+  tableClassName,
+  rowClassName,
 }: SimpleTableProps<Row>) {
   const pad = dense ? 'px-3 py-2' : 'px-4 py-3';
   const colSpan = columns.length;
   return (
     <div className="rounded-lg border border-border overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className={`w-full text-sm ${tableClassName ?? ''}`}>
         <thead>
           <tr className="border-b border-border bg-card">
             {columns.map((col) => (
@@ -62,7 +66,9 @@ export function SimpleTable<Row>({
               <tr
                 key={rowKey(row, i)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`border-b border-border ${onRowClick ? 'hover:bg-accent/50 cursor-pointer' : ''}`}
+                className={`border-b border-border ${onRowClick ? 'hover:bg-accent/50 cursor-pointer' : ''} ${
+                  rowClassName?.(row, i) ?? ''
+                }`}
               >
                 {columns.map((col) => (
                   <td key={col.key} className={`${pad} ${col.className ?? ''}`}>

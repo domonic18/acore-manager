@@ -8,6 +8,19 @@ import { getAgent } from '@/agent/runtime/agent-factory';
 import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { LOG_TYPES, clearWorkspace, manifestKey } from '@/agent/tools/log-tools/log-workspace';
 import { setInspectionRunner } from '@/agent/tools/inspection-tools';
+import {
+  REPORT_SCHEMA_VERSION,
+  assembleReport,
+  clearReportDraftRoot,
+  readDraftedSections,
+  renderInspectionMarkdown,
+  reportDraftDir,
+  resetDraftDir,
+  setReportDraftRoot,
+  validateFinalJson,
+  type InspectionReportJson,
+  type ReportFinalJson,
+} from '@/agent/tools/report-tools';
 import { cosGetObjectJson, cosPutObjectBuffer } from '@/shared/utils/cos.util';
 import { extractJson } from '@/shared/utils/extract-json.util';
 import { cacheService } from '@/services/cache.service';
@@ -15,11 +28,12 @@ import { llmConfigService } from './llm-config.service';
 import { tokenUsageService } from './token-usage.service';
 import { feishuNotifyService } from './feishu-notify.service';
 
-// 每日巡检编排（arch 3.4）：断传检查 → deep agent 取证（日志 + 白名单工具）→ JSON 报告
-// 解析校验（失败追问一轮）→ ai_report 幂等 upsert → COS 归档 → Redis 摘要 → 计量/飞书。
+// 每日巡检编排（arch 3.4）：断传检查 → deep agent 取证（日志 + 白名单工具，分节结论经
+// write_report_section 边运行边落盘）→ 最终小 JSON 校验（失败追问一轮）→ 代码层组装
+// 完整报告并渲染 Markdown → ai_report 幂等 upsert → COS 归档 → Redis 摘要 → 计量/飞书。
 // 失败退避重试（最多 3 次），最终失败落 status=failed 行 + 飞书告警，不阻塞次日。
+// 报告节契约与渲染器在 agent/tools/report-tools（纯域模块，services 可 import）。
 
-export const REPORT_SCHEMA_VERSION = 2;
 const ARCHIVE_PREFIX = 'acore-ai-reports';
 const REPORT_CACHE_TTL_SECONDS = 7 * 24 * 3600;
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
@@ -39,30 +53,6 @@ export interface InspectionOutcome {
   reportId: number | null;
   error: string | null;
   elapsedMs: number;
-}
-
-export interface SuspiciousPlayer {
-  character: string;
-  account?: string;
-  severity: 'high' | 'medium' | 'low';
-  suggestedAction: 'warning' | 'investigate' | 'ban';
-  reasons: string[];
-  evidence: string[];
-  falsePositiveSignals: unknown[];
-  suggestion?: string;
-}
-
-export interface InspectionReportJson {
-  schemaVersion: number;
-  reportDate: string;
-  realm: string;
-  generatedAt?: string;
-  healthScore: number;
-  summary: string;
-  serverHealth: { crashes?: unknown[]; errors?: unknown[]; authAnomalies?: unknown[] };
-  suspiciousPlayers: SuspiciousPlayer[];
-  recommendations: string[];
-  markdown?: string;
 }
 
 class InspectionError extends Error {
@@ -127,51 +117,63 @@ class InspectionService {
   }
 
   private async attempt(input: InspectionInput, attempt: number): Promise<number> {
-    const manifestNote = await this.checkManifest(input.realm, input.date);
-    if (manifestNote.absent || manifestNote.missingTypes.length > 0) {
-      void feishuNotifyService.sendText(
-        `[ACM] 日志断传告警：${input.realm} ${input.date} ${manifestNote.absent ? 'manifest.json 不存在' : `缺失 ${manifestNote.missingTypes.join('/')}`}，巡检继续分析已有部分。`,
-      );
-    }
+    // 分节草稿目录每次 attempt 重建（整轮重试从零开始）；追问轮同 attempt 不清盘，
+    // 已落盘的节在追问后仍然有效。draft 位于 /tmp/ai-workspace/{realm}/{date}/_draft，
+    // 由 doRun finally 的 clearWorkspace() 一并清理，生命周期自洽。
+    const draftDir = reportDraftDir(input.realm, input.date);
+    resetDraftDir(draftDir);
+    setReportDraftRoot(draftDir);
+    try {
+      const manifestNote = await this.checkManifest(input.realm, input.date);
+      const dataGaps = manifestNote.absent ? ['manifest 缺失（疑似断传）'] : manifestNote.missingTypes.map((t) => `${t} 日志缺失`);
+      if (manifestNote.absent || manifestNote.missingTypes.length > 0) {
+        void feishuNotifyService.sendText(
+          `[ACM] 日志断传告警：${input.realm} ${input.date} ${manifestNote.absent ? 'manifest.json 不存在' : `缺失 ${manifestNote.missingTypes.join('/')}`}，巡检继续分析已有部分。`,
+        );
+      }
 
-    const cfg = await llmConfigService.resolveDefault();
-    const agent = await getAgent(cfg, 'inspection');
-    // thread_id 必须每次运行唯一：复用同线程会让模型在 checkpointer 旧上下文里重放上轮结论
-    // （T3.6 实测重跑零工具调用），且同线程上下文随重跑次数膨胀推高 token 成本
-    const threadId = `inspection-${input.realm}-${input.date}-${Date.now()}-${attempt}`;
-    const config = {
-      configurable: {
-        thread_id: threadId,
-        budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
-        refId: `inspection:${input.realm}:${input.date}`,
-      },
-    };
-
-    let { text, tokens, durationMs } = await this.collectAnswer(agent, this.buildTaskPrompt(input.realm, input.date, manifestNote), config);
-    let report = this.parseReport(text, input.realm, input.date);
-    if (!report) {
-      // schema 校验失败追问一轮：带具体错误让模型自我修复，同 thread 保持上下文
-      logger.warn(`[inspection] first round JSON invalid, asking model to fix`);
-      const fixRound = await this.collectAnswer(
-        agent,
-        [
-          { role: 'user', content: `你上一轮的输出无法解析为符合报告 schema 的 JSON，问题：${this.parseError(text, input.realm, input.date)}。请重新输出**完整的报告 JSON 文档**：从 { 开始到 } 结束的一个完整对象，包含全部必需字段，不要使用 markdown 代码块，不要续写上文，不要输出任何解释文字。` },
-        ],
-        config,
-      );
-      text = fixRound.text;
-      tokens = {
-        prompt: tokens.prompt + fixRound.tokens.prompt,
-        completion: tokens.completion + fixRound.tokens.completion,
-        total: tokens.total + fixRound.tokens.total,
+      const cfg = await llmConfigService.resolveDefault();
+      const agent = await getAgent(cfg, 'inspection');
+      // thread_id 必须每次运行唯一：复用同线程会让模型在 checkpointer 旧上下文里重放上轮结论
+      // （T3.6 实测重跑零工具调用），且同线程上下文随重跑次数膨胀推高 token 成本
+      const threadId = `inspection-${input.realm}-${input.date}-${Date.now()}-${attempt}`;
+      const config = {
+        configurable: {
+          thread_id: threadId,
+          budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
+          refId: `inspection:${input.realm}:${input.date}`,
+        },
       };
-      durationMs += fixRound.durationMs;
-      report = this.parseReport(text, input.realm, input.date);
-    }
-    if (!report) throw new InspectionError('agent 两轮输出均不符合报告 schema', 'schema_mismatch');
 
-    const markdown = report.markdown?.trim() || this.renderMarkdownFallback(report);
-    return this.persist(input, report, markdown, { model: cfg.modelName, tokens, durationMs });
+      let { text, tokens, durationMs } = await this.collectAnswer(agent, this.buildTaskPrompt(input.realm, input.date, manifestNote), config);
+      let report = this.parseReport(text, input.realm, input.date);
+      if (!report) {
+        // 最终小 JSON 校验失败追问一轮：带具体错误让模型自我修复，同 thread 保持上下文；
+        // 分节结论已落盘仍有效，模型只需重发小 JSON
+        logger.warn(`[inspection] first round JSON invalid, asking model to fix`);
+        const fixRound = await this.collectAnswer(
+          agent,
+          [
+            { role: 'user', content: `你上一轮的输出无法解析为符合约定的 JSON，问题：${this.parseError(text, input.realm, input.date)}。请重新只输出最终小 JSON：从 { 开始到 } 结束的一个完整对象，仅含 schemaVersion/reportDate/realm/healthScore/summary 五个字段，不要使用 markdown 代码块，不要续写上文，不要输出任何解释文字。三个分节结论你已通过 write_report_section 落盘，无需重复。` },
+          ],
+          config,
+        );
+        text = fixRound.text;
+        tokens = {
+          prompt: tokens.prompt + fixRound.tokens.prompt,
+          completion: tokens.completion + fixRound.tokens.completion,
+          total: tokens.total + fixRound.tokens.total,
+        };
+        durationMs += fixRound.durationMs;
+        report = this.parseReport(text, input.realm, input.date);
+      }
+      if (!report) throw new InspectionError('agent 两轮输出均不符合报告 schema', 'schema_mismatch');
+
+      const markdown = renderInspectionMarkdown(report);
+      return await this.persist(input, report, markdown, { model: cfg.modelName, tokens, durationMs }, dataGaps);
+    } finally {
+      clearReportDraftRoot();
+    }
   }
 
   // 步骤 1：断传检查。manifest 读取失败视为不存在（降级继续，不让 COS 故障中止巡检）
@@ -191,7 +193,7 @@ class InspectionService {
     const manifestNote = manifest.absent
       ? `当日 manifest.json 不存在（疑似断传）。请先用 get_log_manifest 复核；若确认无日志，报告如实说明并给 healthScore 低分。`
       : manifest.missingTypes.length > 0
-        ? `当日日志不完整：仅部分类型可用，缺失 ${manifest.missingTypes.join(' / ')}。只分析已有部分，并在报告 markdown 中说明缺失项。`
+        ? `当日日志不完整：仅部分类型可用，缺失 ${manifest.missingTypes.join(' / ')}。只分析已有部分，并在落盘分节中说明缺失项。`
         : `当日四类日志齐全（${LOG_TYPES.join(' / ')}）。`;
     const content = [
       `请执行 ${realm} 服务器 ${date} 的每日巡检，产出结构化诊断报告。`,
@@ -203,17 +205,15 @@ class InspectionService {
       `2. fetch_log_archive 拉取 anticheat 归档（优先）及其他可用类型`,
       `3. parse_anticheat_violations(from, to, explain=true) 做代码级违规聚合与误报解释`,
       `4. 可疑玩家用 get_anticheat_record / get_character_overview / get_character_auras 佐证`,
-      `5. 汇总输出报告 JSON`,
+      `5. 每完成一个维度立即调用 write_report_section 落盘对应分节，禁止攒到最后一次性输出`,
       ``,
-      `最终必须输出一个 JSON 对象（可置于 \`\`\`json 围栏中），字段：`,
-      `- schemaVersion: ${REPORT_SCHEMA_VERSION}（整数）`,
-      `- reportDate: "${date}"，realm: "${realm}"（必须与此处完全一致）`,
-      `- healthScore: 0-100 整数`,
-      `- summary: 一段话总结（≤200 字）`,
-      `- serverHealth: {crashes:[], errors:[], authAnomalies:[]}（当日无则为空数组）`,
-      `- suspiciousPlayers: [{character, account, severity:"high|medium|low", suggestedAction:"warning|investigate|ban", reasons:[字符串], evidence:[原始日志摘录], falsePositiveSignals:[], suggestion}]（无可疑玩家则为空数组）`,
-      `- recommendations: [字符串]`,
-      `- markdown: 完整 Markdown 报告全文`,
+      `分节落盘契约（write_report_section 的 section / content）：`,
+      `- "server-health"：{"crashes":[当日崩溃摘要],"errors":[错误统计],"authAnomalies":[认证异常摘要]}（无则空数组）`,
+      `- "suspicious-players"：[{"character","account","severity":"high|medium|low","suggestedAction":"warning|investigate|ban","reasons":["…"],"evidence":["原始日志摘录"],"falsePositiveSignals":[],"suggestion":"…"}]，按严重度取 top ≤15 名，每人 evidence ≤5 条`,
+      `- "recommendations"：["处置建议…"]（≤20 条，每条 ≤200 字）`,
+      ``,
+      `三节全部落盘后，最终消息只输出一个五字段小 JSON（可置于 \`\`\`json 围栏中），除此之外不得输出任何明细、markdown 全文或解释文字：`,
+      `{"schemaVersion": ${REPORT_SCHEMA_VERSION}, "reportDate": "${date}", "realm": "${realm}", "healthScore": <0-100 整数>, "summary": "<一段话总结，≤200 字>"}`,
       ``,
       `硬性要求：falsePositiveSignals 非空的玩家 suggestedAction 不得为 "ban"；证据必须来自工具返回的原文摘录，禁止编造；无日志支撑的维度如实写"无数据"。`,
     ].join('\n');
@@ -241,60 +241,44 @@ class InspectionService {
     return { text, tokens, durationMs: Date.now() - t0 };
   }
 
+  // 两段式：① 最终小 JSON 校验（五字段，失败返回 null 走追问轮）；② 读分节草稿组装
+  // 完整报告。缺节属结构性失败（追问轮无法凭空补数据），抛 report_incomplete 触发整轮重试。
   parseReport(text: string, realm: string, date: string): InspectionReportJson | null {
     const obj = extractJson(text);
-    if (!obj || typeof obj !== 'object') {
-      logger.warn(`[inspection] no JSON object in agent output (len=${text.length}), head: ${text.slice(0, 400)}`);
-      return null;
-    }
-    const issues = this.validate(obj as Partial<InspectionReportJson>, realm, date);
+    const issues = validateFinalJson(obj, realm, date);
     if (issues.length > 0) {
       // 记录原始输出片段：schema 拒绝在生产环境必须可回溯诊断
-      logger.warn(`[inspection] report schema issues: ${issues.join('; ')} | raw head: ${text.slice(0, 500)}`);
+      logger.warn(`[inspection] final JSON issues: ${issues.join('; ')} | raw head: ${text.slice(0, 400)}`);
       return null;
     }
-    const r = obj as InspectionReportJson;
-    return {
-      ...r,
-      realm,
-      reportDate: date,
-      healthScore: Math.round(Number(r.healthScore)),
-      summary: String(r.summary).trim(),
-      serverHealth: r.serverHealth ?? {},
-      suspiciousPlayers: Array.isArray(r.suspiciousPlayers) ? r.suspiciousPlayers : [],
-      recommendations: Array.isArray(r.recommendations) ? r.recommendations : [],
-    };
+    let sections;
+    try {
+      sections = readDraftedSections(reportDraftDir(realm, date));
+    } catch (err) {
+      logger.warn(`[inspection] draft sections invalid: ${(err as Error).message}`);
+      throw new InspectionError((err as Error).message, 'report_incomplete');
+    }
+    if (sections.missing.length > 0) {
+      logger.warn(`[inspection] report missing sections: ${sections.missing.join(', ')}`);
+      throw new InspectionError(`报告缺节：${sections.missing.join(' / ')}（agent 未调用 write_report_section 落盘这些节）`, 'report_incomplete');
+    }
+    return assembleReport(obj as ReportFinalJson, sections);
   }
 
   parseError(text: string, realm: string, date: string): string {
     const obj = extractJson(text);
     if (!obj || typeof obj !== 'object') return '未找到 JSON 对象（需要以 { 开始、} 结束的完整 JSON）';
-    const issues = this.validate(obj as Partial<InspectionReportJson>, realm, date);
+    const issues = validateFinalJson(obj, realm, date);
     return issues.length > 0 ? issues.join('；') : 'JSON 解析失败';
   }
 
-  // 宽容校验：数值字符串、首尾空白、缺失集合字段均可归一化；仅拒绝语义性错误
-  private validate(r: Partial<InspectionReportJson>, realm: string, date: string): string[] {
-    const issues: string[] = [];
-    if (r.schemaVersion !== REPORT_SCHEMA_VERSION) issues.push(`schemaVersion 必须为 ${REPORT_SCHEMA_VERSION}`);
-    if (typeof r.reportDate !== 'string' || r.reportDate.trim() !== date) issues.push(`reportDate 必须为 "${date}"`);
-    if (typeof r.realm !== 'string' || r.realm.trim() !== realm) issues.push(`realm 必须为 "${realm}"`);
-    const score = Number(r.healthScore);
-    if (!Number.isFinite(score) || score < 0 || score > 100) issues.push('healthScore 必须为 0-100 的数字');
-    if (typeof r.summary !== 'string' || !r.summary.trim()) issues.push('summary 不能为空');
-    const sh = r.serverHealth;
-    if (sh !== undefined && sh !== null && (typeof sh !== 'object' || Array.isArray(sh))) issues.push('serverHealth 必须为对象');
-    if (r.suspiciousPlayers !== undefined && !Array.isArray(r.suspiciousPlayers)) issues.push('suspiciousPlayers 必须为数组');
-    if (r.recommendations !== undefined && !Array.isArray(r.recommendations)) issues.push('recommendations 必须为数组');
-    return issues;
-  }
-
-  // 步骤 6-10：落库（幂等 upsert，token 用量随行）→ COS 归档（失败不阻塞）→ Redis 摘要 → 计量 → 飞书
+  // 步骤 6-10：落库（幂等 upsert，token 用量随行）→ COS 归档（失败不阻塞）→ Redis 摘要 → 计量 → 飞书简报
   private async persist(
     input: InspectionInput,
     report: InspectionReportJson,
     markdown: string,
     usage: { model: string; tokens: { prompt: number; completion: number; total: number }; durationMs: number },
+    dataGaps: string[] = [],
   ): Promise<number> {
     const repo = acmDataSource.getRepository(AiReport);
     const saved = await repo.upsert(
@@ -304,7 +288,7 @@ class InspectionService {
         schemaVersion: report.schemaVersion,
         healthScore: report.healthScore,
         summary: report.summary.slice(0, 500),
-        contentJson: { ...report, markdown: undefined } as any,
+        contentJson: { ...report } as any,
         contentMarkdown: markdown,
         tokenUsage: usage.tokens as any,
         generatedBy: input.trigger,
@@ -326,7 +310,7 @@ class InspectionService {
       })
       .catch((err: unknown) => logger.error(`[inspection] token record failed: ${(err as Error).message}`));
 
-    void this.archiveAndNotify(input, report, markdown).catch((err: unknown) => logger.error(`[inspection] archive/notify failed: ${(err as Error).message}`));
+    void this.archiveAndNotify(input, report, markdown, dataGaps).catch((err: unknown) => logger.error(`[inspection] archive/notify failed: ${(err as Error).message}`));
     logger.info(`[inspection] report persisted ${input.realm}/${input.date} healthScore=${report.healthScore} id=${reportId}`);
     return reportId;
   }
@@ -336,9 +320,9 @@ class InspectionService {
     return row?.id ?? 0;
   }
 
-  private async archiveAndNotify(input: InspectionInput, report: InspectionReportJson, markdown: string): Promise<void> {
+  private async archiveAndNotify(input: InspectionInput, report: InspectionReportJson, markdown: string, dataGaps: string[] = []): Promise<void> {
     try {
-      const json = { ...report, markdown: undefined, generatedAt: new Date().toISOString() };
+      const json = { ...report, generatedAt: new Date().toISOString() };
       await cosPutObjectBuffer(`${ARCHIVE_PREFIX}/${input.realm}/${input.date}.json`, Buffer.from(JSON.stringify(json, null, 2)), 'application/json');
       await cosPutObjectBuffer(`${ARCHIVE_PREFIX}/${input.realm}/${input.date}.md`, Buffer.from(markdown), 'text/markdown');
     } catch (err) {
@@ -351,7 +335,7 @@ class InspectionService {
       REPORT_CACHE_TTL_SECONDS,
     );
 
-    // T3.5 日报卡片：评分 / 异常数 / 可疑数 / TOP 风险 / 报告链接（基础地址未配置则无跳转按钮）
+    // T3.5 日报简报卡片：研判结论 / 指标网格 / TOP 玩家 / 处置建议 / 报告链接（基础地址未配置则无跳转按钮）
     void feishuNotifyService.sendDailyReportCard({
       realm: input.realm,
       date: input.date,
@@ -361,6 +345,7 @@ class InspectionService {
       serverHealth: report.serverHealth,
       suspiciousPlayers: report.suspiciousPlayers,
       recommendations: report.recommendations,
+      ...(dataGaps.length > 0 ? { dataGaps } : {}),
     });
   }
 
@@ -387,27 +372,6 @@ class InspectionService {
       logger.error(`[inspection] record failure row failed: ${(err as Error).message}`);
       return null;
     }
-  }
-
-  private renderMarkdownFallback(report: InspectionReportJson): string {
-    const lines: string[] = [
-      `# ${report.realm} ${report.reportDate} 巡检报告`,
-      '',
-      `**健康评分：${report.healthScore}/100**`,
-      '',
-      report.summary,
-      '',
-      `## 可疑玩家（${report.suspiciousPlayers.length}）`,
-      '',
-    ];
-    if (report.suspiciousPlayers.length === 0) lines.push('无可疑玩家。');
-    for (const p of report.suspiciousPlayers) {
-      lines.push(`- **${p.character}**（severity=${p.severity}, action=${p.suggestedAction}）：${(p.reasons ?? []).join('；')}`);
-      for (const e of (p.evidence ?? []).slice(0, 3)) lines.push(`  - \`${e}\``);
-    }
-    lines.push('', '## 建议', '');
-    for (const r of report.recommendations ?? []) lines.push(`- ${r}`);
-    return lines.join('\n');
   }
 }
 

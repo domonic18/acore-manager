@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog } from '@/shared/components/Dialog';
+import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 import { toast } from '@/shared/utils/toast.util';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { useDeleteTargetedAnalysis, useTargetedDetail, useUpdateTargetedAnalysis } from '../hooks/useTargetedAnalysis';
@@ -30,11 +30,7 @@ export function TargetedAnalysisDetailView({ id }: { id: number }) {
   const [confirmText, setConfirmText] = useState('');
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> 加载中...
-      </div>
-    );
+    return <DetailPageSkeleton infoRows={6} tables={2} />;
   }
   if (isError || !detail) {
     return <div className="py-10 text-center text-sm text-destructive">详情加载失败</div>;

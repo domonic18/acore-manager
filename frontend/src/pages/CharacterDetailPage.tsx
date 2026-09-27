@@ -8,6 +8,7 @@ import { CharacterUnmuteConfirmDialog } from '@/features/character/components/Ch
 import { BanFlowDialogs } from '@/shared/components/BanFlowDialogs';
 import { BanHistoryTable } from '@/shared/components/BanHistoryTable';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 
 export default function CharacterDetailPage() {
   const { guid } = useParams<{ guid: string }>();
@@ -17,9 +18,7 @@ export default function CharacterDetailPage() {
   const actions = useCharacterDetailActions(characterGuid);
 
   if (isLoading) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">加载中...</div>
-    );
+    return <DetailPageSkeleton infoRows={10} tables={1} />;
   }
 
   if (!character) {

@@ -2,13 +2,14 @@ import { Link, useParams } from 'react-router-dom';
 import { useReportDetail } from '@/features/ai-diagnosis/hooks/useAiDiagnosis';
 import { ReportDetailTabs } from '@/features/ai-diagnosis/components/ReportDetailTabs';
 import { ReportManageActions } from '@/features/ai-diagnosis/components/ReportManageActions';
+import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 
 export default function AiDiagnosisReportDetailPage() {
   const { realm = '', date = '' } = useParams();
   const { data: report, isLoading, isError } = useReportDetail(realm, date);
 
   if (isLoading) {
-    return <div className="py-8 text-center text-muted-foreground">加载中...</div>;
+    return <DetailPageSkeleton infoRows={0} tables={3} />;
   }
   if (isError || !report) {
     return (

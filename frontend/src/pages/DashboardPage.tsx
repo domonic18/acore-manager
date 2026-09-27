@@ -1,6 +1,7 @@
 import { useDashboardStats } from '@/features/dashboard/hooks/useDashboard';
 import PopulationStats from '@/features/dashboard/components/PopulationStats';
 import FriendStats from '@/features/dashboard/components/FriendStats';
+import { Skeleton } from '@/shared/components/Skeleton';
 
 export default function DashboardPage() {
   const { data: stats, isLoading } = useDashboardStats();
@@ -83,9 +84,11 @@ function StatCard({
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <p className="text-sm text-muted-foreground">{title}</p>
-      <p className="text-3xl font-bold mt-2">
-        {loading ? '-' : value}
-      </p>
+      {loading ? (
+        <Skeleton className="mt-2 h-9 w-20" />
+      ) : (
+        <p className="text-3xl font-bold mt-2">{value}</p>
+      )}
     </div>
   );
 }

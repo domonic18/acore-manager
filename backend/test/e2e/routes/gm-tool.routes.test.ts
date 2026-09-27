@@ -123,7 +123,9 @@ describe('GM Tool Routes', () => {
       const res = await request(app).get('/api/gm/mail/logs?page=2&target=Unparalleled');
 
       expect(res.status).toBe(200);
-      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data.items).toHaveLength(1);
+      expect(res.body.data.total).toBe(1);
+      expect(res.body.count).toBe(1);
       expect(gmToolService.mailLogs).toHaveBeenCalledWith(2, 20, 'Unparalleled');
     });
 

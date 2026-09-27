@@ -1,6 +1,28 @@
 import { useRbacConfig } from '@/features/rbac/hooks/useRbacConfig';
 import { RbacPermissionGroups } from '@/features/rbac/components/RbacPermissionGroups';
 import { RbacToggleConfirmDialog } from '@/features/rbac/components/RbacToggleConfirmDialog';
+import { Skeleton } from '@/shared/components/Skeleton';
+
+// 权限分组卡片骨架：与加载完成后的分组卡（标题 + 权限行）同构
+function RbacGroupsSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2" aria-busy="true" aria-label="权限配置加载中">
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="rounded-lg border border-border bg-card p-4">
+          <Skeleton className="mb-3 h-4 w-24" />
+          <div className="space-y-2">
+            {Array.from({ length: 5 }, (_, r) => (
+              <div key={r} className="flex items-center justify-between">
+                <Skeleton className="h-4" style={{ width: `${52 - r * 6}%` }} />
+                <Skeleton className="h-5 w-9 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function RbacConfigPage() {
   const config = useRbacConfig();
@@ -36,7 +58,7 @@ export default function RbacConfigPage() {
       </div>
 
       {config.isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">加载中...</div>
+        <RbacGroupsSkeleton />
       ) : (
         <>
           <RbacPermissionGroups

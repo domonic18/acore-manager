@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { Skeleton } from '@/shared/components/Skeleton';
 import type { GmAccountItem } from '@/features/account/api/account.api';
 
 interface GmAccountGroup {
@@ -51,11 +52,15 @@ export function GmAccountTable({ gms, loading, search }: GmAccountTableProps) {
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                  加载中...
-                </td>
-              </tr>
+              Array.from({ length: 5 }, (_, r) => (
+                <tr key={r} className="border-b border-border" aria-busy="true" aria-label="GM 账号加载中">
+                  {Array.from({ length: 6 }, (_, c) => (
+                    <td key={c} className="px-4 py-3">
+                      <Skeleton className="h-4" style={{ width: `${[40, 55, 65, 45, 50, 60][c]}%` }} />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : groupedByAccount.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">

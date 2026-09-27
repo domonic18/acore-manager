@@ -41,6 +41,9 @@ function LogRow({ log }: { log: MailLogItem }) {
           <span className="line-clamp-1 max-w-[220px] text-muted-foreground">{log.subject}</span>
         </td>
         <td className="px-3 py-2">
+          <span className="line-clamp-2 max-w-[280px] text-muted-foreground" title={log.body}>{log.body}</span>
+        </td>
+        <td className="px-3 py-2">
           <span className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold ${log.ok ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
             {log.ok ? '成功' : '失败'}
           </span>
@@ -55,7 +58,7 @@ function LogRow({ log }: { log: MailLogItem }) {
       </tr>
       {open && (
         <tr className="border-b border-border/60 bg-muted/20">
-          <td colSpan={7} className="px-3 py-2">
+          <td colSpan={8} className="px-3 py-2">
             <div className="space-y-1 text-xs">
               <p>
                 <span className="font-semibold text-muted-foreground">正文：</span>
@@ -224,13 +227,14 @@ export function GmMailPanel() {
           <div className="py-6 text-center text-sm text-muted-foreground">暂无发送记录</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted-foreground">
                   <th className="px-3 py-2 font-medium">时间</th>
                   <th className="px-3 py-2 font-medium">操作人</th>
                   <th className="px-3 py-2 font-medium">角色</th>
                   <th className="px-3 py-2 font-medium">标题</th>
+                  <th className="px-3 py-2 font-medium">内容</th>
                   <th className="px-3 py-2 font-medium">结果</th>
                   <th className="px-3 py-2 font-medium">关联报告</th>
                   <th className="px-3 py-2" />

@@ -9,6 +9,9 @@ jest.mock('@/services/ai/anticheat-exemption.service', () => ({
 jest.mock('@/services/job-trigger.service', () => ({
   triggerJob: jest.fn().mockResolvedValue({ requestId: 'req-1' }),
 }));
+jest.mock('@/config/redis', () => ({
+  redis: { set: jest.fn().mockResolvedValue('OK'), del: jest.fn().mockResolvedValue(1) },
+}));
 jest.mock('@/services/ai/report.service', () => ({
   reportService: {
     list: jest.fn().mockResolvedValue([]),

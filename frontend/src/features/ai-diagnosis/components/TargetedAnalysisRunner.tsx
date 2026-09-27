@@ -5,6 +5,7 @@ import { CopyButton } from '@/shared/components/CopyButton';
 import { Markdown } from '@/shared/components/Markdown';
 import { TimeRangeFilter } from '@/shared/components/TimeRangeFilter';
 import { useDefaultRealm } from '@/shared/hooks/useDefaultRealm';
+import { markdownToHtml } from '@/shared/utils/markdown.util';
 import { streamTargetedAnalysis, type AnalysisConclusion, type TargetedAnalysisInput, type TargetedSubjectType, type ToolResultEvent } from '../api/ai-analysis.api';
 
 // 定向分析发起（T4.6，需求 3.8 申诉研判）：单一对象 + 时间范围，SSE 过程展示，
@@ -110,10 +111,20 @@ export function ConclusionCard({ conclusion, analysisId }: { conclusion: Analysi
 
       {conclusion.markdown && (
         <details open>
-          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">回复全文（可复制）</summary>
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">回复全文（可复制 Markdown / HTML）</summary>
           <div className="mt-2 rounded-md border border-border bg-muted/30 px-3 py-2">
-            <div className="mb-1 flex justify-end">
-              <CopyButton getText={() => Promise.resolve(conclusion.markdown ?? '')} />
+            <div className="mb-1 flex justify-end gap-2">
+              <CopyButton
+                formats={[
+                  { key: 'markdown', label: '复制 Markdown', text: () => Promise.resolve(conclusion.markdown ?? '') },
+                  {
+                    key: 'html',
+                    label: '复制 HTML',
+                    text: () => Promise.resolve(markdownToHtml(conclusion.markdown ?? '')),
+                    richHtml: true,
+                  },
+                ]}
+              />
             </div>
             <Markdown content={conclusion.markdown} />
           </div>

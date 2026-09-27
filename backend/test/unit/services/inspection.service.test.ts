@@ -1,5 +1,5 @@
 jest.mock('@/config/env', () => ({
-  env: { AI_TOOL_CALL_BUDGET: 20, AI_TOOL_TIMEOUT_MS: 5000, AI_DAILY_TOKEN_BUDGET: 5_000_000, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
+  env: { AI_TOOL_CALL_BUDGET: 20, AI_TOOL_TIMEOUT_MS: 5000, AI_DAILY_TOKEN_BUDGET: 5_000_000, AI_INSPECTION_TIME_BUDGET_MS: 780_000, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
 }));
 jest.mock('@/config/database', () => ({
   acmDataSource: { getRepository: jest.fn() },
@@ -25,13 +25,15 @@ jest.mock('@/shared/utils/cos.util', () => ({
 jest.mock('@/agent/runtime/agent-factory', () => ({
   getAgent: jest.fn(),
 }));
-// wire 层直接 mock：collectAnswer 消费的是 streamAgentEvents 的逻辑事件序列
+// wire 层直接 mock：collectAnswer 消费的是 streamAgentEvents 的逻辑事件序列。
+// __onRound 钩子模拟"模型在某一轮调用了 write_report_section"（真实工具执行在 agent 内部）
 jest.mock('@/agent/runtime/wire', () => ({
-  streamAgentEvents: jest.fn((agent: { __rounds: unknown[][]; __cursor?: number }) =>
+  streamAgentEvents: jest.fn((agent: { __rounds: unknown[][]; __cursor?: number; __onRound?: (index: number) => void }) =>
     (async function* () {
-      const round = agent.__rounds[Math.min(agent.__cursor ?? 0, agent.__rounds.length - 1)];
+      const index = Math.min(agent.__cursor ?? 0, agent.__rounds.length - 1);
+      agent.__onRound?.(index);
       agent.__cursor = (agent.__cursor ?? 0) + 1;
-      for (const ev of round) yield ev as { event: string; data: Record<string, unknown> };
+      for (const ev of agent.__rounds[index]) yield ev as { event: string; data: Record<string, unknown> };
     })(),
   ),
 }));
@@ -49,6 +51,7 @@ jest.mock('@/agent/tools/report-tools', () => {
 });
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { env } from '@/config/env';
 import { acmDataSource } from '@/config/database';
 import { cacheService } from '@/services/cache.service';
 import { feishuNotifyService } from '@/services/ai/feishu-notify.service';
@@ -68,8 +71,8 @@ const tokenRecord = tokenUsageService.record as jest.Mock;
 const getAgentMock = getAgent as jest.Mock;
 const getRepository = acmDataSource.getRepository as jest.Mock;
 
-function fakeAgent(rounds: unknown[][]): unknown {
-  return { __rounds: rounds };
+function fakeAgent(rounds: unknown[][], onRound?: (index: number) => void): unknown {
+  return { __rounds: rounds, __onRound: onRound };
 }
 
 const answerRound = (text: string): unknown[] => [
@@ -171,12 +174,45 @@ describe('InspectionService', () => {
     getAgentMock.mockResolvedValue(fakeAgent([answerRound(validReportJson()), answerRound(validReportJson()), answerRound(validReportJson())]));
     const outcome = await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
 
-    // 缺节属结构性失败：追问轮无法凭空补数据，直接走整轮重试（3 次 attempt）
+    // 缺节先走同线程抢救轮（mock 模型始终不调 write_report_section，抢救无效），才整轮重试（3 次 attempt）
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toContain('报告缺节');
+    expect(outcome.error).toContain('抢救轮后仍未落盘');
     expect(getAgentMock).toHaveBeenCalledTimes(3);
     const repo = getRepository.mock.results.at(-1)!.value;
     expect(repo.upsert).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'failed', summary: expect.stringContaining('报告缺节') }), ['realm', 'reportDate']);
+  });
+
+  it('salvages missing sections on the same thread instead of a full retry', async () => {
+    rmSync(reportDraftDir('realm3', '2026-08-22'), { recursive: true, force: true });
+    // 抢救轮（第 2 轮）开始时模拟模型补调 write_report_section 落盘三节
+    getAgentMock.mockResolvedValue(
+      fakeAgent([answerRound(validReportJson()), answerRound(validReportJson())], (index) => {
+        if (index >= 1) seedDraftSections();
+      }),
+    );
+    const outcome = await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
+
+    expect(outcome.ok).toBe(true);
+    expect(getAgentMock).toHaveBeenCalledTimes(1); // 抢救成功，未触发整轮重试
+    const repo = getRepository.mock.results[0].value;
+    expect(repo.upsert).toHaveBeenCalledWith(expect.objectContaining({ status: 'ok', healthScore: 82 }), ['realm', 'reportDate']);
+  });
+
+  it('stops retrying when the time budget is exhausted', async () => {
+    rmSync(reportDraftDir('realm3', '2026-08-22'), { recursive: true, force: true });
+    const originalBudget = env.AI_INSPECTION_TIME_BUDGET_MS;
+    env.AI_INSPECTION_TIME_BUDGET_MS = 100;
+    try {
+      getAgentMock.mockResolvedValue(fakeAgent([answerRound(validReportJson()), answerRound(validReportJson()), answerRound(validReportJson())]));
+      const outcome = await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome.error).toContain('时间预算不足');
+      expect(getAgentMock).toHaveBeenCalledTimes(1); // 预算耗尽，不再重试
+    } finally {
+      env.AI_INSPECTION_TIME_BUDGET_MS = originalBudget;
+    }
   });
 
   it('warns on missing log types but continues the inspection', async () => {

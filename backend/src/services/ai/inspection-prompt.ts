@@ -2,7 +2,14 @@ import { LOG_TYPES } from '@/agent/tools/log-tools/log-workspace';
 import { REPORT_SCHEMA_VERSION } from '@/agent/tools/report-tools';
 
 // 巡检任务提示词（纯函数，inspection.service 拆分）：manifest 状态说明 + 取证步骤建议
-// + write_report_section 分节落盘契约 + 五字段最终小 JSON 约定与硬性要求。
+// + write_report_section 分节落盘契约 + 五字段最终小 JSON 约定与硬性要求
+// + 抗摇摆执行纪律（SquadSight 线上事故同款 SOP）。
+
+// 抗摇摆纪律：工具校验硬拒后模型易"反向误诊 → 换策略/放弃落盘改叙述"，烧尽步数
+// 且叙述文本会被代码层丢弃（报告只认草稿文件）。SOP：只修参数、同工具重试。
+const EXECUTION_DISCIPLINE =
+  '执行纪律：工具调用被拒（返回 error）时，只按报错说明修正参数后用同一工具重试；' +
+  '禁止因校验失败放弃分节落盘，禁止把分节内容改写进最终消息。';
 
 export function buildInspectionTaskPrompt(
   realm: string,
@@ -34,7 +41,44 @@ export function buildInspectionTaskPrompt(
     `三节全部落盘后，最终消息只输出一个五字段小 JSON（可置于 \`\`\`json 围栏中），除此之外不得输出任何明细、markdown 全文或解释文字：`,
     `{"schemaVersion": ${REPORT_SCHEMA_VERSION}, "reportDate": "${date}", "realm": "${realm}", "healthScore": <0-100 整数>, "summary": "<一段话总结，≤200 字>"}`,
     ``,
+    EXECUTION_DISCIPLINE,
+    ``,
     `硬性要求：falsePositiveSignals 非空的玩家 suggestedAction 不得为 "ban"；证据必须来自工具返回的原文摘录，禁止编造；无日志支撑的维度如实写"无数据"。`,
   ].join('\n');
   return { messages: [{ role: 'user', content }] };
+}
+
+// 最终小 JSON 校验失败追问轮：不再无条件断言"分节已落盘"（假前提会诱导模型跳过补落盘），
+// 改为状态中立的指引——若尚未落盘，先补齐再输出小 JSON
+export function buildJsonFixPrompt(parseIssue: string): { messages: { role: string; content: string }[] } {
+  return {
+    messages: [
+      {
+        role: 'user',
+        content:
+          `你上一轮的输出无法解析为符合约定的 JSON，问题：${parseIssue}。` +
+          `请重新只输出最终小 JSON：从 { 开始到 } 结束的一个完整对象，仅含 schemaVersion/reportDate/realm/healthScore/summary 五个字段，` +
+          `不要使用 markdown 代码块，不要续写上文，不要输出任何解释文字。` +
+          `分节结论以你已通过 write_report_section 落盘的草稿为准；若尚有分节未落盘，请先调用 write_report_section 补齐后再输出小 JSON。`,
+      },
+    ],
+  };
+}
+
+// 分节抢救轮：JSON 已合规但草稿缺节时，同线程追问落盘挽回整轮工作
+// （SquadSight「缺失清单 + 局部修补」模式）——分析结论仍留在上下文中，只差落盘动作
+export function buildSectionSalvagePrompt(missing: readonly string[]): { messages: { role: string; content: string }[] } {
+  return {
+    messages: [
+      {
+        role: 'user',
+        content:
+          `报告缺节：${missing.join(' / ')}——这些分节的草稿尚未落盘（write_report_section 未被成功调用）。` +
+          `你此前的分析结论仍在上下文中，请立即按分节落盘契约逐节调用 write_report_section 补齐：` +
+          `content 按契约传 JSON（禁止包成字符串），缺哪节补哪节，已落盘的节无需重写。` +
+          `全部补齐后，最终消息只重新输出五字段小 JSON，除此之外不得输出任何明细或解释文字。` +
+          `${EXECUTION_DISCIPLINE}`,
+      },
+    ],
+  };
 }

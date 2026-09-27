@@ -92,7 +92,24 @@ describe('report-tools: section sanitizers', () => {
     if (!result.ok) return;
     expect(result.value).toHaveLength(20);
     expect(result.value[0]).toHaveLength(200);
-    expect(sanitizeRecommendations('nope').ok).toBe(false);
+    expect(sanitizeRecommendations(123).ok).toBe(false);
+  });
+
+  it('tolerates format drift: multi-line string recommendations, single player object, scalar arrays', () => {
+    const multiline = sanitizeRecommendations('建议一\n建议二\n\n建议三');
+    expect(multiline).toEqual({ ok: true, value: ['建议一', '建议二', '建议三'] });
+
+    const single = sanitizeSuspiciousPlayers(player());
+    expect(single.ok).toBe(true);
+    if (!single.ok) return;
+    expect(single.value).toHaveLength(1);
+    expect(single.value[0].character).toBe('Unparalleled');
+
+    const scalarReasons = sanitizeSuspiciousPlayers([player({ reasons: 'speed 3 次', falsePositiveSignals: '延迟偏高' })]);
+    expect(scalarReasons).toEqual({
+      ok: true,
+      value: [expect.objectContaining({ reasons: ['speed 3 次'], falsePositiveSignals: ['延迟偏高'] })],
+    });
   });
 });
 
@@ -130,7 +147,10 @@ describe('report-tools: draft write/read/assemble', () => {
 
   it('surfaces validation failures as {error} for the model to rewrite the section', async () => {
     const out = await toolFn('write_report_section').invoke({ section: 'suspicious-players', content: [{ character: '', severity: 'high', suggestedAction: 'ban', reasons: [], evidence: [], falsePositiveSignals: [] }] });
+    // 错误可操作化：含节名 + 字段定位 + 同工具重试指引（SquadSight _format_validation_error 模式）
     expect(out).toMatchObject({ error: expect.stringContaining('character 不能为空') });
+    expect(out.error).toContain('write_report_section(suspicious-players)');
+    expect(out.error).toContain('重新调用本工具重试');
   });
 
   it('rejects invocation when no draft root is injected', async () => {

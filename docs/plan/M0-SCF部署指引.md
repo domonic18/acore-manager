@@ -96,7 +96,7 @@ docker push <TCR仓库>/acore-manager-job:<tag>
 | `DB_URL` | 游戏库 MySQL 只读连接串（Job 建立全量数据源连接用） |
 | `ACM_DB_URL` | acm 库 PostgreSQL 连接串（报告/审计/checkpoint 写入） |
 | `REDIS_URL` | Redis 连接串（巡检摘要缓存） |
-| `COS_SECRET_ID` / `COS_SECRET_KEY` | 日志桶读取凭证 |
+| `TENCENT_SECRET_ID` / `TENCENT_SECRET_KEY` | 腾讯云统一 API 凭证：日志桶读取与 SCF 触发共用一对 |
 | `COS_BUCKET` | `wow-warden-1259353115` |
 | `COS_REGION` | `ap-beijing` |
 | `FEISHU_WEBHOOK_URL` / `FEISHU_WEBHOOK_SECRET` | 日报/断传告警推送（含加签）；可选，已支持系统配置页维护，DB 值优先 |

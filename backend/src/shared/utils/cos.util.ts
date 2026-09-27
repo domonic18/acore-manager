@@ -9,12 +9,12 @@ import { logger } from '@/middleware/request-logger';
 let client: COS | null = null;
 
 export function cosConfigured(): boolean {
-  return Boolean(env.COS_SECRET_ID && env.COS_SECRET_KEY && env.COS_BUCKET && env.COS_REGION);
+  return Boolean(env.TENCENT_SECRET_ID && env.TENCENT_SECRET_KEY && env.COS_BUCKET && env.COS_REGION);
 }
 
 function cosClient(): COS {
-  if (!cosConfigured()) throw new Error('COS 未配置（需要 COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION）');
-  if (!client) client = new COS({ SecretId: env.COS_SECRET_ID, SecretKey: env.COS_SECRET_KEY });
+  if (!cosConfigured()) throw new Error('COS 未配置（需要 TENCENT_SECRET_ID / TENCENT_SECRET_KEY / COS_BUCKET / COS_REGION）');
+  if (!client) client = new COS({ SecretId: env.TENCENT_SECRET_ID, SecretKey: env.TENCENT_SECRET_KEY });
   return client;
 }
 

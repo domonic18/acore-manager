@@ -497,8 +497,8 @@ frontend/src/features/
 ```bash
 # 部署增量环境变量（完整模板见 .env.example）
 LLM_AES_KEY                   # ai_model_config.api_key 加解密密钥（生产必填，fail-fast）
-COS_SECRET_ID / COS_SECRET_KEY / COS_BUCKET / COS_REGION   # 日志包与报告归档桶
-TENCENT_SECRET_ID / TENCENT_SECRET_KEY / SCF_*             # 控制面异步触发 Job 函数
+COS_BUCKET / COS_REGION                                    # 日志包与报告归档桶（密钥复用 TENCENT_SECRET_ID/KEY 一对）
+TENCENT_SECRET_ID / TENCENT_SECRET_KEY / SCF_*             # 腾讯云统一 API 密钥（SCF 触发签名 + COS 上传共用）
 FEISHU_WEBHOOK_URL / FEISHU_WEBHOOK_SECRET / ACM_WEB_BASE_URL  # 告警出口（系统配置页 DB 值优先，env 仅回落）
 ACM_WEB_BASE_URL              # 飞书日报卡片报告链接
 AI_DAILY_TOKEN_BUDGET=5000000 # Token 日预算（告警阈值）

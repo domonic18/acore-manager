@@ -173,13 +173,11 @@ export const env = {
   AI_TOOL_CALL_BUDGET: getEnvInt('AI_TOOL_CALL_BUDGET', 20),
   AI_TOOL_TIMEOUT_MS: getEnvInt('AI_TOOL_TIMEOUT_MS', 5000),
 
-  // Tencent COS (log archive / AI report archive bucket, private-read; credentials are infra-level config)
-  COS_SECRET_ID: getEnv('COS_SECRET_ID', ''),
-  COS_SECRET_KEY: getEnv('COS_SECRET_KEY', ''),
+  // Tencent COS (log archive / AI report archive bucket, private-read)
   COS_BUCKET: getEnv('COS_BUCKET', ''),
   COS_REGION: getEnv('COS_REGION', ''),
 
-  // Tencent SCF (Job 函数异步触发，控制面专用；四项主配置缺任一则触发接口快速失败)
+  // 腾讯云统一 API 密钥（SecretId/Key 一对）：SCF Job 触发签名与 COS 上传共用，不再单设 COS_SECRET_*
   // 键名带 TENCENT_ 前缀：SCF_* 是腾讯云 SCF 运行时注入的保留前缀，用户配置同名会冲突报错（仿 SquadSight TENCENT_SCF_*）
   TENCENT_SECRET_ID: getEnv('TENCENT_SECRET_ID', ''),
   TENCENT_SECRET_KEY: getEnv('TENCENT_SECRET_KEY', ''),

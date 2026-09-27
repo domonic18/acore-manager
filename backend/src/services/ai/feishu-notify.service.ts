@@ -14,6 +14,11 @@ import type { InspectionInput } from './inspection.service';
 type FeishuCard = Record<string, unknown>;
 type FeishuPayload = Record<string, unknown>;
 
+const RETRY_BACKOFF_MS = 1000;
+
+// ok=true 发送成功；ok=false 时 transient 标记是否值得重试（网络错/超时/5xx）
+type PostOutcome = { ok: boolean; transient: boolean; reason: string };
+
 export type DailyReportCardInput = Pick<InspectionInput, 'realm' | 'date' | 'trigger'> &
   Pick<InspectionReportJson, 'healthScore' | 'summary' | 'serverHealth' | 'suspiciousPlayers' | 'recommendations'> & {
     /** 当日日志缺口（manifest 缺失 / 某类日志断传），有缺口时简报明示"结论可能低估" */
@@ -42,13 +47,23 @@ class FeishuNotifyService {
     return this.post({ msg_type: 'interactive', card }, 'card notify');
   }
 
+  // 瞬时故障（网络错/超时/5xx）重试一次：通知日频低但重要（日报/告警），
+  // 把「可能丢」换成「可能重」，飞书群里重复卡片无害；4xx/业务错误码重试必然复现，不重试
   private async post(payload: FeishuPayload, label: string): Promise<boolean> {
+    const first = await this.postOnce(payload, label);
+    if (first.ok || !first.transient) return first.ok;
+    logger.warn(`[feishu] ${label} transient failure (${first.reason}), retrying in ${RETRY_BACKOFF_MS}ms`);
+    await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS));
+    return (await this.postOnce(payload, label)).ok;
+  }
+
+  private async postOnce(payload: FeishuPayload, label: string): Promise<PostOutcome> {
     const cfg = await readRuntimeValues([SYSTEM_CONFIG_KEYS.feishuWebhookUrl, SYSTEM_CONFIG_KEYS.feishuWebhookSecret]);
     const webhookUrl = cfg.get(SYSTEM_CONFIG_KEYS.feishuWebhookUrl) ?? env.FEISHU_WEBHOOK_URL;
     const webhookSecret = cfg.get(SYSTEM_CONFIG_KEYS.feishuWebhookSecret) ?? env.FEISHU_WEBHOOK_SECRET;
     if (!webhookUrl) {
       logger.warn(`[feishu] webhook not configured, skip ${label}`);
-      return false;
+      return { ok: false, transient: false, reason: 'webhook not configured' };
     }
     if (webhookSecret) {
       const timestamp = Math.floor(Date.now() / 1000);
@@ -65,18 +80,19 @@ class FeishuNotifyService {
       });
       if (!resp.ok) {
         logger.error(`[feishu] ${label} failed: HTTP ${resp.status}`);
-        return false;
+        return { ok: false, transient: resp.status >= 500, reason: `HTTP ${resp.status}` };
       }
       // webhook 2xx 也会带业务错误码（如签名不符 code=19021），需检查 body
       const body = (await resp.json()) as { code?: number; msg?: string };
       if (body.code && body.code !== 0) {
         logger.error(`[feishu] ${label} rejected: code=${body.code} msg=${body.msg}`);
-        return false;
+        return { ok: false, transient: false, reason: `code=${body.code}` };
       }
-      return true;
+      return { ok: true, transient: false, reason: '' };
     } catch (err) {
+      // 网络错/AbortSignal.timeout 超时均走此分支：网关无响应属瞬时故障
       logger.error(`[feishu] ${label} error: ${(err as Error).message}`);
-      return false;
+      return { ok: false, transient: true, reason: (err as Error).message };
     }
   }
 

@@ -8,7 +8,7 @@ jest.mock('@/services/cache.service', () => ({
   cacheService: { get: jest.fn(), set: jest.fn(), del: jest.fn(), delPattern: jest.fn() },
 }));
 jest.mock('@/services/ai/feishu-notify.service', () => ({
-  feishuNotifyService: { sendText: jest.fn(), sendDailyReportCard: jest.fn().mockResolvedValue(true) },
+  feishuNotifyService: { sendText: jest.fn().mockResolvedValue(true), sendDailyReportCard: jest.fn().mockResolvedValue(true) },
 }));
 jest.mock('@/services/ai/token-usage.service', () => ({
   tokenUsageService: { record: jest.fn().mockResolvedValue(undefined) },

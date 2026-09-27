@@ -90,17 +90,20 @@ async function archiveAndNotify(input: InspectionPersistInput, report: Inspectio
     REPORT_CACHE_TTL_SECONDS,
   );
 
-  void feishuNotifyService.sendDailyReportCard({
-    realm: input.realm,
-    date: input.date,
-    trigger: input.trigger,
-    healthScore: report.healthScore,
-    summary: report.summary,
-    serverHealth: report.serverHealth,
-    suspiciousPlayers: report.suspiciousPlayers,
-    recommendations: report.recommendations,
-    ...(dataGaps.length > 0 ? { dataGaps } : {}),
-  });
+  // Job 形态下任务返回即进程退出：日报卡片是巡检交付物的一部分，必须等待投递完成
+  await feishuNotifyService
+    .sendDailyReportCard({
+      realm: input.realm,
+      date: input.date,
+      trigger: input.trigger,
+      healthScore: report.healthScore,
+      summary: report.summary,
+      serverHealth: report.serverHealth,
+      suspiciousPlayers: report.suspiciousPlayers,
+      recommendations: report.recommendations,
+      ...(dataGaps.length > 0 ? { dataGaps } : {}),
+    })
+    .catch((err: unknown) => logger.error(`[inspection] daily card notify failed: ${(err as Error).message}`));
 }
 
 export async function recordInspectionFailure(input: InspectionPersistInput, message: string): Promise<number | null> {

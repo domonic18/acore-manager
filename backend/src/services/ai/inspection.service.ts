@@ -88,7 +88,10 @@ class InspectionService {
       const message = (err as Error).message ?? String(err);
       logger.error(`[inspection] ${input.realm}/${input.date} failed: ${message}`);
       const reportId = await recordInspectionFailure(input, message);
-      void feishuNotifyService.sendText(`[ACM] 巡检失败：${input.realm} ${input.date}（trigger=${input.trigger}）：${message}`);
+      // Job 形态下任务返回即进程退出：失败告警必须等待投递完成
+      await feishuNotifyService
+        .sendText(`[ACM] 巡检失败：${input.realm} ${input.date}（trigger=${input.trigger}）：${message}`)
+        .catch((err: Error) => logger.error(`[inspection] failure notify failed: ${err.message}`));
       return { ok: false, realm: input.realm, date: input.date, reportId, error: message, elapsedMs: Date.now() - t0 };
     } finally {
       clearWorkspace();
@@ -125,9 +128,11 @@ class InspectionService {
       const manifestNote = await this.checkManifest(input.realm, input.date);
       const dataGaps = manifestNote.absent ? ['manifest 缺失（疑似断传）'] : manifestNote.missingTypes.map((t) => `${t} 日志缺失`);
       if (manifestNote.absent || manifestNote.missingTypes.length > 0) {
-        void feishuNotifyService.sendText(
-          `[ACM] 日志断传告警：${input.realm} ${input.date} ${manifestNote.absent ? 'manifest.json 不存在' : `缺失 ${manifestNote.missingTypes.join('/')}`}，巡检继续分析已有部分。`,
-        );
+        await feishuNotifyService
+          .sendText(
+            `[ACM] 日志断传告警：${input.realm} ${input.date} ${manifestNote.absent ? 'manifest.json 不存在' : `缺失 ${manifestNote.missingTypes.join('/')}`}，巡检继续分析已有部分。`,
+          )
+          .catch((err: Error) => logger.error(`[inspection] gap notify failed: ${err.message}`));
       }
 
       const cfg = await llmConfigService.resolveDefault();

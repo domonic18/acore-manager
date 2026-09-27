@@ -13,7 +13,7 @@ export default function TargetedAnalysisPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">深入分析</h1>
+        <h1 className="text-2xl font-bold">深度分析</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           针对单个角色/账号的违规取证与申诉研判，结论自动落库，可在历史中回看（需求 3.8）
         </p>

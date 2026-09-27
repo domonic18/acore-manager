@@ -172,7 +172,7 @@ export function TargetedAnalysisDetailView({ id }: { id: number }) {
       <Dialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="删除深入分析记录"
+        title="删除深度分析记录"
         footer={
           <div className="flex justify-end gap-2">
             <button onClick={() => setConfirmOpen(false)} className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent">
@@ -199,7 +199,7 @@ export function TargetedAnalysisDetailView({ id }: { id: number }) {
       >
         <div className="space-y-3 text-sm">
           <p>
-            将永久删除 <span className="font-medium">#{detail.id} {detail.subjectName}</span> 的深入分析记录，删除操作会记录审计日志。
+            将永久删除 <span className="font-medium">#{detail.id} {detail.subjectName}</span> 的深度分析记录，删除操作会记录审计日志。
           </p>
           <p className="text-muted-foreground">请输入记录编号 {detail.id} 以确认：</p>
           <input

@@ -47,7 +47,7 @@ export function AccountDetailActions({ account, unbanPending, onOpenBan, onOpenU
         }
         className="px-4 py-2 rounded-md border border-blue-600 text-blue-400 text-sm font-medium hover:bg-blue-600/10"
       >
-        深入分析
+        深度分析
       </button>
       <button
         onClick={onOpenPassword}

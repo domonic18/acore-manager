@@ -2,6 +2,10 @@
 // 输出为与传输无关的事件序列；ai-assistant / ai-analysis 路由负责序列化为 SSE 帧
 // 并在 done 事件中补充 sessionId / messageId 等会话信息。
 // 映射为表驱动：每类 LangChain 回调事件一个 handler，返回待下发的逻辑事件数组。
+// 每次工具调用同步落 pino（start/done/failed + 耗时 + 错误）：SCF 控制台直出，
+// 用于区分"模型没调用工具"与"调用了但被拒"——事后查 ai_tool_audit 覆盖不到日志排障场景。
+
+import { logger } from '@/middleware/request-logger';
 
 export type AgentSseEventName = 'delta' | 'tool_call' | 'tool_result' | 'step' | 'question' | 'done' | 'error';
 
@@ -45,6 +49,7 @@ const HANDLERS: Record<string, RawEventHandler> = {
   },
   on_tool_start: (ev, ctx) => {
     if (ev.run_id) ctx.toolStartAt.set(ev.run_id, Date.now());
+    logger.info(`[agent-tool] start ${ev.name}`);
     return [{ event: 'tool_call', data: { name: ev.name, args: ev.data.input } }];
   },
   on_tool_end: (ev, ctx) => {
@@ -89,12 +94,18 @@ export async function* streamAgentEvents(
 function toolResultEvent(ev: StreamEventLike, ctx: WireContext, error?: string): AgentSseEvent {
   const startedAt = ev.run_id ? ctx.toolStartAt.get(ev.run_id) : undefined;
   if (ev.run_id) ctx.toolStartAt.delete(ev.run_id);
+  const durationMs = startedAt ? Date.now() - startedAt : null;
+  if (error === undefined) {
+    logger.info(`[agent-tool] done ${ev.name}${durationMs != null ? ` ${durationMs}ms` : ''}`);
+  } else {
+    logger.warn(`[agent-tool] failed ${ev.name}${durationMs != null ? ` ${durationMs}ms` : ''}: ${error}`);
+  }
   return {
     event: 'tool_result',
     data: {
       name: ev.name,
       rowCount: error === undefined ? countOutputRows(ev.data.output) : null,
-      durationMs: startedAt ? Date.now() - startedAt : null,
+      durationMs,
       ...(error !== undefined ? { error } : {}),
     },
   };

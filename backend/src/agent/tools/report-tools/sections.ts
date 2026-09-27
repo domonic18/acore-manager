@@ -54,9 +54,13 @@ const ACTIONS: readonly string[] = ['warning', 'investigate', 'ban'];
 export type SanitizeResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 // ---- 宽容清洗（SquadSight _sanitize 风格：trim / clamp / 归一化；仅语义性错误拒绝）----
+// 模型传参存在格式漂移（字符串当数组、单对象当单元素数组）——能无歧义修复的统一
+// 宽容归一（Postel 输入宽容），只拒绝语义性错误；硬拒会诱发模型误诊后策略摇摆。
 
 function asStringArray(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
+  if (raw === undefined || raw === null) return [];
+  if (typeof raw === 'string') return raw.split('\n').map((v) => v.trim()).filter((v) => v.length > 0);
+  if (!Array.isArray(raw)) return [String(raw).trim()].filter((v) => v.length > 0);
   return raw.map((v) => String(v).trim()).filter((v) => v.length > 0);
 }
 
@@ -75,16 +79,18 @@ export function sanitizeServerHealth(raw: unknown): SanitizeResult<InspectionRep
 
 export function sanitizeSuspiciousPlayers(raw: unknown): SanitizeResult<SuspiciousPlayer[]> {
   if (raw === undefined || raw === null) return { ok: true, value: [] };
-  if (!Array.isArray(raw)) return { ok: false, error: 'suspicious-players 必须为玩家对象数组' };
-  if (raw.length > MAX_PLAYERS) {
+  // 单玩家对象宽容为单元素数组（模型只发现一人时常见漂移）
+  const items = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? [raw] : raw;
+  if (!Array.isArray(items)) return { ok: false, error: 'suspicious-players 必须为玩家对象数组（单个玩家对象也会被接受）' };
+  if (items.length > MAX_PLAYERS) {
     return {
       ok: false,
-      error: `suspicious-players 共 ${raw.length} 条，超过硬上限 ${MAX_PLAYERS} 条：请按严重度只保留最可疑的 top ${TARGET_PLAYERS} 名玩家后重新提交本节`,
+      error: `suspicious-players 共 ${items.length} 条，超过硬上限 ${MAX_PLAYERS} 条：请按严重度只保留最可疑的 top ${TARGET_PLAYERS} 名玩家后重新提交本节`,
     };
   }
   const players: SuspiciousPlayer[] = [];
   const issues: string[] = [];
-  raw.forEach((item, idx) => {
+  items.forEach((item, idx) => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
       issues.push(`suspiciousPlayers[${idx}] 必须为对象`);
       return;
@@ -105,7 +111,11 @@ export function sanitizeSuspiciousPlayers(raw: unknown): SanitizeResult<Suspicio
       issues.push(`suspiciousPlayers[${idx}].suggestedAction 必须为 warning|investigate|ban`);
       return;
     }
-    const falsePositiveSignals = Array.isArray(p.falsePositiveSignals) ? p.falsePositiveSignals : [];
+    const falsePositiveSignals = Array.isArray(p.falsePositiveSignals)
+      ? p.falsePositiveSignals
+      : p.falsePositiveSignals !== undefined && p.falsePositiveSignals !== null
+        ? [p.falsePositiveSignals]
+        : [];
     // 误报信号非空时禁止自动 ban（提示词硬性要求的代码兜底），降级为人工调查
     const suggestedAction = falsePositiveSignals.length > 0 && action === 'ban' ? 'investigate' : action;
     const player: SuspiciousPlayer = {
@@ -126,8 +136,10 @@ export function sanitizeSuspiciousPlayers(raw: unknown): SanitizeResult<Suspicio
 
 export function sanitizeRecommendations(raw: unknown): SanitizeResult<string[]> {
   if (raw === undefined || raw === null) return { ok: true, value: [] };
-  if (!Array.isArray(raw)) return { ok: false, error: 'recommendations 必须为字符串数组' };
-  const value = raw
+  // 多行字符串宽容按行拆分（SquadSight 同款：字符串 → 按行分割为数组）
+  const items = typeof raw === 'string' ? raw.split('\n') : raw;
+  if (!Array.isArray(items)) return { ok: false, error: 'recommendations 必须为字符串数组（多行字符串也会被接受）' };
+  const value = items
     .map((v) => String(v).trim().slice(0, MAX_RECOMMENDATION_LENGTH))
     .filter((v) => v.length > 0)
     .slice(0, MAX_RECOMMENDATIONS);

@@ -45,11 +45,22 @@ function requireDraftRoot(): string {
 export function writeReportSection(section: ReportSection, content: unknown): { ok: true; section: ReportSection; bytes: number } {
   const dir = requireDraftRoot();
   const verdict = validateSection(section, content);
-  if (!verdict.ok) throw new Error(verdict.error);
+  // 错误信息必须可操作（SquadSight _format_validation_error 模式）：指出节名 + 修正方式 +
+  // 「同工具重试」指引——笼统拒绝会诱发模型放弃落盘转文本输出（策略摇摆）
+  if (!verdict.ok) {
+    throw new Error(
+      `write_report_section(${section}) 校验失败：${verdict.error}。请修正后以相同 section 重新调用本工具重试；禁止放弃落盘改为文本输出。`,
+    );
+  }
   mkdirSync(dir, { recursive: true });
   const body = JSON.stringify(verdict.value, null, 2);
   writeFileSync(join(dir, SECTION_FILE[section]), body, 'utf8');
   return { ok: true, section, bytes: Buffer.byteLength(body) };
+}
+
+/** 只看文件存在性的缺节清单（抢救轮判定用，不读内容不校验）。 */
+export function listMissingSections(dir: string): ReportSection[] {
+  return REPORT_SECTIONS.filter((section) => !existsSync(join(dir, SECTION_FILE[section])));
 }
 
 export interface DraftedSections {

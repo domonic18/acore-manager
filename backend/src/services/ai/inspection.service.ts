@@ -8,31 +8,36 @@ import { setInspectionRunner } from '@/agent/tools/inspection-tools';
 import {
   assembleReport,
   clearReportDraftRoot,
+  listMissingSections,
   readDraftedSections,
   renderInspectionMarkdown,
   reportDraftDir,
   resetDraftDir,
   setReportDraftRoot,
   validateFinalJson,
-  type InspectionReportJson,
   type ReportFinalJson,
 } from '@/agent/tools/report-tools';
 import { cosGetObjectJson } from '@/shared/utils/cos.util';
 import { extractJson } from '@/shared/utils/extract-json.util';
 import { runAgentRound, sumTokens } from './agent-round.util';
-import { buildInspectionTaskPrompt } from './inspection-prompt';
+import { buildInspectionTaskPrompt, buildJsonFixPrompt, buildSectionSalvagePrompt } from './inspection-prompt';
 import { persistInspection, recordInspectionFailure } from './inspection-persist';
 import { llmConfigService } from './llm-config.service';
 import { feishuNotifyService } from './feishu-notify.service';
 
 // 每日巡检编排（arch 3.4）：断传检查 → deep agent 取证（日志 + 白名单工具，分节结论经
-// write_report_section 边运行边落盘）→ 最终小 JSON 校验（失败追问一轮）→ 代码层组装
-// 完整报告并渲染 Markdown → ai_report 幂等 upsert → COS 归档 → Redis 摘要 → 计量/飞书。
-// 失败退避重试（最多 3 次），最终失败落 status=failed 行 + 飞书告警，不阻塞次日。
+// write_report_section 边运行边落盘）→ 最终小 JSON 校验（失败追问一轮）→ 缺节抢救轮
+// （同线程追问落盘，挽回整轮分析；SquadSight 局部修补模式）→ 代码层组装完整报告并渲染
+// Markdown → ai_report 幂等 upsert → COS 归档 → Redis 摘要 → 计量/飞书。
+// 失败退避重试（最多 3 次，受 AI_INSPECTION_TIME_BUDGET_MS 总预算约束），最终失败落
+// status=failed 行 + 飞书告警，不阻塞次日。
 // 报告节契约与渲染在 agent/tools/report-tools；任务提示词在 inspection-prompt；
 // 持久化（upsert/归档/摘要/简报/失败行）在 inspection-persist；事件流消费复用 agent-round.util。
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
+// 重试前置余量：剩余预算不足 max(上一轮耗时, 60s) + 退避时不再重试——上一轮耗时是下一轮
+// 工作量的最好估计；60s 下限保证快速轮（测试/小日志）始终可重试
+const MIN_RETRY_HEADROOM_MS = 60_000;
 
 export type InspectionTrigger = 'cron' | 'manual' | 'chat';
 
@@ -99,16 +104,31 @@ class InspectionService {
   }
 
   private async attemptWithRetry(input: InspectionInput): Promise<number> {
+    const budgetMs = env.AI_INSPECTION_TIME_BUDGET_MS;
+    const startedAt = Date.now();
     let lastError: unknown;
+    let lastAttemptMs: number;
     for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+      const attemptStart = Date.now();
       try {
         return await this.attempt(input, attempt);
       } catch (err) {
         lastError = err;
+        lastAttemptMs = Date.now() - attemptStart;
         const code = (err as InspectionError).code;
-        if (code === 'budget_exceeded') throw err; // 预算超限重试必然复现，直接失败
+        if (code === 'budget_exceeded' || code === 'time_budget_exceeded') throw err; // 预算超限重试必然复现，直接失败
         if (attempt < RETRY_DELAYS_MS.length - 1) {
           const delay = RETRY_DELAYS_MS[attempt];
+          // 时间预算守卫：下一轮耗时以刚失败这轮为最好估计；剩余不足即快速失败，
+          // 走既有 failed 行 + 飞书告警路径，而不是被平台超时静默击杀（零告警零日志）
+          const remaining = budgetMs - (Date.now() - startedAt);
+          const required = Math.max(lastAttemptMs, MIN_RETRY_HEADROOM_MS) + delay;
+          if (remaining < required) {
+            throw new InspectionError(
+              `巡检时间预算不足（已用 ${Date.now() - startedAt}ms / 预算 ${budgetMs}ms，下一轮重试约需 ${required}ms）：${(err as Error).message}`,
+              'time_budget_exceeded',
+            );
+          }
           logger.warn(`[inspection] attempt ${attempt + 1} failed: ${(err as Error).message}, retry in ${delay}ms`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -149,35 +169,48 @@ class InspectionService {
       };
 
       const first = await runAgentRound(agent, buildInspectionTaskPrompt(input.realm, input.date, manifestNote), config, toInspectionError);
-      let report = this.parseReport(first.text, input.realm, input.date);
+      let report = this.parseFinalJson(first.text, input.realm, input.date);
       let tokens = first.tokens;
       let durationMs = first.durationMs;
       if (!report) {
-        // 最终小 JSON 校验失败追问一轮：带具体错误让模型自我修复，同 thread 保持上下文；
-        // 分节结论已落盘仍有效，模型只需重发小 JSON
+        // 最终小 JSON 校验失败追问一轮：带具体错误让模型自我修复，同 thread 保持上下文
         logger.warn(`[inspection] first round JSON invalid, asking model to fix`);
-        const fixRound = await runAgentRound(
-          agent,
-          {
-            messages: [
-              {
-                role: 'user',
-                content: `你上一轮的输出无法解析为符合约定的 JSON，问题：${this.parseError(first.text, input.realm, input.date)}。请重新只输出最终小 JSON：从 { 开始到 } 结束的一个完整对象，仅含 schemaVersion/reportDate/realm/healthScore/summary 五个字段，不要使用 markdown 代码块，不要续写上文，不要输出任何解释文字。三个分节结论你已通过 write_report_section 落盘，无需重复。`,
-              },
-            ],
-          },
-          config,
-          toInspectionError,
-        );
+        const fixRound = await runAgentRound(agent, buildJsonFixPrompt(this.parseError(first.text, input.realm, input.date)), config, toInspectionError);
         // 计量口径：修复轮 tokens/耗时累加，不覆盖
         tokens = sumTokens(first.tokens, fixRound.tokens);
         durationMs += fixRound.durationMs;
-        report = this.parseReport(fixRound.text, input.realm, input.date);
+        report = this.parseFinalJson(fixRound.text, input.realm, input.date);
       }
       if (!report) throw new InspectionError('agent 两轮输出均不符合报告 schema', 'schema_mismatch');
 
-      const markdown = renderInspectionMarkdown(report);
-      return await persistInspection(input, report, markdown, { model: cfg.modelName, tokens, durationMs }, dataGaps);
+      // 分节抢救轮：JSON 已合规但草稿缺节——分析结论仍在同线程上下文中（只是没落盘），
+      // 先追问落盘挽回整轮工作（SquadSight「缺失清单 + 局部修补」模式），仍缺才整轮重试
+      const missing = listMissingSections(draftDir);
+      if (missing.length > 0) {
+        logger.warn(`[inspection] sections missing (${missing.join(', ')}), asking model to persist them`);
+        const salvageRound = await runAgentRound(agent, buildSectionSalvagePrompt(missing), config, toInspectionError);
+        tokens = sumTokens(tokens, salvageRound.tokens);
+        durationMs += salvageRound.durationMs;
+        // 抢救轮的最终小 JSON 优先（与补齐后的分节一致）；解析失败沿用上一轮
+        report = this.parseFinalJson(salvageRound.text, input.realm, input.date) ?? report;
+        const stillMissing = listMissingSections(draftDir);
+        if (stillMissing.length > 0) {
+          throw new InspectionError(
+            `报告缺节：${stillMissing.join(' / ')}（抢救轮后仍未落盘，agent 未调用 write_report_section）`,
+            'report_incomplete',
+          );
+        }
+      }
+
+      let sections;
+      try {
+        sections = readDraftedSections(draftDir);
+      } catch (err) {
+        throw new InspectionError((err as Error).message, 'report_incomplete');
+      }
+      const fullReport = assembleReport(report, sections);
+      const markdown = renderInspectionMarkdown(fullReport);
+      return await persistInspection(input, fullReport, markdown, { model: cfg.modelName, tokens, durationMs }, dataGaps);
     } finally {
       clearReportDraftRoot();
     }
@@ -196,9 +229,9 @@ class InspectionService {
     }
   }
 
-  // 两段式：① 最终小 JSON 校验（五字段，失败返回 null 走追问轮）；② 读分节草稿组装
-  // 完整报告。缺节属结构性失败（追问轮无法凭空补数据），抛 report_incomplete 触发整轮重试。
-  parseReport(text: string, realm: string, date: string): InspectionReportJson | null {
+  // 最终小 JSON 校验（五字段宽容校验，失败返回 null 由调用方走修复轮/抢救轮）。
+  // 分节草稿的读取与缺节判定移到 attempt 末段：缺节可抢救（追问落盘），不再解析期直接判死。
+  parseFinalJson(text: string, realm: string, date: string): ReportFinalJson | null {
     const obj = extractJson(text);
     const issues = validateFinalJson(obj, realm, date);
     if (issues.length > 0) {
@@ -206,18 +239,7 @@ class InspectionService {
       logger.warn(`[inspection] final JSON issues: ${issues.join('; ')} | raw head: ${text.slice(0, 400)}`);
       return null;
     }
-    let sections;
-    try {
-      sections = readDraftedSections(reportDraftDir(realm, date));
-    } catch (err) {
-      logger.warn(`[inspection] draft sections invalid: ${(err as Error).message}`);
-      throw new InspectionError((err as Error).message, 'report_incomplete');
-    }
-    if (sections.missing.length > 0) {
-      logger.warn(`[inspection] report missing sections: ${sections.missing.join(', ')}`);
-      throw new InspectionError(`报告缺节：${sections.missing.join(' / ')}（agent 未调用 write_report_section 落盘这些节）`, 'report_incomplete');
-    }
-    return assembleReport(obj as ReportFinalJson, sections);
+    return obj as ReportFinalJson;
   }
 
   parseError(text: string, realm: string, date: string): string {

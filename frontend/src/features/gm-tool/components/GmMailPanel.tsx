@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ChevronDown, Loader2, Mail, Search } from 'lucide-react';
+import { ChevronDown, Mail, Search } from 'lucide-react';
+import { Skeleton } from '@/shared/components/Skeleton';
 import { useMailLogs, useMailTemplates, useSendMail } from '../hooks/useGmTool';
 import { TargetInput } from './TargetInput';
 import type { MailLogItem, MailTargetResult } from '@/shared/api/gm-mail';
@@ -214,8 +215,10 @@ export function GmMailPanel() {
         </div>
 
         {logsLoading ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> 加载中...
+          <div className="space-y-2 py-2" aria-busy="true" aria-label="发送记录加载中">
+            {Array.from({ length: 5 }, (_, r) => (
+              <Skeleton key={r} className="h-8 w-full" />
+            ))}
           </div>
         ) : logItems.length === 0 ? (
           <div className="py-6 text-center text-sm text-muted-foreground">暂无发送记录</div>

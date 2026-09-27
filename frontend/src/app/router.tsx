@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { AppLayout } from '@/shared/components/AppLayout';
+import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
@@ -30,7 +31,8 @@ const AiAssistantDock = lazy(() =>
 
 function withSuspense(Component: React.ComponentType) {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-muted-foreground">加载中...</div>}>
+    // 懒加载路由首屏骨架：chunk 加载期间整页占位，避免导航瞬间白屏/文字闪现
+    <Suspense fallback={<DetailPageSkeleton />}>
       <Component />
     </Suspense>
   );

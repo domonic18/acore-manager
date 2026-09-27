@@ -70,5 +70,7 @@ export async function runJobEntry(env: NodeJS.ProcessEnv = process.env): Promise
 }
 
 if (require.main === module) {
+  // 契约：handler 返回即进程退出（one-shot 容器）——任务内的异步副作用（落库/归档/通知）
+  // 必须在返回前 await 完成，禁止 fire-and-forget，否则会被 process.exit 掐断丢失
   void runJobEntry().then((code) => process.exit(code));
 }

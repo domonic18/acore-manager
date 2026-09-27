@@ -55,6 +55,50 @@ describe('feishu-notify: webhook guards', () => {
   });
 });
 
+describe('feishu-notify: transient failure retry', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('retries once after a transient network error and succeeds', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('socket hang up')).mockResolvedValue({ ok: true, json: async () => ({ code: 0 }) });
+    const pending = feishuNotifyService.sendText('hi');
+    await jest.advanceTimersByTimeAsync(1100);
+    await expect(pending).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('transient failure'));
+  });
+
+  it('retries on HTTP 5xx but not on 4xx', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 502 }).mockResolvedValue({ ok: true, json: async () => ({ code: 0 }) });
+    const retryable = feishuNotifyService.sendText('hi');
+    await jest.advanceTimersByTimeAsync(1100);
+    await expect(retryable).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    fetchMock.mockReset().mockResolvedValue({ ok: false, status: 400 });
+    await expect(feishuNotifyService.sendText('hi')).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a business-code rejection (e.g. sign mismatch)', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ code: 19021, msg: 'sign match error' }) });
+    await expect(feishuNotifyService.sendText('hi')).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns false when the retry also fails transiently', async () => {
+    fetchMock.mockRejectedValue(new Error('connection refused'));
+    const pending = feishuNotifyService.sendText('hi');
+    await jest.advanceTimersByTimeAsync(1100);
+    await expect(pending).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('feishu-notify: sign and business code', () => {
   it('attaches timestamp and sign when the secret is configured', async () => {
     mockedEnv.FEISHU_WEBHOOK_SECRET = 'my-secret';

@@ -1,23 +1,28 @@
 import { useReportFilters } from '@/features/ai-diagnosis/hooks/useReportFilters';
 import { UploadStatusStrip } from '@/features/ai-diagnosis/components/UploadStatusStrip';
 import { ReportCalendar } from '@/features/ai-diagnosis/components/ReportCalendar';
+import { ReportCalendarSkeleton, UploadStatusSkeleton } from '@/features/ai-diagnosis/components/ReportSkeletons';
 import { ReportListTable } from '@/features/ai-diagnosis/components/ReportListTable';
 import { TriggerInspectionButton } from '@/features/ai-diagnosis/components/TriggerInspectionButton';
 import { TimeRangeFilter } from '@/shared/components/TimeRangeFilter';
 
 export default function AiDiagnosisPage() {
   const filters = useReportFilters();
+  // 首屏整体加载态：默认 realm 未就绪或报告在拉时，月历/上传状态/表格统一骨架渲染，不分块弹入
+  const pageLoading = !filters.realm || filters.isLoading;
 
   return (
     <div className='space-y-4'>
       <h1 className='text-2xl font-bold'>AI 巡检报告</h1>
 
       <div className='grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]'>
-        {filters.realm && filters.reports && (
-          <aside className='order-2 lg:order-none'>
+        <aside className='order-2 lg:order-none'>
+          {filters.realm && filters.reports ? (
             <ReportCalendar reports={filters.reports} realm={filters.realm} />
-          </aside>
-        )}
+          ) : (
+            <ReportCalendarSkeleton />
+          )}
+        </aside>
 
         <div className='order-1 min-w-0 space-y-4 lg:order-none'>
           <div className='flex flex-wrap gap-2'>
@@ -44,11 +49,11 @@ export default function AiDiagnosisPage() {
             />
           </div>
 
-          {filters.realm && <UploadStatusStrip realm={filters.realm} />}
+          {filters.realm ? <UploadStatusStrip realm={filters.realm} /> : <UploadStatusSkeleton />}
 
           <ReportListTable
             rows={filters.filtered}
-            loading={filters.isLoading}
+            loading={pageLoading}
             emptyText={filters.dateRange ? '该日期范围内暂无巡检报告' : '暂无巡检报告'}
           />
         </div>

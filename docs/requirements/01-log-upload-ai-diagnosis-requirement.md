@@ -487,7 +487,7 @@ ACM 前端
   - `services/ai-inspection.service.ts`（巡检编排）、`services/ai-targeted-analysis.service.ts`（定向分析编排）、`services/cos.service.ts`（COS 读写）、`services/llm-config.service.ts`、`services/token-usage.service.ts`
   - `routes/ai-assistant.routes.ts`（SSE 对话）、`routes/ai-diagnosis.routes.ts`（报告查询与管理：备注 / 删除）、`routes/ai-analysis.routes.ts`（定向分析 SSE 与记录管理）、`routes/ai-model-config.routes.ts`
   - `repositories/` 层扩展只读查询，实现快照指标与白名单钻取工具，与现有查询同一套只读封装
-- **新增环境变量（节选）**：`COS_SECRET_ID`、`COS_SECRET_KEY`、`COS_BUCKET`、`COS_REGION`、`ACM_SYSTEM_DB`（默认 acm）、`FEISHU_WEBHOOK`、`AI_TOOL_CALL_BUDGET`、`AI_TOKEN_DAILY_BUDGET`、`LLM_AES_KEY`（仅用于 api_key 加解密）；LLM 出口配置全量存于后台 `ai_model_config`，**无环境变量兜底**——首启由管理员在后台新增模型配置并设默认，未配置时明确报错（M0 已按此语义验证，见 `backend/poc/agent/resolve-config.ts`）
+- **新增环境变量（节选）**：`TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`（统一 API 凭证，COS 读写与 SCF 触发共用一对）、`COS_BUCKET`、`COS_REGION`、`ACM_SYSTEM_DB`（默认 acm）、`FEISHU_WEBHOOK`、`AI_TOOL_CALL_BUDGET`、`AI_TOKEN_DAILY_BUDGET`、`LLM_AES_KEY`（仅用于 api_key 加解密）；LLM 出口配置全量存于后台 `ai_model_config`，**无环境变量兜底**——首启由管理员在后台新增模型配置并设默认，未配置时明确报错
 
 ## 6. 里程碑与验收标准
 

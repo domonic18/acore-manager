@@ -67,7 +67,7 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     items: [
       { path: '/model-config', label: '模型配置', icon: Bot },
       { path: '/ai-diagnosis', label: '巡检报告', icon: FileSearch, end: true },
-      { path: '/ai-diagnosis/targeted', label: '定向分析', icon: Crosshair },
+      { path: '/ai-diagnosis/targeted', label: '深度分析', icon: Crosshair },
     ],
   },
   {

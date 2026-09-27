@@ -32,10 +32,11 @@ describe('SimpleTable', () => {
     expect(screen.queryByText('alice')).not.toBeInTheDocument();
   });
 
-  it('renders loading row ahead of rows', () => {
+  it('renders skeleton rows instead of data while loading', () => {
     render(<SimpleTable columns={columns} rows={rows} rowKey={(r) => r.id} loading />);
-    expect(screen.getByText('加载中...')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('数据加载中')).toHaveLength(6);
     expect(screen.queryByText('alice')).not.toBeInTheDocument();
+    expect(screen.queryByText('bob')).not.toBeInTheDocument();
   });
 
   it('fires onRowClick with the clicked row', () => {

@@ -9,6 +9,7 @@ import { AccountUnbanDialog } from '@/features/account/components/AccountUnbanDi
 import { AccountDetailActions } from '@/features/account/components/AccountDetailActions';
 import { BanFlowDialogs } from '@/shared/components/BanFlowDialogs';
 import { BanHistoryTable } from '@/shared/components/BanHistoryTable';
+import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 
 export default function AccountDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,10 +20,9 @@ export default function AccountDetailPage() {
   const { data: loginHistory, isLoading: historyLoading } = useAccountLoginHistory(accountId);
   const actions = useAccountDetailActions(accountId);
 
-  if (isLoading) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">加载中...</div>
-    );
+  // 三个并行请求全部就绪后一次性渲染，避免标题与各表格分批弹入
+  if (isLoading || charsLoading || historyLoading) {
+    return <DetailPageSkeleton infoRows={10} tables={3} />;
   }
 
   if (!account) {

@@ -4,6 +4,7 @@ import { useAccountList } from '@/features/account/hooks/useAccount';
 import { AccountTable, type AccountSortState } from '@/features/account/components/AccountTable';
 import { TimeRangeFilter, type TimeRange } from '@/shared/components/TimeRangeFilter';
 import { PaginationBar } from '@/shared/components/PaginationBar';
+import { Skeleton } from '@/shared/components/Skeleton';
 
 export default function AccountListPage() {
   const navigate = useNavigate();
@@ -60,7 +61,11 @@ export default function AccountListPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">账号管理</h1>
-        <p className="text-sm text-muted-foreground">共 {data?.total ?? 0} 个账号</p>
+        {isLoading ? (
+          <Skeleton className="h-5 w-24" />
+        ) : (
+          <p className="text-sm text-muted-foreground">共 {data?.total ?? 0} 个账号</p>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -103,7 +108,7 @@ export default function AccountListPage() {
 
       <AccountTable rows={data?.items ?? []} loading={isLoading} sort={sort} onSort={handleSort} onOpen={(id) => navigate(`/accounts/${id}`)} />
 
-      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} />
+      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} loading={isLoading} />
     </div>
   );
 }

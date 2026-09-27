@@ -78,7 +78,7 @@ export default function IpBanPage() {
 
       <IpBanTable rows={data?.items} isLoading={isLoading} unbanPending={unbanMutation.isPending} onUnban={setUnbanTarget} />
 
-      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} />
+      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} loading={isLoading} />
 
       <IpBanFormDialog flow={flow} canProceed={canProceed} onProceed={handleProceedToConfirm} />
       <IpBanConfirmDialog flow={flow} banPending={banMutation.isPending} onConfirm={handleExecuteBan} onBack={flow.backToForm} />

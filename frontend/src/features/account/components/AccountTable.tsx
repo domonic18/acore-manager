@@ -1,4 +1,5 @@
 import { ChevronUp, ChevronDown } from 'lucide-react';
+import { Skeleton } from '@/shared/components/Skeleton';
 import type { AccountListItem } from '@/features/account/api/account.api';
 
 export interface AccountSortState {
@@ -69,11 +70,15 @@ export function AccountTable({ rows, loading, sort, onSort, onOpen }: AccountTab
         </thead>
         <tbody>
           {loading ? (
-            <tr>
-              <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
-                加载中...
-              </td>
-            </tr>
+            Array.from({ length: 6 }, (_, r) => (
+              <tr key={r} className="border-b border-border" aria-busy="true" aria-label="账号列表加载中">
+                {Array.from({ length: 10 }, (_, c) => (
+                  <td key={c} className="px-4 py-3">
+                    <Skeleton className="h-4" style={{ width: `${[60, 72, 48, 55, 66, 84, 55, 66, 60, 72][c]}%` }} />
+                  </td>
+                ))}
+              </tr>
+            ))
           ) : rows.length === 0 ? (
             <tr>
               <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">

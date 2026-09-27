@@ -5,9 +5,8 @@ import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
 import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
 import { reportService } from '@/services/ai/report.service';
-import { triggerJob } from '@/services/job-trigger.service';
+import { triggerInspectionJob } from '@/services/ai/inspection-trigger.service';
 import { ServiceError } from '@/shared/errors/service-error';
-import { JOB_TASK } from '@/shared/enums/job-task';
 import { logger } from '@/middleware/request-logger';
 import { VIOLATION_TYPES } from '@/agent/tools/log-tools/anticheat-parser';
 
@@ -23,8 +22,9 @@ function handleServiceError(res: Response, err: unknown): void {
 }
 
 // 手动触发巡检（T3.4，arch 4.2 gmlevel=3）：控制面只受理触发，执行一律在 SCF Job 函数
-//（SCF Invoke 异步受理即返回，1-2 分钟后经飞书推送与报告页可见；重复触发由 ai_report
-// 按 (realm, date) 幂等 upsert 兜底）。realm/date 可选透传，缺省值由任务处理器定义。
+//（SCF Invoke 异步受理即返回，1-2 分钟后经飞书推送与报告页可见；重复触发由
+// inspection-trigger.service 的 Redis 锁防呆 + ai_report 按 (realm, date) 幂等 upsert 兜底）。
+// realm/date 可选透传，缺省值由任务处理器定义。
 router.post(
   '/inspection/trigger',
   authMiddleware,
@@ -42,10 +42,10 @@ router.post(
     const realm = (req.body.realm as string | undefined)?.trim();
     const date = req.body.date as string | undefined;
     try {
-      const { requestId } = await triggerJob(JOB_TASK.INSPECTION, {
+      const { requestId } = await triggerInspectionJob({
         realm,
-        ...(date ? { date } : {}),
-        trigger: 'manual',
+        date,
+        operator: req.user?.username ?? String(req.user?.id ?? ''),
       });
       logger.info(`[inspection-trigger] user=${req.user?.username} realm=${realm ?? '-'} date=${date ?? '-'} requestId=${requestId ?? '-'}`);
       res.jsonSuccess({ accepted: true, requestId, realm: realm ?? null, date: date ?? null });

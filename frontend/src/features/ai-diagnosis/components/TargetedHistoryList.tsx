@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Skeleton } from '@/shared/components/Skeleton';
 import { useTargetedList } from '../hooks/useTargetedAnalysis';
 
 // 定向分析历史列表（T4.6）：分页表格 + 角色名/账号名搜索，行点击跳转整页详情（可新标签打开）。
@@ -58,8 +59,27 @@ export function TargetedHistoryList() {
       {isError ? (
         <div className="py-6 text-center text-sm text-destructive">历史加载失败</div>
       ) : isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> 加载中...
+        <div className="overflow-x-auto" aria-busy="true" aria-label="历史列表加载中">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                {['ID', '对象', '服务器', '时间范围', '状态', '触发人', '发起时间'].map((h) => (
+                  <th key={h} className="px-3 py-2 font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 6 }, (_, r) => (
+                <tr key={r} className="border-b border-border/60">
+                  {Array.from({ length: 7 }, (_, c) => (
+                    <td key={c} className="px-3 py-2">
+                      <Skeleton className="h-4" style={{ width: `${[24, 40, 28, 34, 22, 26, 30][c]}%` }} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : items.length === 0 ? (
         <div className="py-6 text-center text-sm text-muted-foreground">暂无分析记录</div>

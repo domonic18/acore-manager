@@ -54,7 +54,7 @@ export default function AuditLogPage() {
 
       <AuditLogTable rows={data?.items ?? []} loading={isLoading} />
 
-      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} />
+      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} loading={isLoading} />
     </div>
   );
 }

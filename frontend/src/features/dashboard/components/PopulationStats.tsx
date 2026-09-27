@@ -1,5 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { RACE_MAP, CLASS_MAP, getRaceIconUrl, getClassIconUrl } from '@/shared/constants/game';
+import { Skeleton, ChartCardSkeleton } from '@/shared/components/Skeleton';
 import type { DistributionItem } from '../api/dashboard.api';
 
 interface TooltipPayloadItem {
@@ -87,14 +88,18 @@ export default function PopulationStats({
   loading = false,
 }: PopulationStatsProps) {
   if (loading) {
+    // 骨架与加载完成后的布局同构（角色总数卡 + 三张图卡），避免卡片数变化造成跳动
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-lg border border-border bg-card p-6 animate-pulse">
-            <div className="h-4 bg-muted rounded w-1/3 mb-4" />
-            <div className="h-64 bg-muted rounded" />
-          </div>
-        ))}
+      <div className="space-y-4">
+        <div className="rounded-lg border border-border bg-card p-6">
+          <p className="text-sm text-muted-foreground">角色总数</p>
+          <Skeleton className="mt-2 h-9 w-24" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {['等级分布', '种族分布', '职业分布'].map((name) => (
+            <ChartCardSkeleton key={name} label={`${name}加载中`} />
+          ))}
+        </div>
       </div>
     );
   }

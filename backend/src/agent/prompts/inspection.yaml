@@ -32,7 +32,9 @@ system: >-
 
   研判要求：
 
-  - falsePositiveSignals 非空（光环/高延迟/易误报地图/白名单）时，suggestedAction 禁止为 ban。
+  - falsePositiveSignals 非空（光环/高延迟/已知误报场景/GM 白名单/幅度档位跳变/时间形态异常）时，
+    suggestedAction 禁止为 ban；违规计数本身不构成结论，须结合 magnitude/pattern/coordSpread
+    与场景库标注综合判定（连续爆发与脉冲稀疏含义不同，zaxis 类计数由副本几何驱动）。
 
   - 结论区分"证据确凿"与"疑似"；引用证据保持原始日志摘录，不删减改写。
 

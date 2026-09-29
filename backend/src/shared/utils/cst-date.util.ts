@@ -8,3 +8,9 @@ export function yesterdayCST(now: Date = new Date()): string {
   cst.setUTCDate(cst.getUTCDate() - 1);
   return cst.toISOString().slice(0, 10);
 }
+
+// 从 DB 读回的 Date 还原成创建时的 YYYY-MM-DD：pg 对 timestamp(无时区) 列按"本地字段"往返，
+// 读写两端容器时区一致（均为 UTC），读回的 Date 即写入时的原瞬时值，加 8h 取 CST 日期即可。
+export function formatCstDate(d: Date): string {
+  return new Date(d.getTime() + CST_OFFSET_MS).toISOString().slice(0, 10);
+}

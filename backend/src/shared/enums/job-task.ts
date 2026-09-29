@@ -2,6 +2,7 @@
 // 事件格式见 job/job-entry.ts：{ "task": <JobTaskName>, "params": <object> }）
 export const JOB_TASK = {
   INSPECTION: 'inspection',
+  TARGETED_ANALYSIS: 'targeted-analysis',
 } as const;
 
 export type JobTaskName = (typeof JOB_TASK)[keyof typeof JOB_TASK];

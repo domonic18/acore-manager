@@ -1,195 +1,161 @@
-jest.mock('@/config/env', () => ({
-  env: { AI_TOOL_CALL_BUDGET: 20, AI_TOOL_TIMEOUT_MS: 5000, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
-}));
 jest.mock('@/config/database', () => ({
   acmDataSource: { getRepository: jest.fn() },
 }));
 jest.mock('@/middleware/request-logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
-jest.mock('@/services/ai/token-usage.service', () => ({
-  tokenUsageService: { record: jest.fn().mockResolvedValue(undefined) },
-}));
-jest.mock('@/services/ai/llm-config.service', () => ({
-  llmConfigService: { resolveDefault: jest.fn().mockResolvedValue({ id: 1, name: 'kimi', provider: 'kimi', protocol: 'anthropic', baseUrl: 'x', modelName: 'kimi-for-coding', apiKey: 'k', temperature: null, maxTokens: null }) },
+jest.mock('@/services/job-trigger.service', () => ({
+  triggerJob: jest.fn().mockResolvedValue({ requestId: 'req-1' }),
 }));
 jest.mock('@/services/audit-log.service', () => ({
   auditLogService: { record: jest.fn().mockResolvedValue(undefined) },
 }));
-jest.mock('@/agent/runtime/agent-factory', () => ({
-  getAgent: jest.fn(),
-}));
-// wire 层直接 mock：按 fake agent 的 __rounds 逐轮吐事件（支持第一轮非法 + 第二轮修复）
-jest.mock('@/agent/runtime/wire', () => ({
-  streamAgentEvents: jest.fn((agent: { __rounds: unknown[][]; __cursor?: number }) =>
-    (async function* () {
-      const round = agent.__rounds[Math.min(agent.__cursor ?? 0, agent.__rounds.length - 1)];
-      agent.__cursor = (agent.__cursor ?? 0) + 1;
-      for (const ev of round) yield ev as { event: string; data: Record<string, unknown> };
-    })(),
-  ),
-}));
 
 import { acmDataSource } from '@/config/database';
 import { auditLogService } from '@/services/audit-log.service';
-import { tokenUsageService } from '@/services/ai/token-usage.service';
-import { getAgent } from '@/agent/runtime/agent-factory';
-import { targetedAnalysisService, type AnalysisConclusion } from '@/services/ai/targeted-analysis.service';
+import { triggerJob } from '@/services/job-trigger.service';
+import { targetedAnalysisService } from '@/services/ai/targeted-analysis.service';
 
-const tokenRecord = tokenUsageService.record as jest.Mock;
-const getAgentMock = getAgent as jest.Mock;
+const triggerJobMock = triggerJob as jest.Mock;
+const auditMock = auditLogService.record as jest.Mock;
 const getRepository = acmDataSource.getRepository as jest.Mock;
 
 const INPUT = {
   realm: 'realm3',
   subjectType: 'character' as const,
-  subjectName: 'Unparalleled',
+  subjectNames: ['Unparalleled', 'Nolove'],
   timeFrom: '2026-08-16',
   timeTo: '2026-08-23',
   operatorId: 753,
   operatorName: 'DEADWALK',
 };
 
-function fakeAgent(rounds: unknown[][]): unknown {
-  return { __rounds: rounds };
-}
-
-const answerRound = (text: string): unknown[] => [
-  { event: 'delta', data: { text } },
-  { event: 'done', data: { tokens: { prompt: 10, completion: 5, total: 15 } } },
-];
-
-const toolRound = (): unknown[] => [{ event: 'tool_call', data: { name: 'get_ban_history' } }];
-
-function validConclusionJson(overrides: Record<string, unknown> = {}): string {
-  const conclusion: AnalysisConclusion = {
-    subjectType: 'character',
-    subjectName: 'Unparalleled',
-    timeRange: { from: '2026-08-16', to: '2026-08-23' },
-    violations: [{ type: 'speed', count: 3, confirmed: true, note: '连续坐标跳变' }],
-    falsePositiveSignals: [],
-    evidence: [{ source: 'parse_anticheat_violations', quote: '2026-08-22 10:01 Speed-Hack' }],
-    suggestion: 'maintain',
-    suggestionReason: '证据链完整，违规确凿。',
-    markdown: '# 申诉回复全文',
-    ...overrides,
-  };
-  return `\`\`\`json\n${JSON.stringify(conclusion)}\n\`\`\``;
+// 覆盖扫荡（update/set/where/execute）、去重（where/andWhere/getMany）、列表（select 链）三种链
+function qbMock() {
+  const qb: Record<string, jest.Mock> = {};
+  for (const m of ['update', 'set', 'where', 'select', 'orderBy', 'skip', 'take', 'andWhere']) {
+    qb[m] = jest.fn().mockReturnThis();
+  }
+  qb.execute = jest.fn().mockResolvedValue({ affected: 2 });
+  qb.getMany = jest.fn().mockResolvedValue([]);
+  qb.getManyAndCount = jest.fn().mockResolvedValue([[{ id: 1 }], 1]);
+  return qb;
 }
 
 function repoMock() {
   return {
     create: jest.fn().mockImplementation((partial: unknown) => partial),
-    save: jest.fn().mockResolvedValue({ id: 77 }),
+    save: jest.fn().mockImplementation((arg: Record<string, unknown> | Record<string, unknown>[]) =>
+      Promise.resolve(
+        Array.isArray(arg) ? arg.map((p, i) => ({ ...p, id: i + 101 })) : { ...arg, id: 9 },
+      ),
+    ),
     update: jest.fn().mockResolvedValue(undefined),
     findOne: jest.fn().mockResolvedValue(null),
     remove: jest.fn().mockResolvedValue(undefined),
+    createQueryBuilder: jest.fn(() => qbMock()),
   };
 }
 
-async function collect(gen: AsyncGenerator<{ event: string; data: Record<string, unknown> }>): Promise<{ event: string; data: Record<string, unknown> }[]> {
-  const events: { event: string; data: Record<string, unknown> }[] = [];
-  for await (const ev of gen) events.push(ev);
-  return events;
-}
-
-describe('TargetedAnalysisService', () => {
+describe('TargetedAnalysisService: createRecords (async submission)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    getRepository.mockReturnValue(repoMock());
-    getAgentMock.mockResolvedValue(fakeAgent([toolRound(), answerRound(validConclusionJson())]));
   });
 
-  it('persists an ok row (append-only) and emits done with the conclusion', async () => {
-    const events = await collect(targetedAnalysisService.stream(INPUT));
-
-    const repo = getRepository.mock.results[0].value;
-    expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ realm: 'realm3', subjectType: 'character', status: 'running', triggeredBy: 'DEADWALK' }));
-    expect(repo.update).toHaveBeenCalledWith(
-      77,
-      expect.objectContaining({ status: 'ok', conclusionMarkdown: '# 申诉回复全文' }),
-    );
-    const values = repo.update.mock.calls[0][1];
-    expect(values.conclusionJson.suggestion).toBe('maintain');
-    expect(values.conclusionJson.markdown).toBeUndefined();
-    expect(values.tokenUsage).toEqual({ prompt: 10, completion: 5, total: 15 });
-    expect(tokenRecord).toHaveBeenCalledWith(expect.objectContaining({ scene: 'analysis', refId: 'analysis:77', totalTokens: 15 }));
-
-    const done = events.find((e) => e.event === 'done');
-    expect(done?.data.analysisId).toBe(77);
-    expect((done?.data.conclusion as AnalysisConclusion).markdown).toBe('# 申诉回复全文');
-    expect(events.some((e) => e.event === 'tool_call')).toBe(true);
-    expect(events.some((e) => e.event === 'error')).toBe(false);
-  });
-
-  it('repairs a malformed first round via a second round on the same thread', async () => {
-    getAgentMock.mockResolvedValue(fakeAgent([answerRound('这不是 JSON'), answerRound(validConclusionJson())]));
-    const events = await collect(targetedAnalysisService.stream(INPUT));
-
-    const repo = getRepository.mock.results[0].value;
-    expect(repo.update).toHaveBeenCalledWith(77, expect.objectContaining({ status: 'ok' }));
-    expect(tokenRecord).toHaveBeenCalledWith(expect.objectContaining({ totalTokens: 30, promptTokens: 20 }));
-    expect(events.find((e) => e.event === 'done')).toBeDefined();
-  });
-
-  it('persists a failed row when both rounds produce invalid output', async () => {
-    getAgentMock.mockResolvedValue(fakeAgent([answerRound('仍然不是 JSON'), answerRound('还是不是')]));
-    const events = await collect(targetedAnalysisService.stream(INPUT));
-
-    const repo = getRepository.mock.results[0].value;
-    expect(repo.update).toHaveBeenLastCalledWith(77, expect.objectContaining({ status: 'failed', conclusionJson: { error: expect.stringContaining('两轮') } }));
-    const error = events.find((e) => e.event === 'error');
-    expect(error?.data.message).toContain('两轮');
-    expect(events.find((e) => e.event === 'done')).toBeUndefined();
-  });
-
-  it('persists a failed row when the agent stream errors', async () => {
-    getAgentMock.mockResolvedValue(fakeAgent([[{ event: 'error', data: { message: 'llm down', code: 'agent_error' } }]]));
-    const events = await collect(targetedAnalysisService.stream(INPUT));
-
-    const repo = getRepository.mock.results[0].value;
-    expect(repo.update).toHaveBeenCalledWith(77, expect.objectContaining({ status: 'failed' }));
-    expect(events.find((e) => e.event === 'error')?.data.message).toBe('llm down');
-  });
-
-  it('downgrades maintain to manual_review when false positive signals exist', async () => {
-    getAgentMock.mockResolvedValue(fakeAgent([answerRound(validConclusionJson({ falsePositiveSignals: ['十字军光环+骑乘合法加速'], suggestion: 'maintain' }))]));
-    await collect(targetedAnalysisService.stream(INPUT));
-
-    const repo = getRepository.mock.results[0].value;
-    const values = repo.update.mock.calls[0][1];
-    expect(values.conclusionJson.suggestion).toBe('manual_review');
-    expect(values.conclusionJson.suggestionReason).toContain('降级');
-  });
-
-  it('rejects a conclusion whose subject echo mismatches the input', async () => {
-    getAgentMock.mockResolvedValue(fakeAgent([answerRound(validConclusionJson({ subjectName: 'SomeoneElse' }))]));
-    const events = await collect(targetedAnalysisService.stream(INPUT));
-
-    const repo = getRepository.mock.results[0].value;
-    expect(repo.update).toHaveBeenCalledWith(77, expect.objectContaining({ status: 'failed' }));
-    expect(events.find((e) => e.event === 'error')).toBeDefined();
-  });
-
-  it('lists rows with paging and resolves a detail by id with 404 for missing', async () => {
+  it('creates one row per subject, triggers the job with ids+meta and audits', async () => {
     const repo = repoMock();
     getRepository.mockReturnValue(repo);
-    const qb = {
-      select: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getManyAndCount: jest.fn().mockResolvedValue([[{ id: 1 }], 1]),
-    };
-    repo.createQueryBuilder = jest.fn().mockReturnValue(qb);
-    repo.findOne.mockResolvedValueOnce({ id: 9, status: 'ok' });
+
+    const rows = await targetedAnalysisService.createRecords(INPUT);
+
+    expect(rows.map((r) => r.subjectName)).toEqual(['Unparalleled', 'Nolove']);
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    const created = repo.save.mock.calls[0][0] as { subjectName: string; status: string; triggeredBy: string }[];
+    expect(created.every((r) => r.status === 'running' && r.triggeredBy === 'DEADWALK')).toBe(true);
+
+    expect(triggerJobMock).toHaveBeenCalledWith(
+      'targeted-analysis',
+      expect.objectContaining({
+        ids: [101, 102],
+        meta: expect.objectContaining({
+          '101': expect.objectContaining({ timeFrom: '2026-08-16', timeTo: '2026-08-23' }),
+        }),
+      }),
+    );
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ operation: 'ai.analysis.create', target: expect.stringContaining('ids:') }));
+  });
+
+  it('rejects a duplicate running submission with 409 before saving', async () => {
+    const repo = repoMock();
+    repo.createQueryBuilder = jest.fn(() => {
+      const qb = qbMock();
+      qb.getMany.mockResolvedValue([{ subjectName: 'Unparalleled' }]);
+      return qb;
+    });
+    getRepository.mockReturnValue(repo);
+
+    await expect(targetedAnalysisService.createRecords(INPUT)).rejects.toMatchObject({ status: 409 });
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(triggerJobMock).not.toHaveBeenCalled();
+  });
+
+  it('marks all created rows failed and rethrows when the job trigger fails', async () => {
+    triggerJobMock.mockRejectedValueOnce(new Error('SCF Invoke failed'));
+    const repo = repoMock();
+    getRepository.mockReturnValue(repo);
+
+    await expect(targetedAnalysisService.createRecords(INPUT)).rejects.toThrow('SCF Invoke failed');
+    expect(repo.update).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: 'failed', conclusionJson: { error: expect.stringContaining('Job 触发失败') } }),
+    );
+  });
+
+  it('trims, dedupes and empties subject names; caps the batch at 10', async () => {
+    const repo = repoMock();
+    getRepository.mockReturnValue(repo);
+
+    await targetedAnalysisService.createRecords({ ...INPUT, subjectNames: [' A ', 'A', ''] });
+    const created = repo.save.mock.calls[0][0] as { subjectName: string }[];
+    expect(created.map((r) => r.subjectName)).toEqual(['A']);
+
+    await expect(targetedAnalysisService.createRecords({ ...INPUT, subjectNames: Array.from({ length: 11 }, (_, i) => `p${i}`) })).rejects.toMatchObject({ status: 400 });
+    await expect(targetedAnalysisService.createRecords({ ...INPUT, subjectNames: [] })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('TargetedAnalysisService: sweep + list', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('archives stale running rows to failed and reports the affected count', async () => {
+    const repo = repoMock();
+    getRepository.mockReturnValue(repo);
+
+    const affected = await targetedAnalysisService.sweepStaleRunning(15);
+
+    expect(affected).toBe(2);
+    const qb = repo.createQueryBuilder.mock.results[0].value as ReturnType<typeof qbMock>;
+    expect(qb.where).toHaveBeenCalledWith('status = :status AND created_at < :cutoff', { status: 'running', cutoff: expect.any(Date) });
+    expect(qb.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+  });
+
+  it('lists rows with paging and sweeps stale rows first', async () => {
+    const repo = repoMock();
+    getRepository.mockReturnValue(repo);
 
     const list = await targetedAnalysisService.list(2, 10, 'Unpar');
+
     expect(list).toEqual({ items: [{ id: 1 }], total: 1 });
-    expect(qb.skip).toHaveBeenCalledWith(10);
-    expect(qb.take).toHaveBeenCalledWith(10);
-    expect(qb.andWhere).toHaveBeenCalledWith('a.subject_name LIKE :name', { name: '%Unpar%' });
+    expect(repo.createQueryBuilder).toHaveBeenCalledTimes(2);
+    expect(triggerJobMock).not.toHaveBeenCalled();
+  });
+
+  it('resolves a detail by id with 404 for missing', async () => {
+    const repo = repoMock();
+    repo.findOne.mockResolvedValueOnce({ id: 9, status: 'ok' });
+    getRepository.mockReturnValue(repo);
 
     const detail = await targetedAnalysisService.getById(9);
     expect(detail.status).toBe('ok');
@@ -202,7 +168,6 @@ describe('TargetedAnalysisService', () => {
 describe('TargetedAnalysisService: manage (T4.7)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    getRepository.mockReturnValue(repoMock());
   });
 
   it('updates whitelisted fields, trims remark and audits the change', async () => {
@@ -215,7 +180,7 @@ describe('TargetedAnalysisService: manage (T4.7)', () => {
     expect(row.gmRemark).toBe('复核通过');
     expect(row.conclusionMarkdown).toBe('# polished');
     expect(repo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 9, gmRemark: '复核通过' }));
-    expect(auditLogService.record).toHaveBeenCalledWith(
+    expect(auditMock).toHaveBeenCalledWith(
       expect.objectContaining({ operation: 'ai.analysis.update', target: 'id:9', details: 'subject=character:Unparalleled fields=gmRemark,conclusionMarkdown' }),
     );
   });
@@ -227,7 +192,7 @@ describe('TargetedAnalysisService: manage (T4.7)', () => {
 
     await expect(targetedAnalysisService.update(9, {}, 7, 'gm1')).rejects.toMatchObject({ status: 400 });
     expect(repo.save).not.toHaveBeenCalled();
-    expect(auditLogService.record).not.toHaveBeenCalled();
+    expect(auditMock).not.toHaveBeenCalled();
   });
 
   it('throws 404 on update/remove when the record is absent', async () => {
@@ -249,7 +214,7 @@ describe('TargetedAnalysisService: manage (T4.7)', () => {
     await targetedAnalysisService.remove(9, 7, 'gm1');
 
     expect(repo.remove).toHaveBeenCalledWith(expect.objectContaining({ id: 9 }));
-    expect(auditLogService.record).toHaveBeenCalledWith(
+    expect(auditMock).toHaveBeenCalledWith(
       expect.objectContaining({ operation: 'ai.analysis.remove', target: 'id:9', details: 'subject=account:acc1 status=ok' }),
     );
   });

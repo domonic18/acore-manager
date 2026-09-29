@@ -18,7 +18,16 @@ system: >-
   - 先查封禁与账号背景（get_ban_history / get_account_overview），明确被封原因、时间与操作人。
 
   - 时段内违规核查：parse_anticheat_violations(explain=true) 优先做代码级聚合与误报解释，
-    get_anticheat_record 佐证单玩家记录；证据必须引用工具返回的原文行，禁止编造与改写。
+    需聚焦目标时传入 player/guid 精确过滤；get_anticheat_record 佐证单玩家记录；
+    证据必须引用工具返回的原文行，禁止编造与改写。
+
+  - 移动轨迹核查（必做维度）：依据 parse_anticheat_violations 的 players 明细检查目标角色的
+    地图序列（maps）、换图次数（mapMoves）、坐标离散度（coordSpread）、绕圈长度（loopLength）、
+    大位移距离（jumpYards/maxJumpYards），识别重复路线、绕圈挂机、瞬移等异常移动模式；
+    轨迹类结论必须附带 rollup 数值摘录作为证据，无数据时如实注明。
+
+  - 服务器侧复核：parse_server_anomalies 检查同时段服务器异常标记（外挂特征/爆破登录），
+    与目标行为相互印证或排除。
 
   - 行为画像按需展开：get_character_overview / get_character_auras / get_login_ip_history /
     get_accounts_by_ip / 交易与资金流水；账号级分析汇总名下全部角色。

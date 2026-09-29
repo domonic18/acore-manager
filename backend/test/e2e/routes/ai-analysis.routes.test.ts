@@ -1,6 +1,6 @@
 jest.mock('@/services/ai/targeted-analysis.service', () => ({
   targetedAnalysisService: {
-    stream: jest.fn(),
+    createRecords: jest.fn().mockResolvedValue([{ id: 77 }]),
     list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     getById: jest.fn(),
     update: jest.fn().mockResolvedValue({ id: 77, gmRemark: 'ok' }),
@@ -28,22 +28,17 @@ import aiAnalysisRoutes from '@/routes/ai-analysis.routes';
 import { ServiceError } from '@/shared/errors/service-error';
 import { targetedAnalysisService } from '@/services/ai/targeted-analysis.service';
 
-const streamMock = targetedAnalysisService.stream as jest.Mock;
+const createRecordsMock = targetedAnalysisService.createRecords as jest.Mock;
 
-function fakeStream(events: { event: string; data: Record<string, unknown> }[]): AsyncGenerator<{ event: string; data: Record<string, unknown> }> {
-  return (async function* () {
-    for (const ev of events) yield ev;
-  })();
-}
+const VALID_BODY = {
+  realm: 'realm3',
+  subjectType: 'character',
+  subjectNames: ['Unparalleled', 'Nolove'],
+  timeFrom: '2026-08-16',
+  timeTo: '2026-08-23',
+};
 
-const VALID_BODY = { realm: 'realm3', subjectType: 'character', subjectName: 'Unparalleled', timeFrom: '2026-08-16', timeTo: '2026-08-23' };
-
-const DONE_EVENTS = [
-  { event: 'delta', data: { text: '分析中' } },
-  { event: 'done', data: { analysisId: 77, conclusion: { suggestion: 'maintain' }, tokens: { total: 15 } } },
-];
-
-describe('AI Analysis Routes: POST /targeted', () => {
+describe('AI Analysis Routes: POST /targeted (async submission)', () => {
   let app: Application;
 
   beforeEach(() => {
@@ -54,39 +49,39 @@ describe('AI Analysis Routes: POST /targeted', () => {
     app.use('/api/ai/analysis', aiAnalysisRoutes);
   });
 
-  it('aggregates a non-stream round into the full conclusion', async () => {
-    streamMock.mockReturnValueOnce(fakeStream(DONE_EVENTS));
+  it('creates rows in batch and returns them with count', async () => {
     const res = await request(app).post('/api/ai/analysis/targeted').send(VALID_BODY);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data).toEqual({ analysisId: 77, conclusion: { suggestion: 'maintain' } });
-    expect(streamMock).toHaveBeenCalledWith(expect.objectContaining({ realm: 'realm3', subjectType: 'character', operatorName: '' }));
+    expect(res.body.count).toBe(1);
+    expect(res.body.data).toEqual([{ id: 77 }]);
+    expect(createRecordsMock).toHaveBeenCalledWith(expect.objectContaining({ realm: 'realm3', subjectType: 'character', subjectNames: ['Unparalleled', 'Nolove'] }));
   });
 
-  it('returns 502 when the stream yields an error event', async () => {
-    streamMock.mockReturnValueOnce(fakeStream([{ event: 'error', data: { message: '两轮校验均未通过' } }]));
+  it('maps a duplicate running submission to 409', async () => {
+    createRecordsMock.mockRejectedValueOnce(new ServiceError('以下对象存在进行中的分析，请等待完成后再提交：Unparalleled', 409));
     const res = await request(app).post('/api/ai/analysis/targeted').send(VALID_BODY);
 
-    expect(res.status).toBe(502);
-    expect(res.body.error).toContain('两轮');
-  });
-
-  it('streams SSE frames when the client negotiates text/event-stream', async () => {
-    streamMock.mockReturnValueOnce(fakeStream(DONE_EVENTS));
-    const res = await request(app).post('/api/ai/analysis/targeted').set('Accept', 'text/event-stream').send(VALID_BODY);
-
-    expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toContain('text/event-stream');
-    expect(res.text).toContain('event: delta');
-    expect(res.text).toContain('event: done');
-    expect(res.text).toContain('"analysisId":77');
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('Unparalleled');
   });
 
   it('rejects an invalid subjectType with 400', async () => {
     const res = await request(app).post('/api/ai/analysis/targeted').send({ ...VALID_BODY, subjectType: 'guild' });
     expect(res.status).toBe(400);
-    expect(streamMock).not.toHaveBeenCalled();
+    expect(createRecordsMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty or over-10 subject list with 400', async () => {
+    const empty = await request(app).post('/api/ai/analysis/targeted').send({ ...VALID_BODY, subjectNames: [] });
+    expect(empty.status).toBe(400);
+
+    const tooMany = await request(app)
+      .post('/api/ai/analysis/targeted')
+      .send({ ...VALID_BODY, subjectNames: Array.from({ length: 11 }, (_, i) => `p${i}`) });
+    expect(tooMany.status).toBe(400);
+    expect(createRecordsMock).not.toHaveBeenCalled();
   });
 
   it('rejects an inverted time range and an over-31d span with 400', async () => {
@@ -95,7 +90,7 @@ describe('AI Analysis Routes: POST /targeted', () => {
 
     const tooLong = await request(app).post('/api/ai/analysis/targeted').send({ ...VALID_BODY, timeFrom: '2026-01-01', timeTo: '2026-03-01' });
     expect(tooLong.status).toBe(400);
-    expect(streamMock).not.toHaveBeenCalled();
+    expect(createRecordsMock).not.toHaveBeenCalled();
   });
 });
 

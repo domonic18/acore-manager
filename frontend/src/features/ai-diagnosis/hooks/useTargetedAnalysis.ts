@@ -1,10 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { aiAnalysisApi } from '../api/ai-analysis.api';
+import { aiAnalysisApi, type TargetedAnalysisInput, type TargetedAnalysisSummary } from '../api/ai-analysis.api';
+
+// 有进行中的任务时 5s 轮询：列表看整体进度，详情看单条落库结论
+const RUNNING_POLL_MS = 5000;
 
 export function useTargetedList(page: number, subjectName?: string) {
   return useQuery({
     queryKey: ['ai-diagnosis', 'targeted', 'list', page, subjectName ?? ''],
     queryFn: () => aiAnalysisApi.list(page, subjectName),
+    refetchInterval: (query) =>
+      (query.state.data as TargetedAnalysisSummary[] | undefined)?.some((item) => item.status === 'running')
+        ? RUNNING_POLL_MS
+        : false,
   });
 }
 
@@ -13,6 +20,17 @@ export function useTargetedDetail(id: number | null) {
     queryKey: ['ai-diagnosis', 'targeted', 'detail', id],
     queryFn: () => aiAnalysisApi.detail(id as number),
     enabled: id != null,
+    refetchInterval: (query) => (query.state.data?.status === 'running' ? RUNNING_POLL_MS : false),
+  });
+}
+
+export function useCreateTargetedAnalysis() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TargetedAnalysisInput) => aiAnalysisApi.create(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'targeted', 'list'] });
+    },
   });
 }
 

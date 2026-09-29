@@ -9,11 +9,24 @@ import { AiAnticheatExemption } from '@/entities/acm/ai-anticheat-exemption.enti
 import { runReadOnly } from '@/agent/tools/db-tools/query-guard';
 import { explainSuspect, FpSignal, suggestAction } from '@/agent/tools/false-positive/explain';
 import { parseAnticheatLine, ParsedViolation } from './anticheat-parser';
+import {
+  classifyPattern,
+  coordSpread,
+  intervalStats,
+  magnitudeStats,
+  IntervalStats,
+  MagnitudeStats,
+  CoordSpread,
+  ViolationPattern,
+} from './violation-stats';
 import { workspaceDir } from './log-workspace';
 
 // parse_anticheat_violations（需求 3.5）：对工作区内已解压的 anticheat_*.log 做代码级结构化解析。
 // 日志行量大且格式固定——代码解析远省 token，且可跨天聚合；返回 聚合结果 + 摘录证据行，不返回原文。
-// 前置：先 fetch_log_archive(type='anticheat')；工作区为空时明确提示而非空结果。
+// 除计数外还产出时间/幅度/空间三维证据（2026-09 误报复盘新增）：
+// interval+pattern（连续爆发 vs 脉冲稀疏，speed 判作弊关键）、magnitude/allowedRates
+// （坐骑状态切换惯性特征：步行速率档跑出坐骑速度级）、coordSpread（定点特征，如影牙城堡
+// 几何误报的 50×15 码集中度）。前置：先 fetch_log_archive(type='anticheat')。
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 31;
@@ -31,15 +44,48 @@ export interface ViolationAggregate {
   ips: string[];
   dates: string[];
   evidence: string[];
+  /** speed 类型：超速幅度分位（%），其他类型为 null */
+  magnitude: MagnitudeStats | null;
+  /** speed 类型：出现过的服务器允许速率档位（7=步行 14=史诗陆地坐骑 28=飞行级） */
+  allowedRates: number[];
+  interval: IntervalStats | null;
+  pattern: ViolationPattern;
+  /** Cheat Flagged At 坐标离散度：小范围 + 少 Z 值 → 定点/副本几何场景特征 */
+  coordSpread: CoordSpread | null;
   falsePositiveSignals?: FpSignal[];
   suggestedAction?: 'review' | 'investigate';
 }
+
+interface Acc {
+  guid: number;
+  player: string;
+  type: string;
+  mapId: number | null;
+  count: number;
+  firstTime: string;
+  lastTime: string;
+  latencyMin: number | null;
+  latencyMax: number;
+  latencySum: number;
+  latencyCount: number;
+  ips: string[];
+  dates: string[];
+  evidence: string[];
+  worstPct: number | null;
+  timesMs: number[];
+  pcts: number[];
+  rates: number[];
+  pos: { x: number; y: number; z: number }[];
+}
+
+// 日志时间戳按字典序即时间序；统一按 UTC 解析求间隔（时区基准不影响差值）
+const toMs = (time: string): number => Date.parse(`${time.replace(' ', 'T')}Z`);
 
 export function registerParseTool(): void {
   registerTool({
     name: 'parse_anticheat_violations',
     description:
-      '代码级解析反作弊日志（需先 fetch_log_archive(type=anticheat)）：按 玩家×违规类型×地图 聚合计数，附首末时间/延迟分布/IP/日期与摘录证据行。可选按玩家/GUID/类型过滤。type 为归一化键（speed/fly/waterwalk/teleportplane/teleport/ignorecontrol 等，与误报白名单一致）。',
+      '代码级解析反作弊日志（需先 fetch_log_archive(type=anticheat)）：按 玩家×违规类型×地图 聚合计数，附首末时间/延迟分布/IP/日期/摘录证据，及三维行为证据——interval+pattern（continuous 连续爆发 / pulsed 脉冲稀疏 / single 单次）、magnitude+allowedRates（speed 超速幅度分位与服务器速率档位，识别坐骑状态切换惯性）、coordSpread（坐标离散度，定点/副本几何特征）。可选按玩家/GUID/类型过滤。type 为归一化键（speed/fly/waterwalk/teleportplane/teleport/zaxis 等，与误报白名单一致）。',
     schema: z.object({
       from: z.string().regex(DATE_RE, 'from 需为 YYYY-MM-DD').describe('起始日期（含）'),
       to: z.string().regex(DATE_RE, 'to 需为 YYYY-MM-DD').describe('结束日期（含，跨度 ≤31 天）'),
@@ -89,11 +135,11 @@ export function registerParseTool(): void {
           (guid === undefined || parsed.guid === guid) &&
           (type === undefined || parsed.type === type),
       );
-      const map = new Map<string, ViolationAggregate>();
+      const acc = new Map<string, Acc>();
       for (const { date, parsed } of filtered) {
         const key = `${parsed.guid}|${parsed.type}|${parsed.mapId ?? 'x'}`;
         const entry =
-          map.get(key) ??
+          acc.get(key) ??
           ({
             guid: parsed.guid,
             player: parsed.player,
@@ -102,33 +148,53 @@ export function registerParseTool(): void {
             count: 0,
             firstTime: parsed.time,
             lastTime: parsed.time,
-            latency: null,
+            latencyMin: null,
+            latencyMax: 0,
+            latencySum: 0,
+            latencyCount: 0,
             ips: [],
             dates: [],
             evidence: [],
-          } satisfies ViolationAggregate);
+            worstPct: null,
+            timesMs: [],
+            pcts: [],
+            rates: [],
+            pos: [],
+          } satisfies Acc);
         entry.count++;
         if (parsed.time < entry.firstTime) entry.firstTime = parsed.time;
         if (parsed.time > entry.lastTime) entry.lastTime = parsed.time;
         if (parsed.latencyMs !== null) {
-          const l = entry.latency ?? { min: parsed.latencyMs, max: parsed.latencyMs, avg: 0 };
-          l.min = Math.min(l.min, parsed.latencyMs);
-          l.max = Math.max(l.max, parsed.latencyMs);
-          l.avg = (l.avg * (entry.count - 1) + parsed.latencyMs) / entry.count;
-          entry.latency = { min: l.min, max: l.max, avg: Math.round(l.avg * 10) / 10 };
+          entry.latencyMin = entry.latencyMin === null ? parsed.latencyMs : Math.min(entry.latencyMin, parsed.latencyMs);
+          entry.latencyMax = Math.max(entry.latencyMax, parsed.latencyMs);
+          entry.latencySum += parsed.latencyMs;
+          entry.latencyCount++;
         }
         if (parsed.ip && !entry.ips.includes(parsed.ip) && entry.ips.length < 5) entry.ips.push(parsed.ip);
         if (!entry.dates.includes(date)) entry.dates.push(date);
+        entry.timesMs.push(toMs(parsed.time));
+        if (parsed.speedPctAbove !== null) {
+          entry.pcts.push(parsed.speedPctAbove);
+          if (parsed.speedAllowedRate !== null && !entry.rates.includes(parsed.speedAllowedRate)) {
+            entry.rates.push(parsed.speedAllowedRate);
+          }
+        }
+        if (parsed.pos) entry.pos.push(parsed.pos);
+        // 证据两条：首条 + 最大幅度条（speed 类），其余类型取前两条
         if (entry.evidence.length < 2) entry.evidence.push(parsed.raw);
-        map.set(key, entry);
+        else if (parsed.speedPctAbove !== null && (entry.worstPct === null || parsed.speedPctAbove > entry.worstPct)) {
+          entry.worstPct = parsed.speedPctAbove;
+          entry.evidence[1] = parsed.raw;
+        }
+        acc.set(key, entry);
       }
 
-      const aggregates = [...map.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+      const aggregates = [...acc.values()].map(toAggregate).sort((a, b) => b.count - a.count).slice(0, limit);
       const result: Record<string, unknown> = {
         totalViolations: filtered.length,
         totalLines,
         aggregates,
-        truncated: map.size > aggregates.length,
+        truncated: acc.size > aggregates.length,
       };
       if (explain && aggregates.length > 0) {
         result.explainNote = '光环为角色当前时刻快照，历史违规时点可能已过期；信号仅提示需复核，非定论';
@@ -137,6 +203,35 @@ export function registerParseTool(): void {
       return result;
     },
   });
+}
+
+function toAggregate(entry: Acc): ViolationAggregate {
+  const stats = intervalStats(entry.timesMs);
+  return {
+    guid: entry.guid,
+    player: entry.player,
+    type: entry.type,
+    mapId: entry.mapId,
+    count: entry.count,
+    firstTime: entry.firstTime,
+    lastTime: entry.lastTime,
+    latency:
+      entry.latencyCount > 0
+        ? {
+            min: entry.latencyMin as number,
+            max: entry.latencyMax,
+            avg: Math.round((entry.latencySum / entry.latencyCount) * 10) / 10,
+          }
+        : null,
+    ips: entry.ips,
+    dates: entry.dates,
+    evidence: entry.evidence,
+    magnitude: magnitudeStats(entry.pcts),
+    allowedRates: [...entry.rates].sort((a, b) => a - b),
+    interval: stats,
+    pattern: classifyPattern(entry.count, stats),
+    coordSpread: coordSpread(entry.pos),
+  };
 }
 
 /** explain 模式：批量拉取聚合条目涉及角色的当前光环与豁免白名单，逐条标注误报信号 */

@@ -11,7 +11,7 @@ jest.mock('@/shared/utils/cos.util', () => ({
 }));
 
 import { execSync } from 'child_process';
-import { existsSync, mkdtempSync, promises as fsp, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, promises as fsp, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { cosGetObjectBuffer, cosGetObjectJson } from '@/shared/utils/cos.util';
@@ -45,6 +45,24 @@ async function seedWorkspaceViaFetch(): Promise<void> {
   execSync(`tar -czf ${archive} -C ${fixtureDir} anticheat_${DATE}.log`);
   bufferMock.mockResolvedValueOnce(await fsp.readFile(archive));
   await toolFn('fetch_log_archive').invoke({ date: DATE, type: 'anticheat', realm: REALM });
+}
+
+// parse_server_anomalies 前置是 fetch_log_archive 解压产物——直接写工作区等价形态
+function seedServerWorkspace(): void {
+  const serverLines = [
+    '2026-09-27 01:30:49 ERROR [spells.effect] Possible hacking attempt: Player 古贰丹 [GUID Full: 0x000000000000133d Type: Player Low: 4925] tried to loot a gameobject [GUID Full: 0xf11002c41f002502 Type: Gameobject Entry: 181279  Low: 9474] which is on respawn time without being in GM mode!',
+    '2026-09-27 09:07:37 ERROR [spells.effect] Possible hacking attempt: Player 萨小五 [GUID Full: 0x00000000000032e8 Type: Player Low: 13032] tried to loot a gameobject [GUID Full: 0xf11002ad180013d2 Type: Gameobject Entry: 175384  Low: 5074] which is on respawn time without being in GM mode!',
+    '2026-09-27 09:12:00 ERROR [spells.effect] Possible hacking attempt: Player 萨小五 [GUID Full: 0x00000000000032e8 Type: Player Low: 13032] tried to loot a gameobject [GUID Full: 0xf11002ad180013d2 Type: Gameobject Entry: 175384  Low: 5074] which is on respawn time without being in GM mode!',
+    '2026-09-27 09:13:00 INFO [world] normal gameplay line',
+  ];
+  const authLines = [
+    "2026-09-28 08:25:18 INFO [server.authserver.hack] '101.42.117.123:47958' [AuthChallenge] account WENWENJIE2023 tried to login with invalid password!",
+    "2026-09-28 08:52:56 INFO [server.authserver.hack] '101.42.117.123:47464' [AuthChallenge] account CTRL2356 tried to login with invalid password!",
+  ];
+  mkdirSync(workspaceDir(REALM, DATE, 'worldserver'), { recursive: true });
+  mkdirSync(workspaceDir(REALM, DATE, 'authserver'), { recursive: true });
+  writeFileSync(join(workspaceDir(REALM, DATE, 'worldserver'), `Server_${DATE}.log`), serverLines.join('\n') + '\n');
+  writeFileSync(join(workspaceDir(REALM, DATE, 'authserver'), `Auth_${DATE}.log`), authLines.join('\n') + '\n');
 }
 
 describe('log-tools', () => {
@@ -151,5 +169,28 @@ describe('log-tools', () => {
     expect(aggregates[0]).toMatchObject({ guid: 11318, suggestedAction: 'investigate' });
     expect(aggregates[1]).toMatchObject({ guid: 2587, suggestedAction: 'warning' });
     expect(aggregates[1].falsePositiveSignals?.map((s) => s.kind).sort()).toEqual(['aura', 'exemption', 'latency']);
+  });
+
+  it('parse_server_anomalies aggregates server markers and auth failures from workspace', async () => {
+    seedServerWorkspace();
+    const result = await toolFn('parse_server_anomalies').invoke({ from: DATE, to: DATE, realm: REALM });
+    expect(result.totalMarkers).toBe(3);
+    expect(result.totalLines).toBe(6);
+    expect(String(result.lootRespawnNote)).toContain('采集外挂判据');
+    const players = result.players as { guid: number; total: number; worstSeverity: string; kinds: { kind: string; count: number }[] }[];
+    expect(players).toHaveLength(2);
+    expect(players[0]).toMatchObject({ guid: 13032, total: 2, worstSeverity: 'medium' });
+    expect(players[0].kinds[0]).toMatchObject({ kind: 'loot-respawn', count: 2 });
+    expect(players[1]).toMatchObject({ guid: 4925, total: 1 });
+
+    const authFailures = result.authFailures as { ip: string; count: number; distinctAccounts: number; bruteForceSuspect: boolean }[];
+    expect(authFailures).toHaveLength(1);
+    expect(authFailures[0]).toMatchObject({ ip: '101.42.117.123', count: 2, distinctAccounts: 2, bruteForceSuspect: false });
+  });
+
+  it('parse_server_anomalies reports empty workspace with a fetch hint', async () => {
+    const result = await toolFn('parse_server_anomalies').invoke({ from: DATE, to: DATE, realm: REALM });
+    expect(result).toMatchObject({ totalMarkers: 0, players: [], authFailures: [] });
+    expect(String(result.note)).toContain('fetch_log_archive');
   });
 });

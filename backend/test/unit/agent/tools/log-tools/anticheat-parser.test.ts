@@ -103,4 +103,17 @@ describe('anticheat-parser', () => {
     // 无 GPS Diff 段的行不产生位移
     expect(parseAnticheatLine(SPEED_LINE)).toMatchObject({ gpsDiff: null });
   });
+
+  it('normalizes the five previously-unmapped module detections to canonical keys', () => {
+    // 2026-09 排查：模块 17 种检测中此 5 种此前落 fallback 键（豁免/日报失配）
+    expect(normalizeViolationType('BG Start Spot Exploit-Hack')).toBe('bgstartspot');
+    expect(normalizeViolationType('DUEL ALERT Teleport-Hack')).toBe('duelteleport');
+    expect(normalizeViolationType('Stricter Check Jump-Hack')).toBe('stricterjump');
+    expect(normalizeViolationType('Time Manipulation - Hack')).toBe('timemanipulation');
+    expect(normalizeViolationType('Opcode Manipulation Hack')).toBe('opcodemanipulation');
+    // duelteleport 不得被 teleport 前缀规则吞掉
+    const line =
+      '2026-09-28 12:00:00 INFO [anticheat.module] AnticheatMgr:: Time Manipulation - Hack detected player 玄策 (GUID Full: 0x00000000000030d2 Type: Player Low: 12498) - Latency: 31 ms - IP: 117.173.233.224 - Cheat Flagged At: .go xyz 1 2 3 0 0';
+    expect(parseAnticheatLine(line)).toMatchObject({ type: 'timemanipulation', guid: 12498 });
+  });
 });

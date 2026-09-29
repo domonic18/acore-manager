@@ -21,6 +21,7 @@ export function renderInspectionMarkdown(report: InspectionReportJson): string {
     ['崩溃事件', sh.crashes],
     ['错误日志', sh.errors],
     ['认证异常', sh.authAnomalies],
+    ['异常标记', sh.cheatMarkers],
   ] as [string, unknown[] | undefined][]) {
     if (!items || items.length === 0) continue;
     healthRendered = true;

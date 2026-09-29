@@ -43,6 +43,7 @@ const TYPE_ALIASES: [RegExp, string][] = [
   [/^walk\s*on\s*water/i, 'waterwalk'],
   [/^teleport\s*to\s*plane/i, 'teleportplane'],
   [/^teleport/i, 'teleport'],
+  [/^duel\s*alert\s*teleport/i, 'duelteleport'],
   [/^ignore\s*control/i, 'ignorecontrol'],
   [/^ignore\s*z/i, 'zaxis'],
   [/^z\s*axis/i, 'zaxis'],
@@ -51,10 +52,15 @@ const TYPE_ALIASES: [RegExp, string][] = [
   [/^anti\s*knock/i, 'antiknockback'],
   [/^no\s*fall/i, 'nofalldamage'],
   [/^op\s*ack/i, 'opackhack'],
+  [/^opcode\s*manipulation/i, 'opcodemanipulation'],
+  [/^bg\s*start\s*spot/i, 'bgstartspot'],
+  [/^stricter\s*check\s*jump/i, 'stricterjump'],
+  [/^time\s*manipulation/i, 'timemanipulation'],
 ];
 
-// 与 daily_players_reports 14 类违规列、ai_anticheat_exemption.violation_type 一致的完整枚举
-// （豁免路由校验 / 误报引擎 explainTypes 共用此唯一出处）
+// 模块全量检测类型（AnticheatMgr 17 种归一化）：前 14 与 daily_players_reports 违规列、
+// ai_anticheat_exemption.violation_type 一致（豁免路由校验 / 误报引擎 explainTypes 共用此唯一出处）；
+// 后 5 为模块独有检测（daily 报表无列），此前落 fallback 键会失配豁免/日报——2026-09 排查补齐。
 export const VIOLATION_TYPES = [
   'speed',
   'fly',
@@ -70,6 +76,11 @@ export const VIOLATION_TYPES = [
   'antiknockback',
   'nofalldamage',
   'opackhack',
+  'duelteleport',
+  'opcodemanipulation',
+  'bgstartspot',
+  'stricterjump',
+  'timemanipulation',
 ] as const;
 export type ViolationType = (typeof VIOLATION_TYPES)[number];
 

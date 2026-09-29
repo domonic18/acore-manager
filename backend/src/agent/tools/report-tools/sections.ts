@@ -27,7 +27,7 @@ export interface InspectionReportJson {
   generatedAt?: string;
   healthScore: number;
   summary: string;
-  serverHealth: { crashes?: unknown[]; errors?: unknown[]; authAnomalies?: unknown[] };
+  serverHealth: { crashes?: unknown[]; errors?: unknown[]; authAnomalies?: unknown[]; cheatMarkers?: unknown[] };
   suspiciousPlayers: SuspiciousPlayer[];
   recommendations: string[];
   markdown?: string;

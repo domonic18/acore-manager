@@ -149,7 +149,7 @@ describe('log-tools', () => {
       falsePositiveSignals?: { kind: string }[];
     }[];
     expect(aggregates[0]).toMatchObject({ guid: 11318, suggestedAction: 'investigate' });
-    expect(aggregates[1]).toMatchObject({ guid: 2587, suggestedAction: 'review' });
+    expect(aggregates[1]).toMatchObject({ guid: 2587, suggestedAction: 'warning' });
     expect(aggregates[1].falsePositiveSignals?.map((s) => s.kind).sort()).toEqual(['aura', 'exemption', 'latency']);
   });
 });

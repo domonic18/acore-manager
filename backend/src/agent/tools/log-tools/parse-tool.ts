@@ -53,7 +53,7 @@ export interface ViolationAggregate {
   /** Cheat Flagged At 坐标离散度：小范围 + 少 Z 值 → 定点/副本几何场景特征 */
   coordSpread: CoordSpread | null;
   falsePositiveSignals?: FpSignal[];
-  suggestedAction?: 'review' | 'investigate';
+  suggestedAction?: 'warning' | 'investigate';
 }
 
 interface Acc {
@@ -249,7 +249,17 @@ async function annotateFalsePositives(aggregates: ViolationAggregate[]): Promise
   }
   for (const agg of aggregates) {
     const signals = explainSuspect(
-      { guid: agg.guid, player: agg.player, type: agg.type, mapId: agg.mapId, latency: agg.latency },
+      {
+        guid: agg.guid,
+        player: agg.player,
+        type: agg.type,
+        mapId: agg.mapId,
+        latency: agg.latency,
+        magnitude: agg.magnitude,
+        allowedRates: agg.allowedRates,
+        interval: agg.interval,
+        pattern: agg.pattern,
+      },
       { auraSpells: aurasByGuid.get(agg.guid) ?? [], exemptions },
     );
     agg.falsePositiveSignals = signals;

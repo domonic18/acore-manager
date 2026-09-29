@@ -81,3 +81,56 @@ export function coordSpread(pos: { x: number; y: number; z: number }[]): CoordSp
   const r1 = (v: number): number => Math.round(v * 10) / 10;
   return { xRange: r1(maxX - minX), yRange: r1(maxY - minY), zUnique: zs.size };
 }
+
+export interface LoopPoint {
+  /** 事件时刻（epoch ms），用于在检测前把点排回时间序 */
+  t: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** 日志时间戳按字典序即时间序；统一按 UTC 解析求 epoch ms（时区基准不影响差值与排序） */
+export function toEpochMs(time: string): number {
+  return Date.parse(`${time.replace(' ', 'T')}Z`);
+}
+
+const LOOP_MAX_CYCLE = 30;
+const LOOP_EPS_YD = 1.0;
+const LOOP_MIN_DIAMETER_YD = 5.0;
+
+/**
+ * 脚本化坐标循环检测（问题2）：找最小周期 L∈[2, 30] 使事件序列末尾 2L 个点
+ * 恰好构成两个重复周期（对应点距离 ≤1 码）。人类重复跑同一路线漂移远超 1 码，
+ * 而脚本寻路（如生产实锤的哀嚎洞穴 13 点循环 ×2）逐点精确复现。
+ * 返回周期长（事件条数计），无循环返回 null。原地重复违规（循环直径 <5 码）不算寻路循环。
+ */
+export function detectPositionLoop(points: LoopPoint[]): number | null {
+  const sorted = [...points].sort((a, b) => a.t - b.t);
+  const n = sorted.length;
+  const maxL = Math.min(LOOP_MAX_CYCLE, Math.floor(n / 2));
+  for (let l = 2; l <= maxL; l++) {
+    let matched = true;
+    for (let i = 0; i < l; i++) {
+      const a = sorted[n - 2 * l + i];
+      const b = sorted[n - l + i];
+      if (Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) > LOOP_EPS_YD) {
+        matched = false;
+        break;
+      }
+    }
+    if (!matched) continue;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = n - l; i < n; i++) {
+      minX = Math.min(minX, sorted[i].x);
+      maxX = Math.max(maxX, sorted[i].x);
+      minY = Math.min(minY, sorted[i].y);
+      maxY = Math.max(maxY, sorted[i].y);
+    }
+    if (maxX - minX + maxY - minY >= LOOP_MIN_DIAMETER_YD) return l;
+  }
+  return null;
+}

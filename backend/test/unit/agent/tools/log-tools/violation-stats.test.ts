@@ -1,4 +1,11 @@
-import { classifyPattern, coordSpread, intervalStats, magnitudeStats, median } from '@/agent/tools/log-tools/violation-stats';
+import {
+  classifyPattern,
+  coordSpread,
+  detectPositionLoop,
+  intervalStats,
+  magnitudeStats,
+  median,
+} from '@/agent/tools/log-tools/violation-stats';
 
 describe('violation-stats', () => {
   describe('median', () => {
@@ -77,6 +84,41 @@ describe('violation-stats', () => {
     });
     it('returns null without coords', () => {
       expect(coordSpread([])).toBeNull();
+    });
+  });
+
+  describe('detectPositionLoop', () => {
+    const pt = (t: number, x: number, y: number, z = 90): { t: number; x: number; y: number; z: number } => ({ t, x, y, z });
+
+    it('detects the 13-point scripted cycle repeated twice (production Wailing Caverns case)', () => {
+      const cycle = (base: number): { t: number; x: number; y: number; z: number }[] =>
+        Array.from({ length: 13 }, (_, i) => pt(base + i * 1000, 1000 + i * 37, 2000 - i * 11));
+      // 乱序喂入也按时间序检测
+      const points = [...cycle(0), ...cycle(60_000)].reverse();
+      expect(detectPositionLoop(points)).toBe(13);
+    });
+
+    it('returns null for a non-repeating walk', () => {
+      const points = Array.from({ length: 10 }, (_, i) => pt(i * 1000, 1000 + i * 50, 2000 + i * 30));
+      expect(detectPositionLoop(points)).toBeNull();
+    });
+
+    it('detects a 2-point ping-pong patrol', () => {
+      const points = [pt(0, 100, 100), pt(1000, 260, 100), pt(2000, 100, 100), pt(3000, 260, 100)];
+      expect(detectPositionLoop(points)).toBe(2);
+    });
+
+    it('ignores stationary repeats (loop diameter under 5 yards)', () => {
+      // 原地刷违规：4 个点几乎重合，不是寻路循环
+      const points = [pt(0, 500, 500), pt(1000, 500.3, 500.2), pt(2000, 500, 500), pt(3000, 500.2, 500.1)];
+      expect(detectPositionLoop(points)).toBeNull();
+    });
+
+    it('requires points within 1 yard tolerance, not approximate repeats', () => {
+      const cycle = (jitter: number, base: number): { t: number; x: number; y: number; z: number }[] =>
+        Array.from({ length: 4 }, (_, i) => pt(base + i * 1000, 100 + i * 30 + jitter, 200 + jitter));
+      // 第二轮漂移 3 码：人类重复跑线，不判循环
+      expect(detectPositionLoop([...cycle(0, 0), ...cycle(3, 60_000)])).toBeNull();
     });
   });
 });

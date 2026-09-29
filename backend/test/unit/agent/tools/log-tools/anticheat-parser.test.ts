@@ -11,6 +11,9 @@ const IGNORE_ZAXIS_LINE =
   '2026-09-27 00:32:40 INFO [anticheat.module] AnticheatMgr:: Ignore Zaxis Hack detected player 玄策 (GUID Full: 0x00000000000030d2 Type: Player Low: 12498) - Latency: 31 ms - IP: 117.173.233.224 - Cheat Flagged At: .go xyz 2897.955078 3227.378418 178.918793 530 6.045329';
 const TELEPORT_PLANE_LINE =
   '2026-09-27 00:05:57 INFO [anticheat.module] AnticheatMgr:: Teleport To Plane - Hack detected player 后腿 (GUID Full: 0x000000000000266f Type: Player Low: 9839)  - Latency: 57 ms - IP: 112.43.5.119 - Cheat Flagged At: .go xyz 2449.711914 2855.792480 145.500931 530 4.438909';
+// Teleport-Hack 行在 IP 与 Cheat Flagged At 之间带 GPS Diff 位移段（此前该段导致坐标全丢）
+const TELEPORT_GPS_LINE =
+  '2026-09-27 03:21:09 INFO [anticheat.module] AnticheatMgr:: Teleport-Hack detected player 萨小六 (GUID Full: 0x00000000000032dc Type: Player Low: 13028) - Latency: 12 ms - IP: 120.245.118.80 - GPS Diff X: 323.271 Y: 459.4375 Z: 68.95222 - Cheat Flagged At: .go xyz 3065.000000 5426.419922 149.389999 530 0.137277';
 
 describe('anticheat-parser', () => {
   it('parses a full Speed-Hack line including coords and Chinese player name', () => {
@@ -83,5 +86,21 @@ describe('anticheat-parser', () => {
     const v = parseAnticheatLine(SPEED_LINE);
     expect(v).toMatchObject({ speedPctAbove: 26.598583, speedAllowedRate: 14 });
     expect(parseAnticheatLine(WATERWALK_LINE)).toMatchObject({ speedPctAbove: null, speedAllowedRate: null });
+  });
+
+  it('parses GPS Diff segment on Teleport-Hack lines without losing coords', () => {
+    const v = parseAnticheatLine(TELEPORT_GPS_LINE);
+    expect(v).toMatchObject({
+      type: 'teleport',
+      player: '萨小六',
+      guid: 13028,
+      latencyMs: 12,
+      ip: '120.245.118.80',
+      gpsDiff: { dx: 323.271, dy: 459.4375, dz: 68.95222 },
+      mapId: 530,
+      pos: { x: 3065.0, y: 5426.419922, z: 149.389999 },
+    });
+    // 无 GPS Diff 段的行不产生位移
+    expect(parseAnticheatLine(SPEED_LINE)).toMatchObject({ gpsDiff: null });
   });
 });

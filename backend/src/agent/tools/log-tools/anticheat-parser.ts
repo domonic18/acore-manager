@@ -5,9 +5,10 @@
 //   - Cheat Flagged At: .go xyz -247.699890 1065.007812 55.583813 530 1.265799
 // 模块真实输出中类型串写法不统一（"Speed-Hack" / "Walk on Water - Hack"），经 normalizeViolationType 归一化为
 // 与 daily_players_reports 列、ai_anticheat_exemption.violation_type 一致的 canonical 键。
-// 生产实测（2026-09  realms 日志）两处格式漂移需兼容：GUID 括号与后续字段间空格数不定
+// 生产实测（2026-09  realms 日志）三处格式漂移需兼容：GUID 括号与后续字段间空格数不定
 // （"Teleport To Plane" 类型恒为双空格）；"Ignore Zaxis Hack" 需归一化到 zaxis（此前落到
-// fallback 键 ignorezaxis，导致豁免/光环/日报列全部失配）。
+// fallback 键 ignorezaxis，导致豁免/光环/日报列全部失配）；Teleport-Hack 行在 IP 与
+// Cheat Flagged At 之间带 "- GPS Diff X/Y/Z" 位移段（瞬移距离判据，缺失曾致该类行坐标全丢）。
 
 export interface ParsedViolation {
   time: string;
@@ -17,6 +18,8 @@ export interface ParsedViolation {
   guid: number;
   latencyMs: number | null;
   ip: string | null;
+  /** Teleport-Hack 行专有：GPS Diff 位移（水平距离即瞬移幅度，无该段时为 null） */
+  gpsDiff: { dx: number; dy: number; dz: number } | null;
   mapId: number | null;
   /** Cheat Flagged At 坐标（无该段时为 null），用于聚合坐标集中度 */
   pos: { x: number; y: number; z: number } | null;
@@ -28,7 +31,7 @@ export interface ParsedViolation {
 }
 
 const LINE_RE =
-  /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \w+ \[anticheat\.module\] AnticheatMgr:: (.+?) detected player (.+?) \(GUID Full: 0x[0-9a-fA-F]+ Type: Player Low: (\d+)\)\s*(?:- Latency: (\d+) ms)?(?:\s*- IP: ([0-9a-fA-F.:]+))?(?:\s*- Cheat Flagged At: \.go \S+ (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (\d+))?/;
+  /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \w+ \[anticheat\.module\] AnticheatMgr:: (.+?) detected player (.+?) \(GUID Full: 0x[0-9a-fA-F]+ Type: Player Low: (\d+)\)\s*(?:- Latency: (\d+) ms)?(?:\s*- IP: ([0-9a-fA-F.:]+))?(?:\s*- GPS Diff X: (-?[\d.]+) Y: (-?[\d.]+) Z: (-?[\d.]+))?(?:\s*- Cheat Flagged At: \.go \S+ (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (\d+))?/;
 
 const SPEED_RE = /Speed Movement at ([\d.]+)% above allowed Server Set rate ([\d.]+)%/;
 
@@ -91,8 +94,9 @@ export function parseAnticheatLine(line: string): ParsedViolation | null {
     guid: Number(guid),
     latencyMs: latency ? Number(latency) : null,
     ip: ip ?? null,
-    mapId: m[10] ? Number(m[10]) : null,
-    pos: m[7] ? { x: Number(m[7]), y: Number(m[8]), z: Number(m[9]) } : null,
+    gpsDiff: m[7] ? { dx: Number(m[7]), dy: Number(m[8]), dz: Number(m[9]) } : null,
+    mapId: m[13] ? Number(m[13]) : null,
+    pos: m[10] ? { x: Number(m[10]), y: Number(m[11]), z: Number(m[12]) } : null,
     speedPctAbove: speed ? Number(speed[1]) : null,
     speedAllowedRate: speed ? Number(speed[2]) : null,
     detail: typeRaw.trim(),

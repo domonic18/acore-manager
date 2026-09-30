@@ -15,7 +15,7 @@ export default function TargetedAnalysisPage() {
       <div>
         <h1 className="text-2xl font-bold">深度分析</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          针对单个角色/账号的违规取证与申诉研判，结论自动落库，可在历史中回看（需求 3.8）
+          针对角色/账号的违规取证与申诉研判（支持批量），由后台任务异步执行，结论自动落库，可在历史中回看（需求 3.8）
         </p>
       </div>
       <TargetedAnalysisRunner onFinished={refreshHistory} />

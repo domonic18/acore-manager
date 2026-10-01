@@ -1,9 +1,10 @@
 # AI 诊断与 Agent 开发计划
 
-> 版本：v1.2（2026-09-21）
+> 版本：v1.3（2026-10-01）
 > 对应需求：[requirements/01-log-upload-ai-diagnosis-requirement.md](../requirements/01-log-upload-ai-diagnosis-requirement.md)（v2.4）
 > 对应架构：[arch/06AI诊断与Agent架构.md](../arch/06AI诊断与Agent架构.md)
 > 估算口径：单人开发人日（含自测，不含评审等待）
+> 变更：v1.3 回填 M4 验收结论，迭代十关闭；T4.0 定向分析实施时由 SSE 流式调整为 manager-job 异步执行（PR #36）
 
 ## 一、总体节奏
 
@@ -86,7 +87,7 @@ M4 处置                                  │──────────×�
 
 | 编号 | 任务 | 产出 | 依赖 | 预估 |
 |------|------|------|------|------|
-| T4.0 | 定向分析后端：analysis.yaml 提示词 + targeted-analysis.service（复用巡检管线与白名单工具）+ SSE 路由（同 5.2 协议）+ ai_targeted_analysis 落库（追加不覆盖）+ 结论 schema 校验（falsePositiveSignals 非空强制 manual_review） | `agent/` 扩展 + `ai-analysis.routes.ts` | T2.4-T2.8, T3.1 | 1.5 天 |
+| T4.0 | 定向分析后端：analysis.yaml 提示词 + targeted-analysis.service（复用巡检管线与白名单工具）+ ai_targeted_analysis 落库（追加不覆盖）+ 结论 schema 校验（falsePositiveSignals 非空强制 manual_review）。**实施调整（2026-09-29，PR #36）**：原 SSE 流式路由迁移为 manager-job 异步执行——web 侧仅建行（≤10 对象批量），SCF Event 触发 job 串行分析，前端轮询取结果 | `agent/` 扩展 + `ai-analysis.routes.ts` + `job/tasks/targeted-analysis-task.ts` | T2.4-T2.8, T3.1 | 1.5 天 |
 | T4.1 | ai-diagnosis 前端：报告列表/详情（Tab：健康/可疑玩家/建议）、上传状态（近 7 天） | `features/ai-diagnosis/` 主体 | M3 | 1.5 天 |
 | T4.2 | Markdown 视图 + 一键复制：raw 接口、clipboard 写入与降级、论坛粘贴验证（Discourse 实测） | 复制功能 | T4.1 | 0.5 天 |
 | T4.3 | 可疑玩家表增强：误报徽标（falsePositiveSignals）、角色/账号跳转、多选批量、标记误报弹窗（写白名单闭环） | 处置交互 | T4.1 | 1 天 |
@@ -129,4 +130,4 @@ T0.4/T0.5（Owner 材料）随时并行收集，T2.7/T4.4 前到位即可
 - [ ] M1：连续 3 天日志到齐且 md5 通过；worldserver 重启后 Server.log 历史保留且带时间戳；删 manifest 触发断传告警
 - [ ] M2：gmlevel 权限正确；模型配置热生效；对话与工具调用全量落库可回放；DB 账号仅 SELECT
 - [x] M3：植入违规样例可检出并附证据；合法加速样例标注误报且不建议 ban；同日重跑幂等；Token 记录与预算告警生效；失败可告警（2026-09-23，见 docs/plan/M3-T3.6联调记录.md）
-- [ ] M4：移动端可查看报告；复制 Markdown 粘贴论坛渲染正常；单发/批量邮件送达可重试；"已警告"标注与全程审计；定向分析结论落库可复制，存在误报信号时建议不为"维持封禁"；报告与定向分析可改备注 / 润色 Markdown / 删除（gmlevel=3、二次确认、审计可查）
+- [x] M4：移动端可查看报告；复制 Markdown 粘贴论坛渲染正常；单发/批量邮件送达可重试；"已警告"标注与全程审计；定向分析结论落库可复制，存在误报信号时建议不为"维持封禁"；报告与定向分析可改备注 / 润色 Markdown / 删除（gmlevel=3、二次确认、审计可查）（2026-10-01，定向分析已于 PR #36 迁移异步 Job 执行）

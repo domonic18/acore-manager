@@ -1,5 +1,5 @@
 jest.mock('@/config/env', () => ({
-  env: { AI_TOOL_CALL_BUDGET: 20, AI_TOOL_TIMEOUT_MS: 5000, AI_DAILY_TOKEN_BUDGET: 5_000_000, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
+  env: { AI_TOOL_CALL_BUDGET: 20, AI_TOOL_TIMEOUT_MS: 5000, AI_DAILY_TOKEN_BUDGET: 5_000_000, AI_INSPECTION_TIME_BUDGET_MS: 780_000, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
 }));
 jest.mock('@/config/database', () => ({
   acmDataSource: { getRepository: jest.fn() },
@@ -8,7 +8,7 @@ jest.mock('@/services/cache.service', () => ({
   cacheService: { get: jest.fn(), set: jest.fn(), del: jest.fn(), delPattern: jest.fn() },
 }));
 jest.mock('@/services/ai/feishu-notify.service', () => ({
-  feishuNotifyService: { sendText: jest.fn(), sendDailyReportCard: jest.fn().mockResolvedValue(true) },
+  feishuNotifyService: { sendText: jest.fn().mockResolvedValue(true), sendDailyReportCard: jest.fn().mockResolvedValue(true) },
 }));
 jest.mock('@/services/ai/token-usage.service', () => ({
   tokenUsageService: { record: jest.fn().mockResolvedValue(undefined) },
@@ -25,22 +25,33 @@ jest.mock('@/shared/utils/cos.util', () => ({
 jest.mock('@/agent/runtime/agent-factory', () => ({
   getAgent: jest.fn(),
 }));
-// wire 层直接 mock：collectAnswer 消费的是 streamAgentEvents 的逻辑事件序列
+// wire 层直接 mock：collectAnswer 消费的是 streamAgentEvents 的逻辑事件序列。
+// __onRound 钩子模拟"模型在某一轮调用了 write_report_section"（真实工具执行在 agent 内部）
 jest.mock('@/agent/runtime/wire', () => ({
-  streamAgentEvents: jest.fn((agent: { __rounds: unknown[][]; __cursor?: number }) =>
+  streamAgentEvents: jest.fn((agent: { __rounds: unknown[][]; __cursor?: number; __onRound?: (index: number) => void }) =>
     (async function* () {
-      const round = agent.__rounds[Math.min(agent.__cursor ?? 0, agent.__rounds.length - 1)];
+      const index = Math.min(agent.__cursor ?? 0, agent.__rounds.length - 1);
+      agent.__onRound?.(index);
       agent.__cursor = (agent.__cursor ?? 0) + 1;
-      for (const ev of round) yield ev as { event: string; data: Record<string, unknown> };
+      for (const ev of agent.__rounds[index]) yield ev as { event: string; data: Record<string, unknown> };
     })(),
   ),
 }));
 jest.mock('@/agent/tools/log-tools/log-workspace', () => ({
   LOG_TYPES: ['worldserver', 'authserver', 'anticheat', 'crash'],
+  WORKSPACE_ROOT: '/tmp/acm-inspection-test-workspace',
   manifestKey: jest.fn((realm: string, date: string) => `acore-logs/${realm}/${date}/manifest.json`),
   clearWorkspace: jest.fn(),
 }));
+// report-tools 保持真实实现（分节清洗/组装/渲染是被测行为），仅把 resetDraftDir 置为 no-op：
+// attempt() 开头的清盘会删掉测试预置的分节草稿
+jest.mock('@/agent/tools/report-tools', () => {
+  const actual = jest.requireActual<typeof import('@/agent/tools/report-tools')>('@/agent/tools/report-tools');
+  return { ...actual, resetDraftDir: jest.fn() };
+});
 
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { env } from '@/config/env';
 import { acmDataSource } from '@/config/database';
 import { cacheService } from '@/services/cache.service';
 import { feishuNotifyService } from '@/services/ai/feishu-notify.service';
@@ -48,7 +59,8 @@ import { tokenUsageService } from '@/services/ai/token-usage.service';
 import { cosGetObjectJson, cosPutObjectBuffer } from '@/shared/utils/cos.util';
 import { getAgent } from '@/agent/runtime/agent-factory';
 import { clearWorkspace } from '@/agent/tools/log-tools/log-workspace';
-import { inspectionService, InspectionReportJson } from '@/services/ai/inspection.service';
+import { reportDraftDir, REPORT_SCHEMA_VERSION } from '@/agent/tools/report-tools';
+import { inspectionService } from '@/services/ai/inspection.service';
 
 const cosGetJson = cosGetObjectJson as jest.Mock;
 const cosPut = cosPutObjectBuffer as jest.Mock;
@@ -59,8 +71,8 @@ const tokenRecord = tokenUsageService.record as jest.Mock;
 const getAgentMock = getAgent as jest.Mock;
 const getRepository = acmDataSource.getRepository as jest.Mock;
 
-function fakeAgent(rounds: unknown[][]): unknown {
-  return { __rounds: rounds };
+function fakeAgent(rounds: unknown[][], onRound?: (index: number) => void): unknown {
+  return { __rounds: rounds, __onRound: onRound };
 }
 
 const answerRound = (text: string): unknown[] => [
@@ -74,14 +86,25 @@ const errorRound = (message: string, code = 'agent_error'): unknown[] => [
 ];
 
 function validReportJson(overrides: Record<string, unknown> = {}): string {
-  const report: InspectionReportJson = {
-    schemaVersion: 2,
+  const finalJson = {
+    schemaVersion: REPORT_SCHEMA_VERSION,
     reportDate: '2026-08-22',
     realm: 'realm3',
     healthScore: 82,
     summary: '整体平稳，发现 1 名可疑玩家。',
-    serverHealth: { crashes: [], errors: [], authAnomalies: [] },
-    suspiciousPlayers: [
+    ...overrides,
+  };
+  return `\`\`\`json\n${JSON.stringify(finalJson)}\n\`\`\``;
+}
+
+// 预置三节草稿（等价 agent 已按分节契约调 write_report_section 落盘）
+function seedDraftSections(realm = 'realm3', date = '2026-08-22'): void {
+  const dir = reportDraftDir(realm, date);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const sections: Record<string, unknown> = {
+    'server-health': { crashes: [], errors: [], authAnomalies: [] },
+    'suspicious-players': [
       {
         character: 'Unparalleled',
         severity: 'high',
@@ -93,10 +116,10 @@ function validReportJson(overrides: Record<string, unknown> = {}): string {
       },
     ],
     recommendations: ['关注该玩家'],
-    markdown: '# 报告全文',
-    ...overrides,
   };
-  return `\`\`\`json\n${JSON.stringify(report)}\n\`\`\``;
+  for (const [name, content] of Object.entries(sections)) {
+    writeFileSync(`${dir}/${name}.json`, JSON.stringify(content));
+  }
 }
 
 function repoMock() {
@@ -108,7 +131,12 @@ describe('InspectionService', () => {
     jest.clearAllMocks();
     cosGetJson.mockResolvedValue({ realm: 'realm3', date: '2026-08-22', files: [{ type: 'anticheat' }, { type: 'worldserver' }, { type: 'authserver' }, { type: 'crash' }] });
     getRepository.mockReturnValue(repoMock());
+    seedDraftSections();
     getAgentMock.mockResolvedValue(fakeAgent([answerRound(validReportJson())]));
+  });
+
+  afterEach(() => {
+    rmSync(reportDraftDir('realm3', '2026-08-22'), { recursive: true, force: true });
   });
 
   it('runs full pipeline and persists an ok report on success', async () => {
@@ -128,6 +156,65 @@ describe('InspectionService', () => {
     expect(clearWorkspace).toHaveBeenCalled();
   });
 
+  it('assembles persisted content from draft sections and renders markdown in code', async () => {
+    await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
+
+    const repo = getRepository.mock.results[0].value;
+    const values = repo.upsert.mock.calls[0][0];
+    expect(values.contentJson.suspiciousPlayers).toEqual([expect.objectContaining({ character: 'Unparalleled', severity: 'high', suggestedAction: 'investigate' })]);
+    expect(values.contentJson.recommendations).toEqual(['关注该玩家']);
+    expect(values.contentJson.markdown).toBeUndefined();
+    const md = values.contentMarkdown as string;
+    expect(md).toContain('# realm3 2026-08-22 巡检报告');
+    expect(md).toContain('### Unparalleled（severity=high → investigate）');
+  });
+
+  it('retries the whole attempt when draft sections are missing', async () => {
+    rmSync(reportDraftDir('realm3', '2026-08-22'), { recursive: true, force: true });
+    getAgentMock.mockResolvedValue(fakeAgent([answerRound(validReportJson()), answerRound(validReportJson()), answerRound(validReportJson())]));
+    const outcome = await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
+
+    // 缺节先走同线程抢救轮（mock 模型始终不调 write_report_section，抢救无效），才整轮重试（3 次 attempt）
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('报告缺节');
+    expect(outcome.error).toContain('抢救轮后仍未落盘');
+    expect(getAgentMock).toHaveBeenCalledTimes(3);
+    const repo = getRepository.mock.results.at(-1)!.value;
+    expect(repo.upsert).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'failed', summary: expect.stringContaining('报告缺节') }), ['realm', 'reportDate']);
+  });
+
+  it('salvages missing sections on the same thread instead of a full retry', async () => {
+    rmSync(reportDraftDir('realm3', '2026-08-22'), { recursive: true, force: true });
+    // 抢救轮（第 2 轮）开始时模拟模型补调 write_report_section 落盘三节
+    getAgentMock.mockResolvedValue(
+      fakeAgent([answerRound(validReportJson()), answerRound(validReportJson())], (index) => {
+        if (index >= 1) seedDraftSections();
+      }),
+    );
+    const outcome = await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
+
+    expect(outcome.ok).toBe(true);
+    expect(getAgentMock).toHaveBeenCalledTimes(1); // 抢救成功，未触发整轮重试
+    const repo = getRepository.mock.results[0].value;
+    expect(repo.upsert).toHaveBeenCalledWith(expect.objectContaining({ status: 'ok', healthScore: 82 }), ['realm', 'reportDate']);
+  });
+
+  it('stops retrying when the time budget is exhausted', async () => {
+    rmSync(reportDraftDir('realm3', '2026-08-22'), { recursive: true, force: true });
+    const originalBudget = env.AI_INSPECTION_TIME_BUDGET_MS;
+    env.AI_INSPECTION_TIME_BUDGET_MS = 100;
+    try {
+      getAgentMock.mockResolvedValue(fakeAgent([answerRound(validReportJson()), answerRound(validReportJson()), answerRound(validReportJson())]));
+      const outcome = await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome.error).toContain('时间预算不足');
+      expect(getAgentMock).toHaveBeenCalledTimes(1); // 预算耗尽，不再重试
+    } finally {
+      env.AI_INSPECTION_TIME_BUDGET_MS = originalBudget;
+    }
+  });
+
   it('warns on missing log types but continues the inspection', async () => {
     cosGetJson.mockResolvedValue({ files: [{ type: 'anticheat' }] });
     await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'manual' });
@@ -137,22 +224,12 @@ describe('InspectionService', () => {
     expect(repo.upsert).toHaveBeenCalledWith(expect.objectContaining({ status: 'ok' }), ['realm', 'reportDate']);
   });
 
-  it('asks the model to fix malformed JSON in a second round', async () => {
+  it('asks the model to fix malformed final JSON in a second round', async () => {
     getAgentMock.mockResolvedValue(fakeAgent([answerRound('这不是 JSON'), answerRound(validReportJson())]));
     const outcome = await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
 
     expect(outcome.ok).toBe(true);
     expect(tokenRecord).toHaveBeenCalledWith(expect.objectContaining({ totalTokens: 30, promptTokens: 20 }));
-  });
-
-  it('falls back to rendered markdown when the agent omits it', async () => {
-    getAgentMock.mockResolvedValue(fakeAgent([answerRound(validReportJson({ markdown: undefined }))]));
-    await inspectionService.run({ realm: 'realm3', date: '2026-08-22', trigger: 'cron' });
-
-    const repo = getRepository.mock.results[0].value;
-    const md = repo.upsert.mock.calls[0][0].contentMarkdown as string;
-    expect(md).toContain('# realm3 2026-08-22 巡检报告');
-    expect(md).toContain('Unparalleled');
   });
 
   it('retries failed agent rounds and ultimately records a failed report row', async () => {
@@ -175,7 +252,7 @@ describe('InspectionService', () => {
     expect(getAgentMock).toHaveBeenCalledTimes(1);
   });
 
-  it('tolerates common LLM deviations: string healthScore and missing collection fields', async () => {
+  it('tolerates common LLM deviations: string healthScore and whitespace', async () => {
     const loose = {
       schemaVersion: 2,
       reportDate: ' 2026-08-22 ',
@@ -190,8 +267,6 @@ describe('InspectionService', () => {
     const repo = getRepository.mock.results[0].value;
     const values = repo.upsert.mock.calls[0][0];
     expect(values.healthScore).toBe(82);
-    expect(values.contentJson.suspiciousPlayers).toEqual([]);
-    expect(values.contentJson.recommendations).toEqual([]);
   });
 
   it('rejects invalid realm/date without touching the agent', async () => {

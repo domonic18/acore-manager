@@ -1,12 +1,4 @@
 jest.mock('@/services/ai/anticheat-exemption.service', () => ({
-  ServiceError: class ServiceError extends Error {
-    constructor(
-      message: string,
-      public status = 400,
-    ) {
-      super(message);
-    }
-  },
   anticheatExemptionService: {
     list: jest.fn().mockResolvedValue([]),
     listByGuids: jest.fn().mockResolvedValue([]),
@@ -14,8 +6,11 @@ jest.mock('@/services/ai/anticheat-exemption.service', () => ({
     remove: jest.fn(),
   },
 }));
-jest.mock('@/services/ai/inspection.service', () => ({
-  inspectionService: { run: jest.fn().mockResolvedValue({ ok: true }) },
+jest.mock('@/services/job-trigger.service', () => ({
+  triggerJob: jest.fn().mockResolvedValue({ requestId: 'req-1' }),
+}));
+jest.mock('@/config/redis', () => ({
+  redis: { set: jest.fn().mockResolvedValue('OK'), del: jest.fn().mockResolvedValue(1) },
 }));
 jest.mock('@/services/ai/report.service', () => ({
   reportService: {
@@ -44,8 +39,9 @@ import express, { Application } from 'express';
 import request from 'supertest';
 import { responseFormatter } from '@/middleware/response-formatter';
 import aiDiagnosisRoutes from '@/routes/ai-diagnosis.routes';
-import { ServiceError as ReportedServiceError } from '@/services/ai/anticheat-exemption.service';
-import { inspectionService } from '@/services/ai/inspection.service';
+import { triggerJob } from '@/services/job-trigger.service';
+import { ServiceError } from '@/shared/errors/service-error';
+import { JOB_TASK } from '@/shared/enums/job-task';
 import { reportService } from '@/services/ai/report.service';
 import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
 
@@ -54,48 +50,56 @@ describe('AI Diagnosis Routes: manual inspection trigger', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (triggerJob as jest.Mock).mockResolvedValue({ requestId: 'req-1' });
     app = express();
     app.use(express.json());
     app.use(responseFormatter);
     app.use('/api/ai/diagnosis', aiDiagnosisRoutes);
   });
 
-  it('accepts a manual trigger with explicit realm and date', async () => {
+  it('accepts a manual trigger with explicit realm and date via SCF invoke', async () => {
     const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: 'realm3', date: '2026-08-22' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data).toEqual({ accepted: true, realm: 'realm3', date: '2026-08-22' });
-    expect(inspectionService.run).toHaveBeenCalledWith({ realm: 'realm3', date: '2026-08-22', trigger: 'manual' });
+    expect(res.body.data).toEqual({ accepted: true, requestId: 'req-1', realm: 'realm3', date: '2026-08-22' });
+    expect(triggerJob).toHaveBeenCalledWith(JOB_TASK.INSPECTION, { realm: 'realm3', date: '2026-08-22', trigger: 'manual' });
   });
 
-  it('defaults the date to yesterday when omitted', async () => {
-    const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: 'realm3' });
+  it('passes omitted realm/date through for the task-side defaults', async () => {
+    const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({});
 
-    expect(res.body.success).toBe(true);
-    const call = (inspectionService.run as jest.Mock).mock.calls[0][0] as { date: string };
-    expect(call.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(call.trigger).toBe('manual');
+    expect(res.status).toBe(200);
+    expect(triggerJob).toHaveBeenCalledWith(JOB_TASK.INSPECTION, { realm: undefined, trigger: 'manual' });
+    expect(res.body.data).toEqual({ accepted: true, requestId: 'req-1', realm: null, date: null });
   });
 
-  it('rejects an empty realm with 400 without entering the inspection flow', async () => {
+  it('rejects an empty realm with 400 without triggering', async () => {
     const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: '' });
 
     expect(res.status).toBe(400);
-    expect(inspectionService.run).not.toHaveBeenCalled();
+    expect(triggerJob).not.toHaveBeenCalled();
+  });
+
+  it('rejects a realm containing whitespace with 400 (argv-safe params)', async () => {
+    const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: 'realm 3' });
+
+    expect(res.status).toBe(400);
+    expect(triggerJob).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed date with 400', async () => {
     const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: 'realm3', date: '20260822' });
     expect(res.status).toBe(400);
+    expect(triggerJob).not.toHaveBeenCalled();
   });
 
-  it('responds immediately even when the background inspection fails', async () => {
-    (inspectionService.run as jest.Mock).mockRejectedValueOnce(new Error('llm down'));
-    const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: 'realm3', date: '2026-08-22' });
+  it('maps trigger ServiceError status (e.g. 502 when SCF is unconfigured)', async () => {
+    (triggerJob as jest.Mock).mockRejectedValueOnce(new ServiceError('SCF 触发未配置：缺少环境变量 TENCENT_SCF_REGION（见 .env.example）', 502));
+    const res = await request(app).post('/api/ai/diagnosis/inspection/trigger').send({ realm: 'realm3' });
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.accepted).toBe(true);
+    expect(res.status).toBe(502);
+    expect(res.body.error).toContain('TENCENT_SCF_REGION');
   });
 });
 
@@ -196,7 +200,7 @@ describe('AI Diagnosis Routes: report query (T4.1)', () => {
     expect(res.body.data).toEqual({ success: true });
     expect(reportService.remove).toHaveBeenCalledWith('realm3', '2026-08-23', 0, '');
 
-    (reportService.remove as jest.Mock).mockRejectedValueOnce(new ReportedServiceError('报告不存在', 404));
+    (reportService.remove as jest.Mock).mockRejectedValueOnce(new ServiceError('报告不存在', 404));
     const missing = await request(app).delete('/api/ai/diagnosis/reports/realm3/2026-08-23');
     expect(missing.status).toBe(404);
   });
@@ -243,7 +247,7 @@ describe('AI Diagnosis Routes: PUT /reports/:realm/:date (T4.7)', () => {
   });
 
   it('maps ServiceError 404 when the report is absent', async () => {
-    (reportService.update as jest.Mock).mockRejectedValueOnce(new ReportedServiceError('报告不存在', 404));
+    (reportService.update as jest.Mock).mockRejectedValueOnce(new ServiceError('报告不存在', 404));
     const res = await request(app).put('/api/ai/diagnosis/reports/realm3/2001-01-01').send({ gmRemark: 'x' });
     expect(res.status).toBe(404);
   });

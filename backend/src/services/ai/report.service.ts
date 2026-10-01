@@ -6,7 +6,7 @@ import { yesterdayCST } from '@/shared/utils/cst-date.util';
 import { auditLogService } from '@/services/audit-log.service';
 import { auditLogRepository } from '@/repositories/audit-log.repository';
 import { characterRepository } from '@/repositories/character.repository';
-import { ServiceError } from './anticheat-exemption.service';
+import { ServiceError } from '@/shared/errors/service-error';
 
 // 报告查询与管理（T4.1/T4.7 前置，arch 4.2 报告页数据源）：列表（摘要列）/ 详情（全量 JSON+Markdown）/
 // 近 N 天 COS 日志上传状态 / 删除（gmlevel=3，审计）。巡检写路径在 inspection.service。

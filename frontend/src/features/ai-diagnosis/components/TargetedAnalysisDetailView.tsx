@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog } from '@/shared/components/Dialog';
+import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 import { toast } from '@/shared/utils/toast.util';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { useDeleteTargetedAnalysis, useTargetedDetail, useUpdateTargetedAnalysis } from '../hooks/useTargetedAnalysis';
 import type { AnalysisConclusion } from '../api/ai-analysis.api';
-import { ConclusionCard } from './TargetedAnalysisRunner';
+import { ConclusionCard } from './ConclusionCard';
 import { RemarkEditDialog } from './RemarkEditDialog';
 import { STATUS_LABEL, STATUS_STYLE } from './TargetedHistoryList';
 
@@ -30,11 +30,7 @@ export function TargetedAnalysisDetailView({ id }: { id: number }) {
   const [confirmText, setConfirmText] = useState('');
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> 加载中...
-      </div>
-    );
+    return <DetailPageSkeleton infoRows={6} tables={2} />;
   }
   if (isError || !detail) {
     return <div className="py-10 text-center text-sm text-destructive">详情加载失败</div>;
@@ -108,7 +104,7 @@ export function TargetedAnalysisDetailView({ id }: { id: number }) {
         </div>
       ) : !concluded ? (
         <div className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
-          该分析仍在进行中，尚未落库结论，可稍后刷新重试。
+          该分析正在后台执行中，本页会自动刷新，结论落库后直接展示。
         </div>
       ) : polishing ? (
         <div className="space-y-3">
@@ -172,7 +168,7 @@ export function TargetedAnalysisDetailView({ id }: { id: number }) {
       <Dialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="删除定向分析记录"
+        title="删除深度分析记录"
         footer={
           <div className="flex justify-end gap-2">
             <button onClick={() => setConfirmOpen(false)} className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent">
@@ -199,7 +195,7 @@ export function TargetedAnalysisDetailView({ id }: { id: number }) {
       >
         <div className="space-y-3 text-sm">
           <p>
-            将永久删除 <span className="font-medium">#{detail.id} {detail.subjectName}</span> 的定向分析记录，删除操作会记录审计日志。
+            将永久删除 <span className="font-medium">#{detail.id} {detail.subjectName}</span> 的深度分析记录，删除操作会记录审计日志。
           </p>
           <p className="text-muted-foreground">请输入记录编号 {detail.id} 以确认：</p>
           <input

@@ -7,7 +7,8 @@ jest.mock('@/services/audit-log.service', () => ({
 
 import { acmDataSource } from '@/config/database';
 import { auditLogService } from '@/services/audit-log.service';
-import { ServiceError, anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
+import { ServiceError } from '@/shared/errors/service-error';
+import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
 
 const getRepository = acmDataSource.getRepository as jest.Mock;
 const record = auditLogService.record as jest.Mock;

@@ -54,7 +54,7 @@ router.get(
     const page = (req.query.page as unknown as number) ?? 1;
     const pageSize = (req.query.pageSize as unknown as number) ?? 20;
     const result = await gmToolService.mailLogs(page, pageSize, req.query.target as string | undefined);
-    res.jsonSuccess(result.items, result.total);
+    res.jsonSuccess({ items: result.items, total: result.total }, result.total);
   }),
 );
 

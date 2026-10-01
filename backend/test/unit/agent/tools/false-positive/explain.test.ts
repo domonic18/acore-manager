@@ -43,13 +43,62 @@ describe('explainSuspect', () => {
     expect(signals.filter((s) => s.kind === 'latency')).toHaveLength(1);
   });
 
-  it('high latency + aura yields multiple signals and review action', () => {
+  it('high latency + aura yields multiple signals and warning action', () => {
     const signals = explainSuspect({ ...BASE, latency: { min: 180, max: 260, avg: 230 } }, { auraSpells: [546] });
     expect(signals.map((s) => s.kind).sort()).toEqual(['aura', 'latency']);
-    expect(suggestAction(signals)).toBe('review');
+    expect(suggestAction(signals)).toBe('warning');
   });
 
   it('empty signals mean investigate', () => {
     expect(suggestAction(explainSuspect(BASE))).toBe('investigate');
+  });
+
+  it('fires the map33×zaxis false-ban scenario but not other types on the same map', () => {
+    const sfk = explainSuspect({ ...BASE, type: 'zaxis', mapId: 33 });
+    expect(sfk.filter((s) => s.kind === 'map')).toHaveLength(1);
+    expect(sfk[0].detail).toContain('影牙城堡');
+    expect(suggestAction(sfk)).toBe('warning');
+
+    // 同地图其他类型不命中场景库（避免一刀切放行同地图真作弊）
+    expect(explainSuspect({ ...BASE, mapId: 33 }).filter((s) => s.kind === 'map')).toHaveLength(0);
+  });
+
+  it('flags speed magnitude tier-jump only in non-continuous patterns', () => {
+    // 坐骑状态切换惯性：中位 +100%（一个档位跳变）且 pulsed
+    const mountInertia = explainSuspect({
+      ...BASE,
+      type: 'speed',
+      magnitude: { min: 100, median: 100, max: 104 },
+      allowedRates: [7],
+      pattern: 'pulsed',
+      interval: { minGapSec: 60, medianGapSec: 132, burst60s: 2 },
+    });
+    expect(mountInertia.filter((s) => s.kind === 'magnitude')).toHaveLength(1);
+    expect(mountInertia.filter((s) => s.kind === 'pattern')).toHaveLength(1);
+    expect(suggestAction(mountInertia)).toBe('warning');
+
+    // 连续形态的 +100% 更可能是真实加速，不标注
+    const continuous = explainSuspect({
+      ...BASE,
+      type: 'speed',
+      magnitude: { min: 96, median: 100, max: 110 },
+      pattern: 'continuous',
+      interval: { minGapSec: 0, medianGapSec: 20, burst60s: 9 },
+    });
+    expect(continuous.filter((s) => s.kind === 'magnitude' || s.kind === 'pattern')).toHaveLength(0);
+    expect(suggestAction(continuous)).toBe('investigate');
+  });
+
+  it('flags single teleport as lacking continuity evidence', () => {
+    const single = explainSuspect({ ...BASE, type: 'teleportplane', pattern: 'single' });
+    expect(single.map((s) => s.kind)).toEqual(['pattern']);
+    // 连续多次坐标跳变不标注
+    expect(explainSuspect({ ...BASE, type: 'teleportplane', pattern: 'continuous' })).toEqual([]);
+  });
+
+  it('does not apply pattern signal to geometry-driven zaxis type', () => {
+    // 影牙案例 2：8 分钟 260 条 zaxis 也是误封——zaxis 计数/形态不具判据意义
+    const signals = explainSuspect({ ...BASE, type: 'zaxis', mapId: 33, pattern: 'continuous' });
+    expect(signals.map((s) => s.kind)).toEqual(['map']);
   });
 });

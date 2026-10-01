@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useSoapTest, useSystemConfig, useUpdateSystemConfig } from '../hooks/useSystemConfig';
 import { toast } from '@/shared/utils/toast.util';
 import { PlayCircle } from 'lucide-react';
+import { Skeleton } from '@/shared/components/Skeleton';
 
 const inputClass =
   'w-full px-3 py-2 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring';
@@ -118,7 +119,20 @@ export function SystemConfigForm() {
   };
 
   if (isLoading) {
-    return <div className='text-sm text-muted-foreground'>加载中…</div>;
+    // 表单区块骨架：与加载后的配置分区卡（标题 + 说明 + 表单项）同构
+    return (
+      <div className='max-w-2xl space-y-6' aria-busy='true' aria-label='系统配置加载中'>
+        {Array.from({ length: 3 }, (_, i) => (
+          <section key={i} className='rounded-lg border border-border bg-card p-4 space-y-3'>
+            <Skeleton className='h-5 w-24' />
+            <Skeleton className='h-3 w-3/4' />
+            <Skeleton className='h-3 w-1/2' />
+            <Skeleton className='h-9 w-full' />
+            <Skeleton className='h-9 w-full' />
+          </section>
+        ))}
+      </div>
+    );
   }
 
   const soapFromEnv = config?.soap.source === 'env';

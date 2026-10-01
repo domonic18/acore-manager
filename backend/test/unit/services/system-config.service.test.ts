@@ -23,16 +23,6 @@ jest.mock('@/config/database', () => ({
 jest.mock('@/services/audit-log.service', () => ({
   auditLogService: { record: jest.fn().mockResolvedValue(undefined) },
 }));
-jest.mock('@/services/ai/llm-config.service', () => ({
-  ServiceError: class ServiceError extends Error {
-    constructor(
-      message: string,
-      public status: number,
-    ) {
-      super(message);
-    }
-  },
-}));
 jest.mock('@/shared/utils/aes.util', () => ({
   encryptToken: jest.fn((v: string) => `enc:${v}`),
   decryptToken: jest.fn((v: string) => v.replace(/^enc:/, '')),
@@ -131,6 +121,15 @@ describe('getView', () => {
     expect(view.soap).toMatchObject({ host: 'db.host', port: 7878, username: 'dbuser', source: 'db' });
     expect(view.soap.passwordMasked).toBe('***1234');
     expect(view.updatedAt).toBe('2026-09-25T00:00:00.000Z');
+  });
+
+  it('配置库故障时回落环境变量默认值且 updatedAt 为 null（不抛 500）', async () => {
+    find.mockRejectedValue(new Error('relation "acm_system_config" does not exist'));
+    const view = await systemConfigService.getView();
+    expect(view.defaultRealm).toBe(DEFAULT_REALM_FALLBACK);
+    expect(view.soap.source).toBe('env');
+    expect(view.soap.passwordMasked).toBeNull();
+    expect(view.updatedAt).toBeNull();
   });
 });
 

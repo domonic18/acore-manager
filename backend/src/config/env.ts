@@ -104,28 +104,36 @@ function parseSoapUrl(url?: string): SoapConn | null {
   };
 }
 
-export const dbConn = parseMysqlUrl(process.env.DB_URL) ?? {
+// 未显式配置而回落开发默认的连接键；生产环境据此 fail-fast（见文件末尾守卫）
+const devFallbackConnKeys: string[] = [];
+
+function fallbackConn<T>(key: string, conn: T): T {
+  devFallbackConnKeys.push(key);
+  return conn;
+}
+
+export const dbConn = parseMysqlUrl(process.env.DB_URL) ?? fallbackConn('DB_URL', {
   host: '127.0.0.1',
   port: 3306,
   user: 'acore',
   pass: 'acore',
-};
+});
 
 // acm 自有库连接（PostgreSQL），与游戏 MySQL（DB_URL）隔离
-export const acmDbConn = parsePgUrl(process.env.ACM_DB_URL) ?? {
+export const acmDbConn = parsePgUrl(process.env.ACM_DB_URL) ?? fallbackConn('ACM_DB_URL', {
   host: '127.0.0.1',
   port: 5433,
   user: 'acm',
   pass: 'acm',
   database: 'acm',
-};
+});
 
-export const redisConn = parseRedisUrl(process.env.REDIS_URL) ?? {
+export const redisConn = parseRedisUrl(process.env.REDIS_URL) ?? fallbackConn('REDIS_URL', {
   host: '127.0.0.1',
   port: 6379,
   password: '',
   db: 0,
-};
+});
 
 // SOAP 连接已支持系统配置页（acm_system_config）管理，DB 优先；此处 SOAP_URL 仅作未录入配置时的回落
 export const soapConn = parseSoapUrl(process.env.SOAP_URL) ?? {
@@ -164,12 +172,25 @@ export const env = {
   AI_AGENT_CACHE_SIZE: getEnvInt('AI_AGENT_CACHE_SIZE', 4),
   AI_TOOL_CALL_BUDGET: getEnvInt('AI_TOOL_CALL_BUDGET', 20),
   AI_TOOL_TIMEOUT_MS: getEnvInt('AI_TOOL_TIMEOUT_MS', 5000),
+  // 巡检重试总时间预算（ms）：默认 1h（Job 函数已开异步执行，平台上限 24h）——
+  // 覆盖弱模型最差情况（3 次 attempt 全跑满）仍有余量；剩余预算不足以完成下一轮
+  // 重试时快速失败（落 failed 行 + 飞书告警），避免无界重试或被平台外部击杀。
+  // 若部署在 900s 级非异步函数上，需相应调小（如 780000）
+  AI_INSPECTION_TIME_BUDGET_MS: getEnvInt('AI_INSPECTION_TIME_BUDGET_MS', 3_600_000),
 
-  // Tencent COS (log archive / AI report archive bucket, private-read; credentials are infra-level config)
-  COS_SECRET_ID: getEnv('COS_SECRET_ID', ''),
-  COS_SECRET_KEY: getEnv('COS_SECRET_KEY', ''),
+  // Tencent COS (log archive / AI report archive bucket, private-read)
   COS_BUCKET: getEnv('COS_BUCKET', ''),
   COS_REGION: getEnv('COS_REGION', ''),
+
+  // 腾讯云统一 API 密钥（SecretId/Key 一对）：SCF Job 触发签名与 COS 上传共用，不再单设 COS_SECRET_*
+  // 键名带 TENCENT_ 前缀：SCF_* 是腾讯云 SCF 运行时注入的保留前缀，用户配置同名会冲突报错（仿 SquadSight TENCENT_SCF_*）
+  TENCENT_SECRET_ID: getEnv('TENCENT_SECRET_ID', ''),
+  TENCENT_SECRET_KEY: getEnv('TENCENT_SECRET_KEY', ''),
+  TENCENT_SCF_REGION: getEnv('TENCENT_SCF_REGION', ''),
+  TENCENT_SCF_NAMESPACE: getEnv('TENCENT_SCF_NAMESPACE', 'default'),
+  TENCENT_SCF_JOB_FUNCTION_NAME: getEnv('TENCENT_SCF_JOB_FUNCTION_NAME', ''),
+  // 留空 = 腾讯云真实端点；联调云测试函数时可按需覆盖（同 AWS_ENDPOINT_URL 的端点覆盖惯例，非模式开关）
+  TENCENT_SCF_ENDPOINT: getEnv('TENCENT_SCF_ENDPOINT', ''),
 
 
   // Redis (connection via REDIS_URL)
@@ -194,3 +215,19 @@ export const env = {
 
 export const isDevelopment = env.NODE_ENV === 'development';
 export const isProduction = env.NODE_ENV === 'production';
+
+// 生产环境 fail-fast：密钥与数据源连接串必须显式提供，弱开发默认禁止静默生效。
+// NODE_ENV 缺省即 production，存量部署漏配将在此启动失败（期望行为，报错含修复指引）。
+// SOAP_URL 不列入：SOAP 已由系统配置页（acm_system_config）DB 优先管理，env 仅作开发回落。
+if (isProduction) {
+  const missing: string[] = [];
+  if (!process.env.JWT_SECRET) missing.push('JWT_SECRET');
+  if (!process.env.LLM_AES_KEY) missing.push('LLM_AES_KEY');
+  missing.push(...devFallbackConnKeys);
+  if (missing.length > 0) {
+    throw new Error(
+      `[config] 生产环境缺少必需配置: ${missing.join(', ')}——请在环境变量中显式提供（参考 .env.example），弱开发默认值已被拒绝` +
+        ` / Missing required production configuration: ${missing.join(', ')}. Set them explicitly via environment variables (see .env.example).`,
+    );
+  }
+}

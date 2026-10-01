@@ -1,5 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import { ChartCardSkeleton } from '@/shared/components/Skeleton';
 import type { DistributionItem, FriendTopCharacter } from '../api/dashboard.api';
 
 const FRIEND_BUCKET_LABELS: Record<number, string> = {
@@ -43,11 +44,8 @@ export default function FriendStats({ distribution, topCharacters, loading = fal
   if (loading) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {[1, 2].map((i) => (
-          <div key={i} className="rounded-lg border border-border bg-card p-6 animate-pulse">
-            <div className="h-4 bg-muted rounded w-1/3 mb-4" />
-            <div className="h-64 bg-muted rounded" />
-          </div>
+        {['好友数量分布', '好友数量 Top 5 角色'].map((name) => (
+          <ChartCardSkeleton key={name} label={`${name}加载中`} />
         ))}
       </div>
     );

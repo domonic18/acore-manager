@@ -71,6 +71,13 @@ export interface ExemptionInput {
   reason: string;
 }
 
+export interface TriggerInspectionResult {
+  accepted: boolean;
+  requestId: string | null;
+  realm: string | null;
+  date: string | null;
+}
+
 export const aiDiagnosisApi = {
   reports: (realm?: string) =>
     apiClient.get<AiReportSummary[]>(`/api/ai/diagnosis/reports${realm ? `?realm=${encodeURIComponent(realm)}` : ''}`),
@@ -94,4 +101,7 @@ export const aiDiagnosisApi = {
   exemptionsByGuids: (guids: number[]) => apiClient.get<ExemptionItem[]>(`/api/ai/diagnosis/exemptions?guids=${guids.join(',')}`),
   createExemption: (input: ExemptionInput) => apiClient.post<ExemptionItem>('/api/ai/diagnosis/exemptions', input),
   violationTypes: () => apiClient.get<string[]>('/api/ai/diagnosis/exemptions/types'),
+  // 立即巡检（gm3）：SCF Invoke 异步受理即返回；realm/date 空则由 Job 侧缺省（default_realm / CST 昨日）
+  triggerInspection: (input: { realm?: string; date?: string }) =>
+    apiClient.post<TriggerInspectionResult>('/api/ai/diagnosis/inspection/trigger', input),
 };

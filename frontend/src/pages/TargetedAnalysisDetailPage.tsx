@@ -12,7 +12,7 @@ export default function TargetedAnalysisDetailPage() {
   return (
     <div className="space-y-4">
       <Link to="/ai-diagnosis/targeted" className="text-sm text-primary hover:underline">
-        ← 返回定向分析
+        ← 返回深度分析
       </Link>
       <TargetedAnalysisDetailView id={numId} />
     </div>

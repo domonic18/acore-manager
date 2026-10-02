@@ -22,12 +22,55 @@ export interface LatestInspection {
   healthScore: number;
 }
 
+export interface OnlineAccountIpRow {
+  guid: number;
+  accountId: number;
+  name: string;
+  level: number;
+  race: number;
+  class: number;
+  username: string;
+  ip: string;
+}
+
 class DashboardRepository {
   async getOnlinePlayersCount(): Promise<number> {
     const result = await charactersDataSource.query(
       'SELECT COUNT(*) as count FROM characters WHERE online = 1 AND account != 0',
     );
     return parseInt(result[0]?.count || '0', 10);
+  }
+
+  // 同 IP 多开检测原始行：跨库单 JOIN（走 characters.idx_online 索引；同 getAccountsWithoutCharacters 的库资格先例）
+  // 假设单 characters 库部署；若未来每 realm 独立库需按库聚合
+  async getOnlineAccountIps(): Promise<OnlineAccountIpRow[]> {
+    const result = await authDataSource.query(
+      `SELECT c.guid, c.account, c.name, c.level, c.race, c.class, a.username, a.last_ip
+      FROM \`${env.DB_CHARACTERS}\`.characters c
+      JOIN account a ON a.id = c.account
+      WHERE c.online = 1 AND c.account != 0`,
+    );
+    return result.map(
+      (row: {
+        guid: number | string;
+        account: number | string;
+        name: string;
+        level: number | string;
+        race: number | string;
+        class: number | string;
+        username: string;
+        last_ip: string | null;
+      }) => ({
+        guid: Number(row.guid),
+        accountId: Number(row.account),
+        name: String(row.name ?? ''),
+        level: Number(row.level),
+        race: Number(row.race),
+        class: Number(row.class),
+        username: String(row.username ?? ''),
+        ip: String(row.last_ip ?? ''),
+      }),
+    );
   }
 
   async getNewAccountsToday(todayStr: string): Promise<number> {

@@ -29,7 +29,7 @@ jest.mock('@/middleware/request-logger', () => ({
 import { acmDataSource } from '@/config/database';
 import { abusePatrolService, FindingCandidate, formatCstDateTime } from '@/services/abuse-patrol.service';
 import { abusePatrolRepository, BattlePlayerRow, OnlineSnapshotRow } from '@/repositories/abuse-patrol.repository';
-import { readInspectionTrustedIps, readRuntimeValues } from '@/config/system-config.reader';
+import { readRuntimeValues } from '@/config/system-config.reader';
 import { feishuNotifyService } from '@/services/ai/feishu-notify.service';
 
 const getRecentBattles = abusePatrolRepository.getRecentBattles as jest.Mock;

@@ -94,7 +94,7 @@ export function AppLayout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 md:relative md:translate-x-0 bg-card border-r border-border',
+          'fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0 bg-card border-r border-border',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -190,6 +190,21 @@ export function AppLayout() {
           >
             <Menu className="w-6 h-6" />
           </button>
+          <NavLink
+            to="/system-config"
+            title="设置"
+            aria-label="设置"
+            className={({ isActive }) =>
+              cn(
+                'ml-auto flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                isActive
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+              )
+            }
+          >
+            <Settings className="w-5 h-5" />
+          </NavLink>
         </header>
 
         {/* Page Content */}

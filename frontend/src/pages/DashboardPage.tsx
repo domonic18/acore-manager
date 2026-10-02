@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useDashboardStats, useHealthDetail } from '@/features/dashboard/hooks/useDashboard';
 import ServerStatusCard from '@/features/dashboard/components/ServerStatusCard';
@@ -11,6 +12,8 @@ import FriendStats from '@/features/dashboard/components/FriendStats';
 export default function DashboardPage() {
   const { data: stats, isLoading, dataUpdatedAt } = useDashboardStats();
   const { data: health } = useHealthDetail();
+  // 受控 details：收起时不渲染内容（closed details 在 Chromium 仍占布局），并顺带延迟加载图表
+  const [moreOpen, setMoreOpen] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -35,23 +38,29 @@ export default function DashboardPage() {
         loading={isLoading}
       />
 
-      <details className="group/open rounded-lg border border-border bg-card">
+      <details
+        open={moreOpen}
+        onToggle={(e) => setMoreOpen(e.currentTarget.open)}
+        className="group/open rounded-lg border border-border bg-card"
+      >
         <summary className="flex cursor-pointer select-none items-center gap-2 px-5 py-3 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
           更多统计 · 账号角色与好友
         </summary>
-        <div className="space-y-4 border-t border-border p-5">
-          <div className="flex flex-wrap gap-x-8 gap-y-2">
-            <AccountMetric label="单账号最多角色" value={stats?.accountCharacters?.maxPerAccount ?? 0} />
-            <AccountMetric label="单账号最少角色" value={stats?.accountCharacters?.minPerAccount ?? 0} />
-            <AccountMetric label="无角色账号" value={stats?.accountCharacters?.accountsWithoutCharacters ?? 0} />
+        {moreOpen && (
+          <div className="space-y-4 border-t border-border p-5">
+            <div className="flex flex-wrap gap-x-8 gap-y-2">
+              <AccountMetric label="单账号最多角色" value={stats?.accountCharacters?.maxPerAccount ?? 0} />
+              <AccountMetric label="单账号最少角色" value={stats?.accountCharacters?.minPerAccount ?? 0} />
+              <AccountMetric label="无角色账号" value={stats?.accountCharacters?.accountsWithoutCharacters ?? 0} />
+            </div>
+            <FriendStats
+              distribution={stats?.friends?.distribution ?? []}
+              topCharacters={stats?.friends?.topCharacters ?? []}
+              loading={isLoading}
+            />
           </div>
-          <FriendStats
-            distribution={stats?.friends?.distribution ?? []}
-            topCharacters={stats?.friends?.topCharacters ?? []}
-            loading={isLoading}
-          />
-        </div>
+        )}
       </details>
     </div>
   );

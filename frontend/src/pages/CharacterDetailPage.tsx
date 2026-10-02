@@ -31,7 +31,7 @@ export default function CharacterDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <button
-          onClick={() => navigate('/characters')}
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/characters'))}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           ← 返回列表

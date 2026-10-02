@@ -2,30 +2,23 @@ import { useState } from 'react';
 import { useCharacterList } from '@/features/character/hooks/useCharacter';
 import { CharacterTable } from '@/features/character/components/CharacterTable';
 import { PaginationBar } from '@/shared/components/PaginationBar';
+import { useListQueryParams } from '@/shared/hooks/useListQueryParams';
 
-const ONLINE_ONLY_KEY = 'acm.characters.onlineOnly';
-
-function readOnlineOnlyPref(): boolean {
-  return localStorage.getItem(ONLINE_ONLY_KEY) !== '0';
-}
-
+// 筛选/翻页状态持久化在 URL（online 默认仅在线，online=0 表示全部），
+// 进出详情返回后恢复，深链可直达。搜索提交产生历史记录（replace:false）。
 export default function CharacterListPage() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [includeDeleted, setIncludeDeleted] = useState(false);
-  const [onlineOnly, setOnlineOnly] = useState(readOnlineOnlyPref);
+  const { params, set } = useListQueryParams();
+
+  const search = params.get('q') ?? '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const includeDeleted = params.get('deleted') === '1';
+  const onlineOnly = params.get('online') !== '0';
+  const [searchInput, setSearchInput] = useState(search);
+
   const { data, isLoading } = useCharacterList({ page, pageSize: 20, search, includeDeleted, online: onlineOnly });
 
-  const handleOnlineOnlyChange = (value: boolean) => {
-    setOnlineOnly(value);
-    localStorage.setItem(ONLINE_ONLY_KEY, value ? '1' : '0');
-    setPage(1);
-  };
-
   const handleSearch = () => {
-    setSearch(searchInput);
-    setPage(1);
+    set({ q: searchInput || null, page: null }, { replace: false });
   };
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
@@ -37,7 +30,7 @@ export default function CharacterListPage() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="inline-flex rounded-md border border-border p-0.5">
             <button
-              onClick={() => handleOnlineOnlyChange(true)}
+              onClick={() => set({ online: null, page: null })}
               className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                 onlineOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-accent-foreground'
               }`}
@@ -45,7 +38,7 @@ export default function CharacterListPage() {
               仅在线
             </button>
             <button
-              onClick={() => handleOnlineOnlyChange(false)}
+              onClick={() => set({ online: '0', page: null })}
               className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                 !onlineOnly ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-accent-foreground'
               }`}
@@ -57,7 +50,7 @@ export default function CharacterListPage() {
             <input
               type="checkbox"
               checked={includeDeleted}
-              onChange={(e) => { setIncludeDeleted(e.target.checked); setPage(1); }}
+              onChange={(e) => set({ deleted: e.target.checked ? '1' : null, page: null })}
               className="rounded border-border"
             />
             显示已删除角色
@@ -81,7 +74,7 @@ export default function CharacterListPage() {
 
       <CharacterTable rows={data?.items ?? []} loading={isLoading} />
 
-      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} loading={isLoading} />
+      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={(p) => set({ page: p > 1 ? p : null })} loading={isLoading} />
     </div>
   );
 }

@@ -1,10 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { characterApi } from '../api/character.api';
 
 export function useCharacterList(params: { page?: number; pageSize?: number; search?: string; includeDeleted?: boolean; online?: boolean }) {
   return useQuery({
     queryKey: ['characters', 'list', params],
     queryFn: () => characterApi.list(params),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountApi } from '../api/account.api';
 
 export function useAccountList(params: {
@@ -15,6 +15,7 @@ export function useAccountList(params: {
   return useQuery({
     queryKey: ['accounts', 'list', params],
     queryFn: () => accountApi.list(params),
+    placeholderData: keepPreviousData,
   });
 }
 

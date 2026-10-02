@@ -49,3 +49,4 @@ tmp/
 *.pid.lock
 
 .cc-connect
+.playwright-mcp

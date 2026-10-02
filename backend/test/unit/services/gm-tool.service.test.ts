@@ -88,6 +88,32 @@ describe('GmToolService', () => {
       expect(sendCommand).toHaveBeenNthCalledWith(2, expect.stringContaining('.send mail Treepress "违规警告" "亲爱的 Treepress：2026-08-22 检测到 加速违规，请立即停止。"'));
     });
 
+    it('prefers per-target reasonsByTarget over the shared reason and falls back when a target misses', async () => {
+      await gmToolService.sendMail(
+        mailInput({
+          targets: ['Unparalleled', 'Treepress'],
+          body: '亲爱的 {player}：{date} 因 {reason} 被警告。',
+          reason: '多次违规',
+          reasonsByTarget: { Unparalleled: '触发 Speed-Hack 举报 3 次' },
+          reportDate: '2026-10-01',
+        }),
+      );
+
+      expect(sendCommand).toHaveBeenNthCalledWith(1, expect.stringContaining('亲爱的 Unparalleled：2026-10-01 因 触发 Speed-Hack 举报 3 次 被警告。'));
+      expect(sendCommand).toHaveBeenNthCalledWith(2, expect.stringContaining('亲爱的 Treepress：2026-10-01 因 多次违规 被警告。'));
+    });
+
+    it('renders empty {reason}/{date} when neither reasonsByTarget nor reason is provided (legacy callers)', async () => {
+      await gmToolService.sendMail(
+        mailInput({
+          targets: ['Unparalleled'],
+          body: '亲爱的 {player}：{date} 因 {reason} 被警告。',
+        }),
+      );
+
+      expect(sendCommand).toHaveBeenCalledWith(expect.stringContaining('亲爱的 Unparalleled： 因  被警告。'));
+    });
+
     it('isolates a failing target without affecting the others', async () => {
       sendCommand.mockRejectedValueOnce(new Error('SOAP timeout'));
       const { results } = await gmToolService.sendMail(mailInput({ targets: ['Unparalleled', 'Treepress'] }));

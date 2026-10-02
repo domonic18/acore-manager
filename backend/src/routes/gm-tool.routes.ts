@@ -70,6 +70,9 @@ router.post(
     body('body').isString().trim().isLength({ min: 1, max: 500 }),
     body('source').optional().isIn(['template', 'custom']),
     body('refReport').optional().isString().trim().isLength({ max: 64 }),
+    body('reasonsByTarget').optional().isObject(),
+    body('reasonsByTarget.*').optional().isString().trim().isLength({ max: 300 }),
+    body('reportDate').optional().isString().trim().matches(/^\d{4}-\d{2}-\d{2}$/),
   ],
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -84,6 +87,8 @@ router.post(
         body: req.body.body as string,
         source: (req.body.source as 'template' | 'custom') ?? 'custom',
         refReport: req.body.refReport as string | undefined,
+        reasonsByTarget: req.body.reasonsByTarget as Record<string, string> | undefined,
+        reportDate: req.body.reportDate as string | undefined,
         operatorId: req.user?.id || 0,
         operatorName: req.user?.username || '',
       });

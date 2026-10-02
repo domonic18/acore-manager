@@ -16,7 +16,10 @@ export interface MailSendInput {
   body: string;
   source: 'template' | 'custom';
   refReport?: string;
+  /** 共享 {reason} 兜底（目标无逐项概要时使用） */
   reason?: string;
+  /** 逐目标违规概要，key 为角色名；巡检报告处置联动按玩家各自 reasons 传入 */
+  reasonsByTarget?: Record<string, string>;
   reportDate?: string;
   operatorId: number;
   operatorName: string;
@@ -131,8 +134,10 @@ export class GmToolService {
     const results: MailTargetResult[] = [];
     for (const name of names) {
       const basic = byName.get(name);
-      // GM 编辑的是含占位符的模板文本：逐目标渲染 {player}/{reason}/{date} 后发送
-      const rendered = renderTemplate({ subject, body }, { player: name, reason: input.reason ?? '', date: input.reportDate ?? '' });
+      // GM 编辑的是含占位符的模板文本：逐目标渲染 {player}/{reason}/{date} 后发送；
+      // {reason} 取该玩家自己的违规概要，无逐项时回落共享 reason
+      const reason = input.reasonsByTarget?.[name] ?? input.reason ?? '';
+      const rendered = renderTemplate({ subject, body }, { player: name, reason, date: input.reportDate ?? '' });
       const result = await this.sendToTarget(name, basic, rendered, input);
       results.push(result);
     }

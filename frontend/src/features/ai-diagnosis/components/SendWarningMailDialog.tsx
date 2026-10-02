@@ -10,7 +10,8 @@ import type { MarkFalsePositiveTarget } from './MarkFalsePositiveDialog';
 
 export interface SendWarningMailDialogProps {
   targets: MarkFalsePositiveTarget[];
-  reason: string;
+  /** 逐目标违规概要（{reason} 占位符），key 为角色名 */
+  reasonsByTarget: Record<string, string>;
   reportDate: string;
   refReport: string;
   open: boolean;
@@ -23,7 +24,7 @@ function renderPreview(text: string, player: string, reason: string, date: strin
   return text.replace(/\{player\}/g, player).replace(/\{reason\}/g, reason).replace(/\{date\}/g, date);
 }
 
-export function SendWarningMailDialog({ targets, reason, reportDate, refReport, open, onClose }: SendWarningMailDialogProps) {
+export function SendWarningMailDialog({ targets, reasonsByTarget, reportDate, refReport, open, onClose }: SendWarningMailDialogProps) {
   const { data: template } = useMailTemplate(open);
   const sendMail = useSendWarningMail();
   const [phase, setPhase] = useState<Phase>('edit');
@@ -41,13 +42,22 @@ export function SendWarningMailDialog({ targets, reason, reportDate, refReport, 
   }, [open, template]);
 
   const previewName = targets[0]?.name ?? '';
-  const previewBody = renderPreview(body, previewName, reason, reportDate);
+  // 预览按第一个目标渲染（与发送时逐目标替换 {reason} 同规则）
+  const previewBody = renderPreview(body, previewName, reasonsByTarget[previewName] ?? '', reportDate);
   const okCount = results.filter((r) => r.ok).length;
   const failCount = results.length - okCount;
 
   const handleSubmit = (): void => {
     sendMail.mutate(
-      { targets: targets.map((t) => t.name), subject, body, source: 'custom', refReport },
+      {
+        targets: targets.map((t) => t.name),
+        subject,
+        body,
+        source: 'custom',
+        refReport,
+        reasonsByTarget,
+        reportDate,
+      },
       {
         onSuccess: (data) => {
           setResults(data.results);

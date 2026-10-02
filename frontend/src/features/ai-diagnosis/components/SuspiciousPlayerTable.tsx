@@ -5,7 +5,7 @@ import { useExemptionsByGuids } from '@/features/ai-diagnosis/hooks/useAiDiagnos
 import { useRowSelection } from '@/shared/hooks/useRowSelection';
 import { MarkFalsePositiveDialog, type MarkFalsePositiveTarget } from './MarkFalsePositiveDialog';
 import { SendWarningMailDialog } from './SendWarningMailDialog';
-import { AiAdviceCell, ACTION_LABEL, SEVERITY_LABEL, SEVERITY_STYLE } from './AiAdviceCell';
+import { AiAdviceCell, SEVERITY_LABEL, SEVERITY_STYLE } from './AiAdviceCell';
 
 // 可疑玩家处置表（T4.3）：卡片列表升级为可勾选表格，角色/账号富化 ID 跳转详情，
 // 行内/批量标记误报（豁免白名单落库）。guid 缺失（已删除角色）降级纯文本且不可勾选。
@@ -45,14 +45,17 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
     setDialogOpen(true);
   };
 
-  // 警告邮件违规概要（{reason} 占位符）：按选中玩家的最高严重度生成
-  const mailReason = (() => {
-    const rank: Record<string, number> = { high: 0, medium: 1, low: 2 };
-    const worst = [...players].filter((p) => p.characterGuid != null && selected.has(p.characterGuid)).sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9))[0];
-    const label = worst ? (SEVERITY_LABEL[worst.severity] ?? worst.severity) : '';
-    const action = worst ? (ACTION_LABEL[worst.suggestedAction] ?? '') : '';
-    return action ? `${action}（${label}）` : `多次违规行为（${label}）`;
-  })();
+  // 警告邮件违规概要（{reason} 占位符）：逐目标取该玩家自己的 reasons 行为数组
+  //（AI 建议标签如"建议人工核查"是处置意见，不是行为，不得作为 reason）
+  const reasonsByTarget = useMemo(() => {
+    const compose = (p: SuspiciousPlayer): string => {
+      const list = (p.reasons ?? []).filter(Boolean).slice(0, 3);
+      return list.length > 0 ? list.join('；') : '存在可疑行为，请遵守服务器规则';
+    };
+    return Object.fromEntries(
+      ordered.filter((p) => p.characterGuid != null && selected.has(p.characterGuid)).map((p) => [p.character, compose(p)]),
+    );
+  }, [ordered, selected]);
 
   if (players.length === 0) {
     return <div className="py-6 text-center text-sm text-muted-foreground">本日无可疑玩家</div>;
@@ -212,7 +215,7 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
 
       <SendWarningMailDialog
         targets={targets}
-        reason={mailReason}
+        reasonsByTarget={reasonsByTarget}
         reportDate={reportDate}
         refReport={`${realm}:${reportDate}`}
         open={mailOpen}

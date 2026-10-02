@@ -25,6 +25,7 @@ export const SYSTEM_CONFIG_KEYS = {
   loginCaptchaEnabled: 'login_captcha_enabled',
   loginCaptchaTtlSeconds: 'login_captcha_ttl_seconds',
   inspectionTrustedIps: 'inspection_trusted_ips',
+  patrolBgCursor: 'patrol_bg_cursor',
 } as const;
 
 export const DEFAULT_REALM_FALLBACK = 'realm3';

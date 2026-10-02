@@ -99,4 +99,37 @@ router.post(
   }),
 );
 
+// 荣誉调整（守望者伪命令 wardenhonor，经 SOAP，仅在线玩家生效）：处罚级操作 gmlevel≥3 + 全量审计
+router.post(
+  '/honor-adjust',
+  authMiddleware,
+  requireGmLevel(3),
+  [
+    body('characterName').isString().trim().isLength({ min: 1, max: 12 }),
+    body('mode').isIn(['set', 'sub']),
+    body('value').isInt({ min: 0 }),
+    body('reason').optional().isString().trim().isLength({ max: 300 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const result = await gmToolService.adjustHonor({
+        characterName: req.body.characterName as string,
+        mode: req.body.mode as 'set' | 'sub',
+        value: req.body.value as number,
+        reason: req.body.reason as string | undefined,
+        operatorId: req.user?.id || 0,
+        operatorName: req.user?.username || '',
+      });
+      res.jsonSuccess(result);
+    } catch (err) {
+      res.jsonError((err as Error).message || '荣誉调整失败', 400);
+    }
+  }),
+);
+
 export default router;

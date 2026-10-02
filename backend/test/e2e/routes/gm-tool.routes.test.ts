@@ -113,6 +113,37 @@ describe('GM Tool Routes', () => {
     });
   });
 
+  describe('POST /api/gm/honor-adjust', () => {
+    const VALID_HONOR = { characterName: 'Unparalleled', mode: 'set', value: 0, reason: '互刷处罚' };
+
+    it('returns the per-target result', async () => {
+      (gmToolService.adjustHonor as jest.Mock).mockResolvedValueOnce({
+        name: 'Unparalleled',
+        ok: true,
+        message: '[warden] Unparalleled honor adjusted: 500 -> 0 (set 0)',
+      });
+
+      const res = await request(app).post('/api/gm/honor-adjust').send(VALID_HONOR);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ name: 'Unparalleled', ok: true });
+      expect(gmToolService.adjustHonor).toHaveBeenCalledWith(expect.objectContaining(VALID_HONOR));
+    });
+
+    it('rejects invalid mode, negative value and missing name with 400', async () => {
+      const badMode = await request(app).post('/api/gm/honor-adjust').send({ ...VALID_HONOR, mode: 'add' });
+      expect(badMode.status).toBe(400);
+
+      const negative = await request(app).post('/api/gm/honor-adjust').send({ ...VALID_HONOR, value: -5 });
+      expect(negative.status).toBe(400);
+
+      const noName = await request(app).post('/api/gm/honor-adjust').send({ ...VALID_HONOR, characterName: '' });
+      expect(noName.status).toBe(400);
+
+      expect(gmToolService.adjustHonor).not.toHaveBeenCalled();
+    });
+  });
+
   describe('GET /api/gm/mail/logs', () => {
     it('returns paginated per-target mail log items with total', async () => {
       (gmToolService.mailLogs as jest.Mock).mockResolvedValueOnce({

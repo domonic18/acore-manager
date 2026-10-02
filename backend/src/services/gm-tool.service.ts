@@ -57,7 +57,7 @@ function extractResultText(xml: string): string {
 }
 
 function isReceiptError(text: string): boolean {
-  return /ACErr|not found|不存在|错误|error/i.test(text);
+  return /ACErr|not found|not online|不存在|错误|error/i.test(text);
 }
 
 export interface MailLogItem {
@@ -197,6 +197,59 @@ export class GmToolService {
       }),
     });
   }
+
+  // 荣誉调整（守望者伪命令 warden-honor.lua）：SOAP 通道仅在线玩家生效，
+  // set <v> 设值（0 即清零）/ sub <v> 扣减下限 0；worldserver 回执原样回传给前端展示
+  async adjustHonor(input: HonorAdjustInput): Promise<HonorAdjustResult> {
+    const name = input.characterName.trim();
+    if (!name || name.length > 12) throw new Error('角色名不合法');
+    if (input.mode !== 'set' && input.mode !== 'sub') throw new Error('mode 需为 set 或 sub');
+    if (!Number.isInteger(input.value) || input.value < 0) throw new Error('value 需为非负整数');
+
+    const base: HonorAdjustResult = { name, ok: false, message: '' };
+    let resultText = '';
+    try {
+      const command = `.wardenhonor ${input.mode} ${sanitizeCommandArg(name)} ${input.value}`;
+      const raw = await soapService.sendCommand(command);
+      resultText = extractResultText(raw);
+      base.ok = !isReceiptError(resultText);
+      base.message = resultText || '已受理';
+    } catch (err) {
+      base.message = (err as Error).message || 'SOAP 命令失败';
+    }
+    await auditLogService
+      .record({
+        operatorId: input.operatorId,
+        operatorName: input.operatorName,
+        operation: 'gmtool.honor.adjust',
+        target: `name:${name}`,
+        details: JSON.stringify({
+          characterName: name,
+          mode: input.mode,
+          value: input.value,
+          reason: input.reason ?? '',
+          result: resultText || base.message,
+          ok: base.ok,
+        }),
+      })
+      .catch((err: unknown) => logger.error(`[gm-tool] honor adjust audit failed: ${(err as Error).message}`));
+    return base;
+  }
+}
+
+export interface HonorAdjustInput {
+  characterName: string;
+  mode: 'set' | 'sub';
+  value: number;
+  reason?: string;
+  operatorId: number;
+  operatorName: string;
+}
+
+export interface HonorAdjustResult {
+  name: string;
+  ok: boolean;
+  message: string;
 }
 
 export const gmToolService = new GmToolService();

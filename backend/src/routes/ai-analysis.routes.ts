@@ -4,6 +4,8 @@ import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
 import { ServiceError } from '@/shared/errors/service-error';
+import { auditLogService } from '@/services/audit-log.service';
+import { abusePatrolService } from '@/services/abuse-patrol.service';
 import { targetedAnalysisService, type TargetedAnalysisInput } from '@/services/ai/targeted-analysis.service';
 
 // 定向分析（T4.0 / arch 5.1）：POST /targeted 批量建行（≤10 对象）并异步触发 manager-job，
@@ -160,6 +162,73 @@ router.delete(
     try {
       await targetedAnalysisService.remove(parseInt(req.params.id, 10), req.user?.id || 0, req.user?.username || '');
       res.jsonSuccess({ success: true });
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+// 违规巡检发现（需求一/二）：列表 gmlevel≥1；处置流转 gmlevel≥2 + 审计
+router.get(
+  '/patrol-findings',
+  authMiddleware,
+  requireGmLevel(1),
+  [
+    query('date').optional().matches(DATE_RE),
+    query('type').optional().isIn(['bg_honor_farm', 'hardcore_carry']),
+    query('status').optional().isIn(['open', 'actioned', 'dismissed']),
+    query('page').optional().isInt({ min: 1 }).toInt(),
+    query('pageSize').optional().isInt({ min: 1, max: 50 }).toInt(),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    const page = (req.query.page as unknown as number) ?? 1;
+    const pageSize = (req.query.pageSize as unknown as number) ?? 20;
+    const result = await abusePatrolService.listFindings(
+      {
+        date: req.query.date as string | undefined,
+        type: req.query.type as string | undefined,
+        status: req.query.status as string | undefined,
+      },
+      page,
+      pageSize,
+    );
+    res.jsonSuccess(result.items, result.total);
+  }),
+);
+
+router.post(
+  '/patrol-findings/:id/status',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('id').isInt({ min: 1 }).toInt(), body('status').isIn(['open', 'actioned', 'dismissed'])],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const id = parseInt(req.params.id, 10);
+      const item = await abusePatrolService.updateFindingStatus(id, req.body.status);
+      if (!item) {
+        res.jsonError('Finding not found', 404);
+        return;
+      }
+      await auditLogService
+        .record({
+          operatorId: req.user?.id || 0,
+          operatorName: req.user?.username || '',
+          operation: 'patrol.finding.status',
+          target: `finding:${id}`,
+          details: JSON.stringify({ status: item.status, findingType: item.findingType, dedupeKey: item.dedupeKey }),
+        })
+        .catch(() => undefined);
+      res.jsonSuccess(item);
     } catch (err) {
       handleServiceError(res, err);
     }

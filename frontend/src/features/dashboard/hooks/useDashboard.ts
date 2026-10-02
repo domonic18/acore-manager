@@ -16,3 +16,12 @@ export function useHealthDetail() {
     refetchInterval: 30 * 1000,
   });
 }
+
+export function useDashboardTrends(days: number) {
+  return useQuery({
+    queryKey: ['dashboard', 'trends', days],
+    queryFn: () => dashboardApi.getTrends(days),
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+}

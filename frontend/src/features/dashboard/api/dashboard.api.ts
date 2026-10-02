@@ -62,7 +62,37 @@ export interface HealthDetail {
   };
 }
 
+export interface TrendPoint {
+  date: string;
+  newAccounts: number;
+  activeAccounts: number | null;
+  peakOnline: number | null;
+  bans: number;
+}
+
+export interface CumulativePoint {
+  date: string;
+  total: number;
+}
+
+export interface InspectionTrendPoint {
+  date: string;
+  realm: string;
+  healthScore: number;
+}
+
+export interface DashboardTrends {
+  days: number;
+  series: TrendPoint[];
+  cumulative: {
+    baseline: number;
+    points: CumulativePoint[];
+  };
+  inspections: InspectionTrendPoint[];
+}
+
 export const dashboardApi = {
   getStats: () => apiClient.get<DashboardStats>('/api/dashboard/stats'),
   getHealthDetail: () => apiClient.get<HealthDetail>('/api/health/detail'),
+  getTrends: (days: number) => apiClient.get<DashboardTrends>(`/api/dashboard/trends?days=${days}`),
 };

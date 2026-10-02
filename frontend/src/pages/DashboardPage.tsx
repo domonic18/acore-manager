@@ -3,11 +3,13 @@ import { ChevronRight } from 'lucide-react';
 import { useDashboardStats, useHealthDetail } from '@/features/dashboard/hooks/useDashboard';
 import ServerStatusCard from '@/features/dashboard/components/ServerStatusCard';
 import KpiRow from '@/features/dashboard/components/KpiRow';
+import OperationTrendChart from '@/features/dashboard/components/OperationTrendChart';
+import InspectionTrendChart from '@/features/dashboard/components/InspectionTrendChart';
 import PopulationStats from '@/features/dashboard/components/PopulationStats';
 import FriendStats from '@/features/dashboard/components/FriendStats';
 
-// 管理总览：L1 服务器运行状态 → L2 今日运营 KPI → L3 人口结构 → L4 弱信号折叠区
-// 设计目标：1440×900 一屏呈现 L1–L3，治理弱信号（账号角色/好友）默认收起
+// 管理总览：L1 服务器运行状态 → L2 今日运营 KPI → L3 运营趋势（宽图+巡检分）→ L4 人口结构 → L5 弱信号折叠区
+// 运营趋势读 acm PG 快照表（job 每日聚合），页面可滚动不追求一屏
 
 export default function DashboardPage() {
   const { data: stats, isLoading, dataUpdatedAt } = useDashboardStats();
@@ -29,6 +31,13 @@ export default function DashboardPage() {
       <ServerStatusCard realms={stats?.realms ?? []} health={health} loading={isLoading} />
 
       <KpiRow stats={stats} loading={isLoading} />
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+        <div className="xl:col-span-2 min-w-0">
+          <OperationTrendChart />
+        </div>
+        <InspectionTrendChart />
+      </div>
 
       <PopulationStats
         totalCharacters={stats?.population?.totalCharacters ?? 0}

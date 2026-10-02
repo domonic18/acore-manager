@@ -57,6 +57,7 @@ function battleRow(overrides: Partial<BattlePlayerRow> & { characterGuid: number
     name: `P${overrides.characterGuid}`,
     level: 80,
     race: 1,
+    username: `acc${overrides.accountId}`,
     ip: '1.2.3.4',
     killingBlows: 30,
     deaths: 12,
@@ -186,7 +187,16 @@ describe('AbusePatrolService.persistCandidates', () => {
     dedupeKey: 'bg_honor_farm:2026-10-03:1-2',
     detectedAt: NOW,
     subjects: [],
-    evidence: { battlegroundId: 1901 },
+    evidence: {
+      battlegroundId: 1901,
+      battleType: 2,
+      battleDate: '2026-10-03 11:30:00',
+      sameIpAccounts: 2,
+      avgHonorableKills: 27,
+      avgDeaths: 7,
+      damagePerKill: 400,
+      signals: { highHK: true, highDeaths: true, lowDamage: true },
+    },
   };
 
   it('inserts a new finding with occurrence=1 and stays silent', async () => {

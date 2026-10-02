@@ -41,6 +41,16 @@ const DEFAULT_SCAN_WINDOW_HOURS = 1;
 
 const CST_OFFSET_MS = 8 * 3600 * 1000;
 
+// 告警卡可读化：战场类型号 → 名称（AC BattlegroundTypeId 常见值，未收录回落编号原文）
+const BG_TYPE_LABEL: Record<number, string> = {
+  1: '奥特兰克山谷',
+  2: '战歌峡谷',
+  3: '阿拉希盆地',
+  4: '风暴之眼',
+  5: '远古海滩',
+  7: '征服之岛',
+};
+
 export interface FindingCandidate {
   findingType: PatrolFindingType;
   dedupeKey: string;
@@ -115,7 +125,7 @@ export class AbusePatrolService {
           detectedAt: now,
           subjects: ipPlayers.map((p) => ({
             accountId: p.accountId,
-            accountName: '',
+            accountName: p.username,
             characterGuid: p.characterGuid,
             characterName: p.name,
             level: p.level,
@@ -265,25 +275,58 @@ export class AbusePatrolService {
 
   private async notifyFinding(realm: string, type: PatrolFindingType, occurrence: number, candidate: FindingCandidate): Promise<boolean> {
     const label = type === 'bg_honor_farm' ? '战场互刷嫌疑' : '硬核被带嫌疑';
-    const subjectLines = candidate.subjects
-      .map((s) => `- ${s.characterName}（账号 ${s.accountName || s.accountId}）${s.hardcore ? ` 硬核 Lv${s.extra?.hardcoreLevel ?? '?'}` : ` Lv${s.level}`} @ ${s.ip}`)
-      .join('\n');
-    const evidenceText =
-      type === 'bg_honor_farm'
-        ? `战场 #${(candidate.evidence as { battlegroundId?: number }).battlegroundId ?? '?'}：人均 HK ${candidate.evidence.avgHonorableKills} / 人均死亡 ${candidate.evidence.avgDeaths} / 每杀伤害 ${candidate.evidence.damagePerKill}`
-        : JSON.stringify((candidate.evidence as { pairs?: unknown }).pairs ?? candidate.evidence);
-    const md = [
-      `**${label}**（realm: ${realm}）第 **${occurrence}** 轮共现`,
-      `**涉案对象**`,
-      subjectLines,
-      `**证据摘要**：${evidenceText}`,
-      `请到巡检报告「违规巡检」页处置（警告邮件 / 深度分析 / 荣誉调整）。`,
-    ].join('\n');
+    const mdEl = (content: string) => ({ tag: 'markdown', content });
+
+    const subjectLines = candidate.subjects.map((s) => {
+      const levelText = s.hardcore ? `硬核 Lv${s.extra?.hardcoreLevel ?? '?'}` : `Lv${s.level}`;
+      return `- **${s.characterName}**（${levelText} · 账号 ${s.accountName || `ID ${s.accountId}`}）· IP ${s.ip}`;
+    });
+
+    let evidenceLines: string[];
+    if (type === 'bg_honor_farm') {
+      const ev = candidate.evidence as {
+        battleType: number;
+        battleDate: string;
+        sameIpAccounts: number;
+        avgHonorableKills: number;
+        avgDeaths: number;
+        damagePerKill: number;
+        signals: { highHK: boolean; highDeaths: boolean; lowDamage: boolean };
+      };
+      const bgName = BG_TYPE_LABEL[ev.battleType] ?? `战场编号 ${ev.battleType}`;
+      const signals = [
+        ev.signals.highHK && '荣誉击杀异常高',
+        ev.signals.highDeaths && '死亡次数异常多',
+        ev.signals.lowDamage && '每次击杀伤害远低于正常',
+      ].filter(Boolean) as string[];
+      evidenceLines = [
+        `- 同一 IP 下 **${ev.sameIpAccounts} 个账号**同场对局（${bgName} · ${ev.battleDate.slice(5, 16)}）`,
+        `- 人均荣誉击杀 **${ev.avgHonorableKills}**、人均死亡 **${ev.avgDeaths}**、每次击杀平均仅造成 **${ev.damagePerKill}** 点伤害`,
+        `- 命中特征：${signals.join('、')}——符合互相击杀刷荣誉的行为模式`,
+      ];
+    } else {
+      const ev = candidate.evidence as { pairs: Array<{ hardcore: string; main: string; map: number; zone: number; distanceYd: number }> };
+      evidenceLines = [
+        ...ev.pairs.map(
+          (p) => `- 硬核角色 **${p.hardcore}** 与大号 **${p.main}** 同地图同区域共现，直线距离仅 **${p.distanceYd}** 码`,
+        ),
+        `- 命中特征：登录 IP 相同且等级差距明显——疑似大号护送硬核角色升级`,
+      ];
+    }
+
+    const elements = [
+      mdEl(`<font color='red'>**第 ${occurrence} 轮扫描命中**</font>：同一批角色被反复检出，达到告警阈值才推送（首轮仅记录，用于排除偶发同位置的误报）`),
+      { tag: 'hr' },
+      mdEl(['**涉案角色**', ...subjectLines].join('\n')),
+      mdEl(['**判定依据**', ...evidenceLines].join('\n')),
+      { tag: 'hr' },
+      mdEl(`<font color='grey'>属疑似判定而非坐实，请人工核实后处置。入口：巡检报告详情 →「违规巡检」页（警告邮件 / 深度分析 / 荣誉调整）· realm: ${realm}</font>`),
+    ];
 
     const ok = await feishuNotifyService.sendCard({
       schema: '2.0',
       header: { template: 'red', title: { tag: 'plain_text', content: `反滥用巡检告警：${label}` } },
-      body: { elements: [{ tag: 'markdown', content: md }] },
+      body: { elements },
     });
     if (!ok) logger.warn(`[abuse-patrol] feishu notify failed (${candidate.dedupeKey})`);
     return ok;

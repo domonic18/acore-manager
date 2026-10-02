@@ -11,6 +11,7 @@ export interface BattlePlayerRow {
   level: number;
   race: number;
   accountId: number;
+  username: string;
   ip: string;
   killingBlows: number;
   deaths: number;
@@ -90,6 +91,7 @@ class AbusePatrolRepository {
         level: Number(row.level),
         race: Number(row.race),
         accountId: Number(row.account),
+        username: String(row.username ?? ''),
         ip: String(row.ip ?? ''),
         killingBlows: Number(row.killingBlows ?? 0),
         deaths: Number(row.deaths ?? 0),

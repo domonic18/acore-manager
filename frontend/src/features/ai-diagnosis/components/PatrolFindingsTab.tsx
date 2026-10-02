@@ -3,12 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/utils/toast.util';
 import { HonorAdjustDialog } from '@/shared/components/HonorAdjustDialog';
+import { PaginationBar } from '@/shared/components/PaginationBar';
 import type { BgFarmEvidence, CarryEvidence, PatrolFinding, PatrolFindingType } from '../api/patrol-findings.api';
 import { usePatrolFindings, useUpdateFindingStatus } from '../hooks/usePatrolFindings';
 import { SendWarningMailDialog } from './SendWarningMailDialog';
 
-// 违规巡检 tab（需求一/二）：展示当日反滥用巡检发现（战场互刷 / 硬核被带），
-// 行内处置：警告邮件 / 深度分析 / 荣誉调整（仅互刷类，gm3）/ 状态流转（gm2）。
+// 违规巡检 tab（需求一/二）：展示全部反滥用巡检发现（战场互刷 / 硬核被带），
+// 日期为可选过滤（默认全量分页）；行内处置：警告邮件 / 深度分析 / 荣誉调整（仅互刷类，gm3）/ 状态流转（gm2）。
 
 const TYPE_LABEL: Record<PatrolFindingType, string> = {
   bg_honor_farm: '战场互刷',
@@ -73,19 +74,26 @@ function EvidenceSummary({ finding }: { finding: PatrolFinding }) {
   );
 }
 
+const PAGE_SIZE = 20;
+
 export function PatrolFindingsTab({ realm, reportDate }: { realm: string; reportDate: string }) {
   const { hasGmLevel } = usePermission();
   const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState<PatrolFindingType | ''>('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [page, setPage] = useState(1);
   const [mailTarget, setMailTarget] = useState<PatrolFinding | null>(null);
   const [honorTarget, setHonorTarget] = useState<string | null>(null);
 
   const { data, isLoading } = usePatrolFindings({
-    date: reportDate,
+    ...(dateFilter ? { date: dateFilter } : {}),
     ...(typeFilter ? { type: typeFilter } : {}),
-    pageSize: 50,
+    page,
+    pageSize: PAGE_SIZE,
   });
   const updateStatus = useUpdateFindingStatus();
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const findings = useMemo(() => data?.items ?? [], [data]);
 
@@ -122,7 +130,10 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
           <button
             key={t || 'all'}
             type="button"
-            onClick={() => setTypeFilter(t)}
+            onClick={() => {
+              setTypeFilter(t);
+              setPage(1);
+            }}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
               typeFilter === t ? 'bg-primary text-primary-foreground' : 'border border-border text-muted-foreground hover:bg-accent'
             }`}
@@ -130,13 +141,23 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
             {t === '' ? '全部' : TYPE_LABEL[t]}
           </button>
         ))}
-        <span className="ml-auto self-center text-xs text-muted-foreground">共 {data?.total ?? 0} 条</span>
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => {
+            setDateFilter(e.target.value);
+            setPage(1);
+          }}
+          className="rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground"
+          aria-label="按发现日期过滤"
+        />
+        <span className="ml-auto self-center text-xs text-muted-foreground">共 {total} 条</span>
       </div>
 
       {isLoading ? (
         <div className="py-6 text-center text-sm text-muted-foreground">加载中...</div>
       ) : findings.length === 0 ? (
-        <div className="py-6 text-center text-sm text-muted-foreground">本日无巡检发现</div>
+        <div className="py-6 text-center text-sm text-muted-foreground">暂无巡检发现</div>
       ) : (
         <div className="space-y-2">
           {findings.map((f) => (
@@ -216,6 +237,14 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
           ))}
         </div>
       )}
+
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        onPageChange={setPage}
+        loading={isLoading}
+      />
 
       <SendWarningMailDialog
         targets={mailTargets}

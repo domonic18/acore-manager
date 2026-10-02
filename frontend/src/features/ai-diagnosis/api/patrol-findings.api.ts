@@ -48,7 +48,7 @@ export interface PatrolFinding {
 }
 
 export interface PatrolFindingsFilter {
-  date: string;
+  date?: string;
   type?: PatrolFindingType;
   status?: PatrolFindingStatus;
   page?: number;
@@ -57,7 +57,8 @@ export interface PatrolFindingsFilter {
 
 export const patrolFindingsApi = {
   list: (filter: PatrolFindingsFilter) => {
-    const q = new URLSearchParams({ date: filter.date, page: String(filter.page ?? 1), pageSize: String(filter.pageSize ?? 20) });
+    const q = new URLSearchParams({ page: String(filter.page ?? 1), pageSize: String(filter.pageSize ?? 20) });
+    if (filter.date) q.set('date', filter.date);
     if (filter.type) q.set('type', filter.type);
     if (filter.status) q.set('status', filter.status);
     return apiClient.get<{ items: PatrolFinding[]; total: number }>(`/api/ai/analysis/patrol-findings?${q.toString()}`);

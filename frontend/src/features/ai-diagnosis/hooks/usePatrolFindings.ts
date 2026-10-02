@@ -5,7 +5,6 @@ export function usePatrolFindings(filter: PatrolFindingsFilter) {
   return useQuery({
     queryKey: ['ai-diagnosis', 'patrol-findings', filter],
     queryFn: () => patrolFindingsApi.list(filter),
-    enabled: !!filter.date,
   });
 }
 

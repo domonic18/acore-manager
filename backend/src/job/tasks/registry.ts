@@ -1,6 +1,7 @@
 import { JOB_TASK } from '@/shared/enums/job-task';
 import { inspectionTask } from './inspection-task';
 import { targetedAnalysisTask } from './targeted-analysis-task';
+import { metricsSnapshotTask } from './metrics-snapshot-task';
 
 // 任务处理器契约：run 返回进程退出码（0=成功 / 1=任务失败 / 2=启动致命错误，与 job-entry 对齐）
 export interface TaskHandler {
@@ -12,4 +13,5 @@ export interface TaskHandler {
 export const taskHandlers: Readonly<Record<string, TaskHandler>> = {
   [JOB_TASK.INSPECTION]: inspectionTask,
   [JOB_TASK.TARGETED_ANALYSIS]: targetedAnalysisTask,
+  [JOB_TASK.METRICS_SNAPSHOT]: metricsSnapshotTask,
 };

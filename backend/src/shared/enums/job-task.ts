@@ -4,6 +4,8 @@ export const JOB_TASK = {
   INSPECTION: 'inspection',
   TARGETED_ANALYSIS: 'targeted-analysis',
   METRICS_SNAPSHOT: 'metrics-snapshot',
+  BG_HONOR_FARM: 'bg-honor-farm',
+  HARDCORE_CARRY: 'hardcore-carry',
 } as const;
 
 export type JobTaskName = (typeof JOB_TASK)[keyof typeof JOB_TASK];

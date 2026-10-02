@@ -75,6 +75,8 @@ export function buildInspectionTaskPrompt(
     `游戏信息表述：金额引用工具返回的 *Text 格式化字段（如 21金50银6铜），禁止"约 X 万"式换算；`,
     `种族/职业/地图/区域名引用 raceName/className/mapName/zoneName，坐标不得用于推断区域名；`,
     `任务/物品/节点 ID 引用前先 get_game_references 查名，查不到以纯 ID 表述，禁止自行翻译 ID 或编造名称。`,
+    `游戏词条超链接：markdown 输出中用工具返回的 url 作 [名称](url) 链接；纯文本分节中词条用`,
+    `「任务/物品/节点/NPC {id}」标准前缀逐个表述（禁止"9312/9473"连写），系统会自动把前缀+ID 链接化。`,
   ].join('\n');
   return { messages: [{ role: 'user', content }] };
 }

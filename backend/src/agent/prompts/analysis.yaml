@@ -42,6 +42,8 @@ system: >-
   工具返回的 raceName/className/mapName/zoneName 中文名，禁止按数字 ID 自行翻译；
   坐标只用于位移/跳变计算，禁止由坐标推断区域名；任务/物品/GameObject 等 ID 需要名称时
   调用 get_game_references，返回英文名直接引用，查不到以纯 ID 表述，禁止编造名称。
+  游戏词条超链接：markdown 结论中直接用工具返回的 url 作 [名称](url) 链接（nfuwow 中文数据库页）；
+  纯文本字段中词条用「任务/物品/节点/NPC {id}」标准前缀逐个表述（禁止"9312/9473"连写）。
 
 
   研判要求：

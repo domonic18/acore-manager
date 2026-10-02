@@ -3,7 +3,7 @@ import { initializeDataSources } from '@/config/database';
 import { registerAllDbTools } from '@/agent/tools/db-tools';
 import { exportTools } from '@/agent/tools/registry';
 
-// DB 白名单工具真库冒烟：初始化四数据源后逐个调用 12 个工具，
+// DB 白名单工具真库冒烟：初始化四数据源后逐个调用 13 个工具，
 // 校验 SQL 语法/占位符在真实 MySQL/PG 上可执行（行数可为空，只看是否报错）。
 // 用法：npx tsx src/scripts/db-tools-smoke.ts
 
@@ -20,6 +20,7 @@ const CASES: Record<string, Record<string, unknown>> = {
   get_ban_history: { scope: 'account', id: 1 },
   get_anticheat_record: { guid: 1 },
   get_metrics_snapshot: {},
+  get_game_references: { type: 'gameobject', ids: [181683, 181854] },
 };
 
 async function main(): Promise<void> {

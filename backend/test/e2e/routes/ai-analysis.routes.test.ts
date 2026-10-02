@@ -211,8 +211,7 @@ describe('AI Analysis Routes: /patrol-findings (violation patrol)', () => {
     const res = await request(app).get('/api/ai/analysis/patrol-findings?date=2026-10-03&type=bg_honor_farm&status=open&page=2&pageSize=10');
 
     expect(res.status).toBe(200);
-    expect(res.body.count).toBe(1);
-    expect(res.body.data[0]).toMatchObject({ id: 5 });
+    expect(res.body.data).toEqual({ items: [{ id: 5, findingType: 'bg_honor_farm', status: 'open' }], total: 1 });
     expect(listFindingsMock).toHaveBeenCalledWith({ date: '2026-10-03', type: 'bg_honor_farm', status: 'open' }, 2, 10);
   });
 

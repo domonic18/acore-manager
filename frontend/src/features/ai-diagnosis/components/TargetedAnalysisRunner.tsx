@@ -17,14 +17,21 @@ function localDate(d: Date): string {
 
 export function TargetedAnalysisRunner({ onFinished }: { onFinished?: () => void }) {
   const location = useLocation();
-  const preset = (location.state ?? {}) as { subjectType?: TargetedSubjectType; subjectName?: string };
+  const preset = (location.state ?? {}) as {
+    subjectType?: TargetedSubjectType;
+    subjectName?: string;
+    /** 多对象预填（违规巡检深度分析联动），优先于 subjectName */
+    subjectNames?: string[];
+    timeFrom?: string;
+    timeTo?: string;
+  };
 
   const [subjectType, setSubjectType] = useState<TargetedSubjectType>(preset.subjectType ?? 'character');
-  const [namesText, setNamesText] = useState(preset.subjectName ?? '');
+  const [namesText, setNamesText] = useState(preset.subjectNames?.join('\n') ?? preset.subjectName ?? '');
   const defaultRealm = useDefaultRealm();
   const [realm, setRealm] = useState('');
-  const [timeFrom, setTimeFrom] = useState(localDate(new Date(Date.now() - 6 * 86400000)));
-  const [timeTo, setTimeTo] = useState(localDate(new Date()));
+  const [timeFrom, setTimeFrom] = useState(preset.timeFrom ?? localDate(new Date(Date.now() - 6 * 86400000)));
+  const [timeTo, setTimeTo] = useState(preset.timeTo ?? localDate(new Date()));
   const [banReason, setBanReason] = useState('');
   const [bannedBy, setBannedBy] = useState('');
   const [submitting, setSubmitting] = useState(false);

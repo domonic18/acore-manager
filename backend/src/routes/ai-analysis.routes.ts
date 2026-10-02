@@ -197,7 +197,8 @@ router.get(
       page,
       pageSize,
     );
-    res.jsonSuccess(result.items, result.total);
+    // data 载荷携带 {items, total}（apiClient 只透传 data，count 会丢失）
+    res.jsonSuccess({ items: result.items, total: result.total });
   }),
 );
 

@@ -18,6 +18,7 @@ export function useCharacterDetailActions(characterGuid: number) {
   const [showMuteDialog, setShowMuteDialog] = useState(false);
   const [showUnbanConfirmDialog, setShowUnbanConfirmDialog] = useState(false);
   const [showUnmuteConfirmDialog, setShowUnmuteConfirmDialog] = useState(false);
+  const [showHonorDialog, setShowHonorDialog] = useState(false);
 
   const handleExecuteBan = () => {
     banMutation.mutate(
@@ -57,6 +58,8 @@ export function useCharacterDetailActions(characterGuid: number) {
     setShowUnbanConfirmDialog,
     showUnmuteConfirmDialog,
     setShowUnmuteConfirmDialog,
+    showHonorDialog,
+    setShowHonorDialog,
     handleExecuteBan,
     handleExecuteMute,
     handleExecuteUnban,

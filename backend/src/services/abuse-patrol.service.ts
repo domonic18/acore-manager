@@ -339,11 +339,12 @@ export class AbusePatrolService {
     if (filter.type) qb.andWhere('f.findingType = :type', { type: filter.type });
     if (filter.status) qb.andWhere('f.status = :status', { status: filter.status });
     if (filter.date) {
-      // detected_at 为 timestamp：按 CST 日起止过滤
-      const start = new Date(`${filter.date}T00:00:00+08:00`);
+      // detected_at 存 CST 墙钟（写入方按 +08:00 序列化），比较须用 CST 墙钟字符串；
+      // 传 JS Date 会按进程本地时区（容器 UTC）序列化成 UTC 墙钟，日窗恒错位 8h
+      const startMs = new Date(`${filter.date}T00:00:00+08:00`).getTime();
       qb.andWhere('f.detectedAt >= :start AND f.detectedAt < :end', {
-        start,
-        end: new Date(start.getTime() + 86400_000),
+        start: formatCstDateTime(new Date(startMs)),
+        end: formatCstDateTime(new Date(startMs + 86400_000)),
       });
     }
     const [items, total] = await qb

@@ -5,6 +5,7 @@ import ServerStatusCard from '@/features/dashboard/components/ServerStatusCard';
 import KpiRow from '@/features/dashboard/components/KpiRow';
 import OperationTrendChart from '@/features/dashboard/components/OperationTrendChart';
 import InspectionTrendChart from '@/features/dashboard/components/InspectionTrendChart';
+import MultiBoxCard from '@/features/dashboard/components/MultiBoxCard';
 import PopulationStats from '@/features/dashboard/components/PopulationStats';
 import FriendStats from '@/features/dashboard/components/FriendStats';
 
@@ -38,6 +39,8 @@ export default function DashboardPage() {
         </div>
         <InspectionTrendChart />
       </div>
+
+      <MultiBoxCard multiBox={stats?.multiBox} loading={isLoading} />
 
       <PopulationStats
         totalCharacters={stats?.population?.totalCharacters ?? 0}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { usePermission } from '@/shared/hooks/usePermission';
 import { LogoIcon } from '@/shared/components/ui/LogoIcon';
 import { SHORT_VERSION } from '@/shared/config/version';
 import {
@@ -72,13 +73,6 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
       { path: '/ai-diagnosis/targeted', label: '深度分析', icon: Crosshair },
     ],
   },
-  {
-    title: '系统',
-    items: [
-      { path: '/audit-logs', label: '日志审计', icon: ScrollText },
-      { path: '/system-config', label: '系统配置', icon: Settings },
-    ],
-  },
 ];
 
 export function AppLayout() {
@@ -86,6 +80,7 @@ export function AppLayout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
+  const { hasGmLevel } = usePermission();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -196,21 +191,40 @@ export function AppLayout() {
             <Menu className="w-6 h-6" />
           </button>
           <div className="ml-auto flex items-center gap-1">
-            <NavLink
-              to="/system-config"
-              title="设置"
-              aria-label="设置"
-              className={({ isActive }) =>
-                cn(
-                  'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                )
-              }
-            >
-              <Settings className="w-5 h-5" />
-            </NavLink>
+            {hasGmLevel(1) && (
+              <NavLink
+                to="/audit-logs"
+                title="日志审计"
+                aria-label="日志审计"
+                className={({ isActive }) =>
+                  cn(
+                    'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  )
+                }
+              >
+                <ScrollText className="w-5 h-5" />
+              </NavLink>
+            )}
+            {hasGmLevel(3) && (
+              <NavLink
+                to="/system-config"
+                title="设置"
+                aria-label="设置"
+                className={({ isActive }) =>
+                  cn(
+                    'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  )
+                }
+              >
+                <Settings className="w-5 h-5" />
+              </NavLink>
+            )}
 
             {/* 头像下拉：账户信息 + 退出登录 */}
             <div className="relative" ref={userMenuRef}>

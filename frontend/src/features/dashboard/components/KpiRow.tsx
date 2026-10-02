@@ -47,7 +47,11 @@ export default function KpiRow({ stats, loading = false }: KpiRowProps) {
   return (
     <div className="rounded-lg border border-border bg-card px-5 py-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-4">
-        <KpiTile label="在线玩家" value={String(stats?.onlinePlayers ?? 0)} sub={`共 ${stats?.population?.totalCharacters ?? 0} 角色`} />
+        <KpiTile
+          label="在线玩家"
+          value={String(stats?.onlinePlayers ?? 0)}
+          sub={`实际玩家 ${stats?.multiBox?.distinctPlayers ?? stats?.onlinePlayers ?? 0} · 共 ${stats?.population?.totalCharacters ?? 0} 角色`}
+        />
         <KpiTile label="今日新增账号" value={String(stats?.newAccountsToday ?? 0)} />
         <KpiTile label="今日活跃账号" value={String(stats?.activeAccountsToday ?? 0)} />
         <KpiTile label="今日封禁" value={String(stats?.bansToday ?? 0)} sub="账号级" />

@@ -27,6 +27,7 @@ describe('DashboardService', () => {
         bansToday: 2,
         realms: [{ realmId: 3, name: 'realm3', startTime: 1, uptimeSeconds: 100, maxPlayers: 45, revision: 'rev' }],
         latestInspection: { realm: 'realm3', reportDate: '2026-10-01', healthScore: 88 },
+        multiBox: { distinctPlayers: 0, totalGroups: 0, groups: [] },
         population: {
           totalCharacters: 200,
           levelDistribution: [],
@@ -87,6 +88,16 @@ describe('DashboardService', () => {
         reportDate: '2026-10-01',
         healthScore: 88,
       });
+      (dashboardRepository.getOnlineAccountIps as jest.Mock).mockResolvedValue([
+        // 同 IP 双账号 → 成组
+        { guid: 1, accountId: 11, name: 'Alice', level: 60, race: 1, class: 7, username: 'usera', ip: '1.2.3.4' },
+        { guid: 2, accountId: 12, name: 'Bob', level: 55, race: 2, class: 4, username: 'userb', ip: '1.2.3.4' },
+        // 单账号 IP → 不成组，计入 distinctPlayers
+        { guid: 3, accountId: 13, name: 'Carol', level: 40, race: 4, class: 8, username: 'userc', ip: '5.6.7.8' },
+        // loopback → 不进组，按账号去重计（同账号两角色仍算 1 人）
+        { guid: 4, accountId: 14, name: 'Dave', level: 70, race: 7, class: 2, username: 'userd', ip: '127.0.0.1' },
+        { guid: 5, accountId: 14, name: 'DaveAlt', level: 21, race: 7, class: 2, username: 'userd', ip: '127.0.0.1' },
+      ]);
       (cacheService.set as jest.Mock).mockResolvedValue(undefined);
 
       const result = await dashboardService.getStats();
@@ -100,6 +111,27 @@ describe('DashboardService', () => {
           { realmId: 3, name: 'realm3', startTime: 1759000000, uptimeSeconds: 300000, maxPlayers: 45, revision: 'AzerothCore rev. abc1234' },
         ],
         latestInspection: { realm: 'realm3', reportDate: '2026-10-01', healthScore: 88 },
+        multiBox: {
+          distinctPlayers: 3,
+          totalGroups: 1,
+          groups: [
+            {
+              ip: '1.2.3.4',
+              accounts: [
+                {
+                  accountId: 11,
+                  username: 'usera',
+                  characters: [{ guid: 1, name: 'Alice', level: 60, race: 1, class: 7 }],
+                },
+                {
+                  accountId: 12,
+                  username: 'userb',
+                  characters: [{ guid: 2, name: 'Bob', level: 55, race: 2, class: 4 }],
+                },
+              ],
+            },
+          ],
+        },
         population: {
           totalCharacters: 8,
           levelDistribution: [
@@ -144,6 +176,7 @@ describe('DashboardService', () => {
         bansToday: 0,
         realms: [],
         latestInspection: null,
+        multiBox: { distinctPlayers: 0, totalGroups: 0, groups: [] },
         population: {
           totalCharacters: 0,
           levelDistribution: [],

@@ -24,6 +24,9 @@ describe('DashboardService', () => {
         onlinePlayers: 100,
         newAccountsToday: 5,
         activeAccountsToday: 50,
+        bansToday: 2,
+        realms: [{ realmId: 3, name: 'realm3', startTime: 1, uptimeSeconds: 100, maxPlayers: 45, revision: 'rev' }],
+        latestInspection: { realm: 'realm3', reportDate: '2026-10-01', healthScore: 88 },
         population: {
           totalCharacters: 200,
           levelDistribution: [],
@@ -34,6 +37,10 @@ describe('DashboardService', () => {
           maxPerAccount: 10,
           minPerAccount: 1,
           accountsWithoutCharacters: 5,
+        },
+        friends: {
+          distribution: [],
+          topCharacters: [],
         },
       };
       (cacheService.get as jest.Mock).mockResolvedValue(cached);
@@ -71,6 +78,15 @@ describe('DashboardService', () => {
       (dashboardRepository.getTopCharactersByFriends as jest.Mock).mockResolvedValue([
         { guid: 1, name: 'Alice', friendCount: 20 },
       ]);
+      (dashboardRepository.getRealmStatuses as jest.Mock).mockResolvedValue([
+        { realmId: 3, name: 'realm3', startTime: 1759000000, uptimeSeconds: 300000, maxPlayers: 45, revision: 'AzerothCore rev. abc1234' },
+      ]);
+      (dashboardRepository.getBansToday as jest.Mock).mockResolvedValue(2);
+      (dashboardRepository.getLatestInspection as jest.Mock).mockResolvedValue({
+        realm: 'realm3',
+        reportDate: '2026-10-01',
+        healthScore: 88,
+      });
       (cacheService.set as jest.Mock).mockResolvedValue(undefined);
 
       const result = await dashboardService.getStats();
@@ -79,6 +95,11 @@ describe('DashboardService', () => {
         onlinePlayers: 42,
         newAccountsToday: 3,
         activeAccountsToday: 25,
+        bansToday: 2,
+        realms: [
+          { realmId: 3, name: 'realm3', startTime: 1759000000, uptimeSeconds: 300000, maxPlayers: 45, revision: 'AzerothCore rev. abc1234' },
+        ],
+        latestInspection: { realm: 'realm3', reportDate: '2026-10-01', healthScore: 88 },
         population: {
           totalCharacters: 8,
           levelDistribution: [
@@ -120,6 +141,9 @@ describe('DashboardService', () => {
         onlinePlayers: 0,
         newAccountsToday: 0,
         activeAccountsToday: 0,
+        bansToday: 0,
+        realms: [],
+        latestInspection: null,
         population: {
           totalCharacters: 0,
           levelDistribution: [],

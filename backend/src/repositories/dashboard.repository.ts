@@ -1,9 +1,25 @@
-import { charactersDataSource, authDataSource } from '@/config/database';
+import { charactersDataSource, authDataSource, acmDataSource } from '@/config/database';
 import { env } from '@/config/env';
+import { AiReport } from '@/entities/acm/ai-report.entity';
 
 export interface DistributionItem {
   key: number;
   count: number;
+}
+
+export interface RealmStatus {
+  realmId: number;
+  name: string;
+  startTime: number;
+  uptimeSeconds: number;
+  maxPlayers: number;
+  revision: string;
+}
+
+export interface LatestInspection {
+  realm: string;
+  reportDate: string;
+  healthScore: number;
 }
 
 class DashboardRepository {
@@ -125,6 +141,49 @@ class DashboardRepository {
       name: row.name,
       friendCount: parseInt(row.friendCount, 10),
     }));
+  }
+
+  // realm 运行状态：starttime 倒序首见即最新（与 metrics-tools.ts 同款去重逻辑）
+  async getRealmStatuses(): Promise<RealmStatus[]> {
+    const result = await authDataSource.query(
+      `SELECT u.realmid, r.name, u.starttime, u.uptime, u.maxplayers, u.revision
+      FROM uptime u
+      JOIN realmlist r ON r.id = u.realmid
+      ORDER BY u.starttime DESC
+      LIMIT 50`,
+    );
+    const latest = new Map<number, RealmStatus>();
+    for (const row of result) {
+      const realmId = Number(row.realmid);
+      if (latest.has(realmId)) continue;
+      latest.set(realmId, {
+        realmId,
+        name: String(row.name ?? ''),
+        startTime: Number(row.starttime),
+        uptimeSeconds: Number(row.uptime),
+        maxPlayers: Number(row.maxplayers),
+        revision: String(row.revision ?? ''),
+      });
+    }
+    return [...latest.values()];
+  }
+
+  // epoch 区间条件避免 DB 时区漂移（bandate 为 unix 秒）
+  async getBansToday(startEpoch: number, endEpoch: number): Promise<number> {
+    const result = await authDataSource.query(
+      'SELECT COUNT(*) as count FROM account_banned WHERE bandate >= ? AND bandate < ?',
+      [startEpoch, endEpoch],
+    );
+    return parseInt(result[0]?.count || '0', 10);
+  }
+
+  async getLatestInspection(): Promise<LatestInspection | null> {
+    const report = await acmDataSource.getRepository(AiReport).findOne({
+      where: { status: 'ok' },
+      order: { reportDate: 'DESC', createdAt: 'DESC' },
+    });
+    if (!report) return null;
+    return { realm: report.realm, reportDate: report.reportDate, healthScore: report.healthScore };
   }
 }
 

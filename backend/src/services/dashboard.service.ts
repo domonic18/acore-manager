@@ -1,6 +1,11 @@
 import { cacheService } from './cache.service';
 import { logger } from '@/middleware/request-logger';
-import { dashboardRepository, type DistributionItem } from '@/repositories/dashboard.repository';
+import {
+  dashboardRepository,
+  type DistributionItem,
+  type RealmStatus,
+  type LatestInspection,
+} from '@/repositories/dashboard.repository';
 
 export interface FriendTopCharacter {
   guid: number;
@@ -12,6 +17,9 @@ export interface DashboardStats {
   onlinePlayers: number;
   newAccountsToday: number;
   activeAccountsToday: number;
+  bansToday: number;
+  realms: RealmStatus[];
+  latestInspection: LatestInspection | null;
   population: {
     totalCharacters: number;
     levelDistribution: DistributionItem[];
@@ -66,10 +74,21 @@ export class DashboardService {
         dashboardRepository.getTopCharactersByFriends(5),
       ]);
 
+      // 治理信号与 realm 状态：封禁按本地 0 点 epoch 区间统计，巡检取最新有效报告
+      const todayEpoch = Math.floor(today.getTime() / 1000);
+      const [realms, bansToday, latestInspection] = await Promise.all([
+        dashboardRepository.getRealmStatuses(),
+        dashboardRepository.getBansToday(todayEpoch, todayEpoch + 86400),
+        dashboardRepository.getLatestInspection(),
+      ]);
+
       const stats: DashboardStats = {
         onlinePlayers,
         newAccountsToday,
         activeAccountsToday,
+        bansToday,
+        realms,
+        latestInspection,
         population: {
           totalCharacters,
           levelDistribution,
@@ -95,6 +114,9 @@ export class DashboardService {
         onlinePlayers: 0,
         newAccountsToday: 0,
         activeAccountsToday: 0,
+        bansToday: 0,
+        realms: [],
+        latestInspection: null,
         population: {
           totalCharacters: 0,
           levelDistribution: [],

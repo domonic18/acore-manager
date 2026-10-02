@@ -26,6 +26,31 @@ export interface LatestInspection {
   healthScore: number;
 }
 
+export interface MultiBoxCharacter {
+  guid: number;
+  name: string;
+  level: number;
+  race: number;
+  class: number;
+}
+
+export interface MultiBoxAccount {
+  accountId: number;
+  username: string;
+  characters: MultiBoxCharacter[];
+}
+
+export interface MultiBoxGroup {
+  ip: string;
+  accounts: MultiBoxAccount[];
+}
+
+export interface MultiBox {
+  distinctPlayers: number;
+  totalGroups: number;
+  groups: MultiBoxGroup[];
+}
+
 export interface DashboardStats {
   onlinePlayers: number;
   newAccountsToday: number;
@@ -33,6 +58,8 @@ export interface DashboardStats {
   bansToday: number;
   realms: RealmStatus[];
   latestInspection: LatestInspection | null;
+  /** 60s 缓存窗口内旧数据可能缺该字段，消费处全部 ?? 兜底 */
+  multiBox?: MultiBox;
   population: {
     totalCharacters: number;
     levelDistribution: DistributionItem[];

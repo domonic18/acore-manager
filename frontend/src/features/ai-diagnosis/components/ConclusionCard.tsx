@@ -4,6 +4,7 @@ import { CopyButton } from '@/shared/components/CopyButton';
 import { Markdown } from '@/shared/components/Markdown';
 import { markdownToHtml } from '@/shared/utils/markdown.util';
 import type { AnalysisConclusion } from '../api/ai-analysis.api';
+import { GameRefText } from './GameRefText';
 
 // 定向分析结论卡：建议徽章 + 误报信号 + 违规聚合 + markdown 全文（可复制）+ 证据摘录。
 
@@ -66,7 +67,9 @@ export function ConclusionCard({ conclusion, analysisId }: { conclusion: Analysi
         </div>
       )}
 
-      <p className="text-sm leading-relaxed text-muted-foreground">{conclusion.suggestionReason}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        <GameRefText text={conclusion.suggestionReason} />
+      </p>
 
       {conclusion.markdown && (
         <details open>

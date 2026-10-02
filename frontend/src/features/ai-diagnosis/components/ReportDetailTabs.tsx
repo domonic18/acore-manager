@@ -7,6 +7,7 @@ import { CopyButton } from '@/shared/components/CopyButton';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/utils/toast.util';
 import { SuspiciousPlayerTable } from './SuspiciousPlayerTable';
+import { GameRefText } from './GameRefText';
 
 // 报告详情四 Tab（T4.1 + T4.2 全文 + T4.3 处置表）：结构化呈现 + 色块高亮，
 // 替代整段 summary 文字墙：指标卡 / 风险级别徽标 / 处置 callout / 折叠证据。
@@ -53,7 +54,7 @@ function HealthTab({ serverHealth, summary }: { serverHealth?: ReportServerHealt
         ))}
       </div>
       <blockquote className="rounded-r-lg border-l-4 border-primary bg-card px-4 py-3 text-sm leading-relaxed">
-        {summary}
+        <GameRefText text={summary} />
       </blockquote>
       {sections
         .filter((s) => s.items.length > 0)
@@ -86,7 +87,9 @@ function RecsTab({ recommendations }: { recommendations?: string[] }) {
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
             {i + 1}
           </span>
-          <p className="rounded-r-lg border-l-4 border-primary bg-card px-3 py-2 text-sm leading-relaxed">{r}</p>
+          <p className="rounded-r-lg border-l-4 border-primary bg-card px-3 py-2 text-sm leading-relaxed">
+            <GameRefText text={r} />
+          </p>
         </li>
       ))}
     </ol>

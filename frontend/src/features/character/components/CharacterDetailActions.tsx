@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { AI_QUICK_ANALYZE_EVENT, type QuickAnalyzePayload } from '@/shared/lib/ai-quick-analyze';
+import { usePermission } from '@/shared/hooks/usePermission';
 import type { CharacterDetail } from '@/features/character/api/character.api';
 
 interface CharacterDetailActionsProps {
@@ -10,6 +11,7 @@ interface CharacterDetailActionsProps {
   onOpenUnban: () => void;
   onOpenMute: () => void;
   onOpenUnmute: () => void;
+  onOpenHonor: () => void;
 }
 
 export function CharacterDetailActions({
@@ -20,8 +22,10 @@ export function CharacterDetailActions({
   onOpenUnban,
   onOpenMute,
   onOpenUnmute,
+  onOpenHonor,
 }: CharacterDetailActionsProps) {
   const navigate = useNavigate();
+  const { hasGmLevel } = usePermission();
   const activeBans = character.bans?.filter((b) => b.active) || [];
 
   return (
@@ -57,6 +61,14 @@ export function CharacterDetailActions({
       >
         禁言聊天
       </button>
+      {hasGmLevel(3) && (
+        <button
+          onClick={onOpenHonor}
+          className="px-4 py-2 rounded-md border border-red-600 text-red-400 text-sm font-medium hover:bg-red-600/10"
+        >
+          荣誉调整
+        </button>
+      )}
       <button
         onClick={onOpenUnmute}
         disabled={unmutePending}

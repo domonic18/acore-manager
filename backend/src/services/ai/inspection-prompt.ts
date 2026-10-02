@@ -53,7 +53,9 @@ export function buildInspectionTaskPrompt(
     `8. server 日志异常标记（parse_server_anomalies 的 players）：loot-respawn 单次多为节点竞速/多开采集/`,
     `   客户端状态残留误判，同一玩家当日跨多节点重复才构成采集外挂嫌疑；quest/auction/foreign-account-access`,
     `   等 high 级标记须列入 suspicious-players 并给出证据摘录；authFailures.bruteForceSuspect 的 IP`,
-    `   直接写入 server-health 并在 recommendations 提示封禁/拉黑。`,
+    `   直接写入 server-health 并在 recommendations 提示封禁/拉黑。authFailures 已在代码层剔除受信 IP`,
+    `   （站长自有服务的合法认证流量），返回列表中的 IP 均为待审可疑来源，禁止用 grep 等方式从原始日志`,
+    `   外推其他 IP 补入报告。`,
     ``,
     `历史误封校准案例（真实申诉复盘，判定口径参考）：`,
     `- 影牙城堡(地图33) 20 级法师被带刷：当日 zaxis 103 次全部位于地图33、坐标集中约 45×15 码、延迟 0-11ms → 模块自动永封，核实为误封解封。`,
@@ -70,6 +72,11 @@ export function buildInspectionTaskPrompt(
     EXECUTION_DISCIPLINE,
     ``,
     `硬性要求：falsePositiveSignals 非空的玩家 suggestedAction 不得为 "ban"；证据必须来自工具返回的原文摘录，禁止编造；无日志支撑的维度如实写"无数据"。`,
+    `游戏信息表述：金额引用工具返回的 *Text 格式化字段（如 21金50银6铜），禁止"约 X 万"式换算；`,
+    `种族/职业/地图/区域名引用 raceName/className/mapName/zoneName，坐标不得用于推断区域名；`,
+    `任务/物品/节点 ID 引用前先 get_game_references 查名，查不到以纯 ID 表述，禁止自行翻译 ID 或编造名称。`,
+    `游戏词条超链接：markdown 输出中用工具返回的 url 作 [名称](url) 链接；纯文本分节中词条用`,
+    `「任务/物品/节点/NPC {id}」标准前缀逐个表述（禁止"9312/9473"连写），系统会自动把前缀+ID 链接化。`,
   ].join('\n');
   return { messages: [{ role: 'user', content }] };
 }

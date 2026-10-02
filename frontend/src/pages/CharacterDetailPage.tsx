@@ -8,6 +8,7 @@ import { CharacterUnmuteConfirmDialog } from '@/features/character/components/Ch
 import { BanFlowDialogs } from '@/shared/components/BanFlowDialogs';
 import { BanHistoryTable } from '@/shared/components/BanHistoryTable';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { HonorAdjustDialog } from '@/shared/components/HonorAdjustDialog';
 import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 
 export default function CharacterDetailPage() {
@@ -31,7 +32,7 @@ export default function CharacterDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <button
-          onClick={() => navigate('/characters')}
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/characters'))}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           ← 返回列表
@@ -48,6 +49,7 @@ export default function CharacterDetailPage() {
           onOpenUnban={() => actions.setShowUnbanConfirmDialog(true)}
           onOpenMute={() => actions.setShowMuteDialog(true)}
           onOpenUnmute={() => actions.setShowUnmuteConfirmDialog(true)}
+          onOpenHonor={() => actions.setShowHonorDialog(true)}
         />
       </div>
 
@@ -88,6 +90,11 @@ export default function CharacterDetailPage() {
         characterName={character.name}
         pending={actions.unmutePending}
         onConfirm={actions.handleExecuteUnmute}
+      />
+      <HonorAdjustDialog
+        characterName={character.name}
+        open={actions.showHonorDialog}
+        onClose={() => actions.setShowHonorDialog(false)}
       />
     </div>
   );

@@ -20,13 +20,15 @@ services:
       target: production
       args:
         VITE_ICON_BASE_URL: ${VITE_ICON_BASE_URL}
-        VITE_AOWOW_BASE_URL: ${VITE_AOWOW_BASE_URL}
+        # 游戏词条外链基址（nfuwow 中文数据库）：前端构建与后端运行时共用同一变量
+        VITE_AOWOW_BASE_URL: ${VITE_AOWOW_BASE_URL:-https://db.nfuwow.com/80/}
     ports:
-      - "9010:9000"
+      - "9000:9000"
     env_file:
       - .env
     environment:
       - NODE_ENV=production
+      - AOWOW_BASE_URL=${VITE_AOWOW_BASE_URL:-https://db.nfuwow.com/80/}
     depends_on:
       - acm-postgres
     restart: unless-stopped

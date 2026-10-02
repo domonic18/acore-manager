@@ -1,7 +1,8 @@
-import { useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { usePermission } from '@/shared/hooks/usePermission';
 import { LogoIcon } from '@/shared/components/ui/LogoIcon';
 import { SHORT_VERSION } from '@/shared/config/version';
 import {
@@ -23,6 +24,8 @@ import {
   FileSearch,
   Crosshair,
   Settings,
+  ChevronDown,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -70,31 +73,47 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
       { path: '/ai-diagnosis/targeted', label: '深度分析', icon: Crosshair },
     ],
   },
-  {
-    title: '系统',
-    items: [
-      { path: '/audit-logs', label: '日志审计', icon: ScrollText },
-      { path: '/system-config', label: '系统配置', icon: Settings },
-    ],
-  },
 ];
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
+  const { hasGmLevel } = usePermission();
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    setUserMenuOpen(false);
     logout();
     navigate('/login');
   };
+
+  // 点击菜单外任意区域收起头像下拉
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [userMenuOpen]);
 
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 md:relative md:translate-x-0 bg-card border-r border-border',
+          'fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0 bg-card border-r border-border',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -122,7 +141,7 @@ export function AppLayout() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {menuGroups.map((group) => (
               <div key={group.title}>
                 <div className="px-3 pt-4 pb-1 text-xs font-medium text-muted-foreground">
@@ -150,25 +169,6 @@ export function AppLayout() {
               </div>
             ))}
           </nav>
-
-          {/* User Info & Logout */}
-          <div className="p-4 border-t border-border space-y-3">
-            {user && (
-              <div className="px-3">
-                <p className="text-sm font-medium">{user.username}</p>
-                <p className="text-xs text-muted-foreground">
-                  GM等级: {user.gmlevel}
-                </p>
-              </div>
-            )}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 w-full px-3 py-2 text-sm text-muted-foreground hover:text-destructive transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              退出登录
-            </button>
-          </div>
         </div>
       </aside>
 
@@ -190,6 +190,86 @@ export function AppLayout() {
           >
             <Menu className="w-6 h-6" />
           </button>
+          <div className="ml-auto flex items-center gap-1">
+            {hasGmLevel(1) && (
+              <NavLink
+                to="/audit-logs"
+                title="日志审计"
+                aria-label="日志审计"
+                className={({ isActive }) =>
+                  cn(
+                    'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  )
+                }
+              >
+                <ScrollText className="w-5 h-5" />
+              </NavLink>
+            )}
+            {hasGmLevel(3) && (
+              <NavLink
+                to="/system-config"
+                title="设置"
+                aria-label="设置"
+                className={({ isActive }) =>
+                  cn(
+                    'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  )
+                }
+              >
+                <Settings className="w-5 h-5" />
+              </NavLink>
+            )}
+
+            {/* 头像下拉：账户信息 + 退出登录 */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                title={user?.username}
+                className="flex items-center gap-1 h-9 pl-1 pr-1.5 rounded-full transition-colors hover:bg-accent"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-semibold uppercase">
+                  {(user?.username || '?').charAt(0)}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    'w-4 h-4 text-muted-foreground transition-transform',
+                    userMenuOpen && 'rotate-180',
+                  )}
+                />
+              </button>
+
+              {userMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-2 w-60 rounded-md border border-border bg-popover shadow-md py-1.5 z-50"
+                >
+                  <div className="px-3 py-2 border-b border-border">
+                    <p className="text-sm font-medium truncate">{user?.username ?? '—'}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      GM 等级 {user?.gmlevel ?? '—'}
+                    </p>
+                  </div>
+                  <button
+                    role="menuitem"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    退出登录
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </header>
 
         {/* Page Content */}

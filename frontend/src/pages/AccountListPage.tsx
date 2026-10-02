@@ -5,22 +5,35 @@ import { AccountTable, type AccountSortState } from '@/features/account/componen
 import { TimeRangeFilter, type TimeRange } from '@/shared/components/TimeRangeFilter';
 import { PaginationBar } from '@/shared/components/PaginationBar';
 import { Skeleton } from '@/shared/components/Skeleton';
+import { useListQueryParams } from '@/shared/hooks/useListQueryParams';
 
+// 筛选/排序/翻页状态持久化在 URL：进出详情返回后恢复，深链可直达。
+// 搜索提交与重置产生历史记录（replace:false），其余变更 replace。
 export default function AccountListPage() {
   const navigate = useNavigate();
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [sort, setSort] = useState<AccountSortState>({});
-  const [joinRange, setJoinRange] = useState<TimeRange | null>(null);
-  const [loginRange, setLoginRange] = useState<TimeRange | null>(null);
+  const { params, set } = useListQueryParams();
+
+  const search = params.get('q') ?? '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const sortBy = params.get('sortBy') ?? undefined;
+  const sortOrder = params.get('sortOrder') ?? undefined;
+  const sort: AccountSortState = { sortBy, sortOrder: sortOrder === 'ASC' || sortOrder === 'DESC' ? sortOrder : undefined };
+  const joinRange: TimeRange | null =
+    params.get('joinedFrom') || params.get('joinedTo')
+      ? { from: params.get('joinedFrom') ?? '', to: params.get('joinedTo') ?? '' }
+      : null;
+  const loginRange: TimeRange | null =
+    params.get('loginFrom') || params.get('loginTo')
+      ? { from: params.get('loginFrom') ?? '', to: params.get('loginTo') ?? '' }
+      : null;
+  const [searchInput, setSearchInput] = useState(search);
 
   const { data, isLoading } = useAccountList({
     page,
     pageSize: 20,
     search,
-    sortBy: sort.sortBy,
-    sortOrder: sort.sortOrder,
+    sortBy,
+    sortOrder,
     joinedFrom: joinRange?.from,
     joinedTo: joinRange?.to,
     loginFrom: loginRange?.from,
@@ -28,31 +41,20 @@ export default function AccountListPage() {
   });
 
   const handleSearch = () => {
-    setSearch(searchInput);
-    setPage(1);
+    set({ q: searchInput || null, page: null }, { replace: false });
   };
 
   const handleReset = () => {
     setSearchInput('');
-    setSearch('');
-    setJoinRange(null);
-    setLoginRange(null);
-    setPage(1);
+    set({ q: null, page: null, sortBy: null, sortOrder: null, joinedFrom: null, joinedTo: null, loginFrom: null, loginTo: null }, { replace: false });
   };
 
   const hasFilters = Boolean(search || joinRange || loginRange);
 
   const handleSort = (field: string) => {
-    setSort((prev) => {
-      if (prev.sortBy !== field) {
-        return { sortBy: field, sortOrder: 'DESC' };
-      }
-      if (prev.sortOrder === 'DESC') {
-        return { sortBy: field, sortOrder: 'ASC' };
-      }
-      return {};
-    });
-    setPage(1);
+    if (sortBy !== field) set({ sortBy: field, sortOrder: 'DESC', page: null });
+    else if (sortOrder === 'DESC') set({ sortBy: field, sortOrder: 'ASC', page: null });
+    else set({ sortBy: null, sortOrder: null, page: null });
   };
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
@@ -87,16 +89,14 @@ export default function AccountListPage() {
           label="注册时间"
           value={joinRange}
           onChange={(v) => {
-            setJoinRange(v);
-            setPage(1);
+            set({ joinedFrom: v?.from ?? null, joinedTo: v?.to ?? null, page: null });
           }}
         />
         <TimeRangeFilter
           label="最后登录"
           value={loginRange}
           onChange={(v) => {
-            setLoginRange(v);
-            setPage(1);
+            set({ loginFrom: v?.from ?? null, loginTo: v?.to ?? null, page: null });
           }}
         />
         {hasFilters && (
@@ -108,7 +108,7 @@ export default function AccountListPage() {
 
       <AccountTable rows={data?.items ?? []} loading={isLoading} sort={sort} onSort={handleSort} onOpen={(id) => navigate(`/accounts/${id}`)} />
 
-      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={setPage} loading={isLoading} />
+      <PaginationBar page={page} totalPages={totalPages} total={data?.total ?? 0} onPageChange={(p) => set({ page: p > 1 ? p : null })} loading={isLoading} />
     </div>
   );
 }

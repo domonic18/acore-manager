@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import type { SuspiciousPlayer } from '@/features/ai-diagnosis/api/ai-diagnosis.api';
+import { GameRefText } from './GameRefText';
 
 export const SEVERITY_STYLE: Record<string, string> = {
   high: 'bg-red-500/20 text-red-400',
@@ -28,7 +29,9 @@ export function AiAdviceCell({ player }: { player: SuspiciousPlayer }) {
         {player.suggestion && (
           <div>
             <div className="mb-0.5 font-sans font-semibold text-muted-foreground">AI 处置建议</div>
-            <p className="font-sans leading-relaxed text-muted-foreground">{player.suggestion}</p>
+            <p className="font-sans leading-relaxed text-muted-foreground">
+              <GameRefText text={player.suggestion} />
+            </p>
           </div>
         )}
         {reasons.length > 0 && (
@@ -37,7 +40,7 @@ export function AiAdviceCell({ player }: { player: SuspiciousPlayer }) {
             <ol className="list-decimal space-y-0.5 pl-4">
               {reasons.map((r, i) => (
                 <li key={i} className="break-all text-muted-foreground">
-                  {r}
+                  <GameRefText text={r} />
                 </li>
               ))}
             </ol>

@@ -24,6 +24,8 @@ export const SYSTEM_CONFIG_KEYS = {
   loginLockoutMinutes: 'login_lockout_minutes',
   loginCaptchaEnabled: 'login_captcha_enabled',
   loginCaptchaTtlSeconds: 'login_captcha_ttl_seconds',
+  inspectionTrustedIps: 'inspection_trusted_ips',
+  patrolBgCursor: 'patrol_bg_cursor',
 } as const;
 
 export const DEFAULT_REALM_FALLBACK = 'realm3';
@@ -40,6 +42,22 @@ export async function loadConfigValues(): Promise<Map<string, string>> {
 export async function readDefaultRealm(): Promise<string> {
   const values = await loadConfigValues();
   return values.get(SYSTEM_CONFIG_KEYS.defaultRealm) ?? DEFAULT_REALM_FALLBACK;
+}
+
+export const IPV4_RE = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+// 巡检受信 IP 白名单（逗号/换行分隔）：这些来源的失败登录为合法业务流量（如站长自有
+// Web 服务的认证日志），爆破判定前整体剔除。读取失败/未配置 → 空 Set（行为同无白名单）。
+export async function readInspectionTrustedIps(): Promise<Set<string>> {
+  const raw = (await readRuntimeValues([SYSTEM_CONFIG_KEYS.inspectionTrustedIps])).get(
+    SYSTEM_CONFIG_KEYS.inspectionTrustedIps,
+  );
+  if (!raw) return new Set();
+  const ips = raw
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter((s) => IPV4_RE.test(s));
+  return new Set(ips);
 }
 
 // 运行时读取（消费方路径）：PG 暂不可用时静默回落——返回空 Map，由消费方回退 env 值，

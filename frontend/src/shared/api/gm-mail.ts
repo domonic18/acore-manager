@@ -27,6 +27,10 @@ export interface MailSendInput {
   body: string;
   source: 'template' | 'custom';
   refReport?: string;
+  /** 逐目标违规概要（{reason} 占位符），key 为角色名；未命中时回落共享 reason（不传则空） */
+  reasonsByTarget?: Record<string, string>;
+  /** 报告日期（{date} 占位符），YYYY-MM-DD */
+  reportDate?: string;
 }
 
 export interface MailLogItem {

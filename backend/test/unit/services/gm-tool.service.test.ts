@@ -88,6 +88,32 @@ describe('GmToolService', () => {
       expect(sendCommand).toHaveBeenNthCalledWith(2, expect.stringContaining('.send mail Treepress "违规警告" "亲爱的 Treepress：2026-08-22 检测到 加速违规，请立即停止。"'));
     });
 
+    it('prefers per-target reasonsByTarget over the shared reason and falls back when a target misses', async () => {
+      await gmToolService.sendMail(
+        mailInput({
+          targets: ['Unparalleled', 'Treepress'],
+          body: '亲爱的 {player}：{date} 因 {reason} 被警告。',
+          reason: '多次违规',
+          reasonsByTarget: { Unparalleled: '触发 Speed-Hack 举报 3 次' },
+          reportDate: '2026-10-01',
+        }),
+      );
+
+      expect(sendCommand).toHaveBeenNthCalledWith(1, expect.stringContaining('亲爱的 Unparalleled：2026-10-01 因 触发 Speed-Hack 举报 3 次 被警告。'));
+      expect(sendCommand).toHaveBeenNthCalledWith(2, expect.stringContaining('亲爱的 Treepress：2026-10-01 因 多次违规 被警告。'));
+    });
+
+    it('renders empty {reason}/{date} when neither reasonsByTarget nor reason is provided (legacy callers)', async () => {
+      await gmToolService.sendMail(
+        mailInput({
+          targets: ['Unparalleled'],
+          body: '亲爱的 {player}：{date} 因 {reason} 被警告。',
+        }),
+      );
+
+      expect(sendCommand).toHaveBeenCalledWith(expect.stringContaining('亲爱的 Unparalleled： 因  被警告。'));
+    });
+
     it('isolates a failing target without affecting the others', async () => {
       sendCommand.mockRejectedValueOnce(new Error('SOAP timeout'));
       const { results } = await gmToolService.sendMail(mailInput({ targets: ['Unparalleled', 'Treepress'] }));
@@ -132,6 +158,51 @@ describe('GmToolService', () => {
     it('rejects an over-500-char body and an over-100-char subject before any SOAP call', async () => {
       await expect(gmToolService.sendMail(mailInput({ body: 'a'.repeat(501) }))).rejects.toThrow('500');
       await expect(gmToolService.sendMail(mailInput({ subject: 'a'.repeat(101) }))).rejects.toThrow('100');
+      expect(sendCommand).not.toHaveBeenCalled();
+      expect(record).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('adjustHonor', () => {
+    it('builds the wardenhonor SOAP command and reports success', async () => {
+      sendCommand.mockResolvedValueOnce('<result>[warden] Unparalleled honor adjusted: 500 -> 0 (set 0)</result>');
+
+      const result = await gmToolService.adjustHonor({ ...OPERATOR, characterName: 'Unparalleled', mode: 'set', value: 0 });
+
+      expect(sendCommand).toHaveBeenCalledWith('.wardenhonor set Unparalleled 0');
+      expect(result).toMatchObject({ name: 'Unparalleled', ok: true, message: '[warden] Unparalleled honor adjusted: 500 -> 0 (set 0)' });
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({ operation: 'gmtool.honor.adjust', target: 'name:Unparalleled', operatorName: 'DEADWALK' }),
+      );
+      const details = JSON.parse(record.mock.calls[0][0].details);
+      expect(details).toMatchObject({ characterName: 'Unparalleled', mode: 'set', value: 0, ok: true });
+    });
+
+    it('marks a not-online receipt as failed', async () => {
+      sendCommand.mockResolvedValueOnce('<result>[warden] player not online: Ghost</result>');
+
+      const result = await gmToolService.adjustHonor({ ...OPERATOR, characterName: 'Ghost', mode: 'sub', value: 500 });
+
+      expect(sendCommand).toHaveBeenCalledWith('.wardenhonor sub Ghost 500');
+      expect(result).toMatchObject({ ok: false, message: '[warden] player not online: Ghost' });
+    });
+
+    it('isolates SOAP failures and still audits', async () => {
+      sendCommand.mockRejectedValueOnce(new Error('SOAP timeout'));
+
+      const result = await gmToolService.adjustHonor({ ...OPERATOR, characterName: 'Unparalleled', mode: 'sub', value: 1, reason: '互刷处罚' });
+
+      expect(result).toMatchObject({ ok: false, message: 'SOAP timeout' });
+      expect(record).toHaveBeenCalledTimes(1);
+      const details = JSON.parse(record.mock.calls[0][0].details);
+      expect(details).toMatchObject({ mode: 'sub', value: 1, reason: '互刷处罚', ok: false });
+    });
+
+    it('rejects invalid input before any SOAP call', async () => {
+      await expect(gmToolService.adjustHonor({ ...OPERATOR, characterName: '', mode: 'set', value: 0 })).rejects.toThrow('角色名');
+      await expect(gmToolService.adjustHonor({ ...OPERATOR, characterName: 'A', mode: 'add', value: 1 })).rejects.toThrow('mode');
+      await expect(gmToolService.adjustHonor({ ...OPERATOR, characterName: 'A', mode: 'set', value: -1 })).rejects.toThrow('value');
+      await expect(gmToolService.adjustHonor({ ...OPERATOR, characterName: 'A', mode: 'set', value: 1.5 })).rejects.toThrow('value');
       expect(sendCommand).not.toHaveBeenCalled();
       expect(record).not.toHaveBeenCalled();
     });

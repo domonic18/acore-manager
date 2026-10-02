@@ -7,6 +7,15 @@ jest.mock('@/services/ai/targeted-analysis.service', () => ({
     remove: jest.fn().mockResolvedValue(undefined),
   },
 }));
+jest.mock('@/services/abuse-patrol.service', () => ({
+  abusePatrolService: {
+    listFindings: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+    updateFindingStatus: jest.fn().mockResolvedValue(null),
+  },
+}));
+jest.mock('@/services/audit-log.service', () => ({
+  auditLogService: { record: jest.fn().mockResolvedValue(undefined) },
+}));
 jest.mock('@/config/env', () => ({
   env: { LOG_LEVEL: 'silent', NODE_ENV: 'test' },
 }));
@@ -27,6 +36,10 @@ import { responseFormatter } from '@/middleware/response-formatter';
 import aiAnalysisRoutes from '@/routes/ai-analysis.routes';
 import { ServiceError } from '@/shared/errors/service-error';
 import { targetedAnalysisService } from '@/services/ai/targeted-analysis.service';
+import { abusePatrolService } from '@/services/abuse-patrol.service';
+
+const listFindingsMock = abusePatrolService.listFindings as jest.Mock;
+const updateFindingStatusMock = abusePatrolService.updateFindingStatus as jest.Mock;
 
 const createRecordsMock = targetedAnalysisService.createRecords as jest.Mock;
 
@@ -178,5 +191,57 @@ describe('AI Analysis Routes: PUT/DELETE /targeted/:id (T4.7)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ success: true });
     expect(targetedAnalysisService.remove).toHaveBeenCalledWith(77, 0, '');
+  });
+});
+
+describe('AI Analysis Routes: /patrol-findings (violation patrol)', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    app = express();
+    app.use(express.json());
+    app.use(responseFormatter);
+    app.use('/api/ai/analysis', aiAnalysisRoutes);
+  });
+
+  it('lists findings with filters, paging and total count', async () => {
+    listFindingsMock.mockResolvedValueOnce({ items: [{ id: 5, findingType: 'bg_honor_farm', status: 'open' }], total: 1 });
+
+    const res = await request(app).get('/api/ai/analysis/patrol-findings?date=2026-10-03&type=bg_honor_farm&status=open&page=2&pageSize=10');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ items: [{ id: 5, findingType: 'bg_honor_farm', status: 'open' }], total: 1 });
+    expect(listFindingsMock).toHaveBeenCalledWith({ date: '2026-10-03', type: 'bg_honor_farm', status: 'open' }, 2, 10);
+  });
+
+  it('rejects an invalid type and a malformed date with 400', async () => {
+    const badType = await request(app).get('/api/ai/analysis/patrol-findings?type=honor_farm');
+    expect(badType.status).toBe(400);
+
+    const badDate = await request(app).get('/api/ai/analysis/patrol-findings?date=20261003');
+    expect(badDate.status).toBe(400);
+    expect(listFindingsMock).not.toHaveBeenCalled();
+  });
+
+  it('transitions a finding status and returns the row', async () => {
+    updateFindingStatusMock.mockResolvedValueOnce({ id: 5, status: 'actioned', findingType: 'hardcore_carry', dedupeKey: 'k1' });
+
+    const res = await request(app).post('/api/ai/analysis/patrol-findings/5/status').send({ status: 'actioned' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ id: 5, status: 'actioned' });
+    expect(updateFindingStatusMock).toHaveBeenCalledWith(5, 'actioned');
+  });
+
+  it('returns 404 for a missing finding and 400 for a bad status', async () => {
+    const missing = await request(app).post('/api/ai/analysis/patrol-findings/999/status').send({ status: 'actioned' });
+    expect(missing.status).toBe(404);
+
+    const badStatus = await request(app).post('/api/ai/analysis/patrol-findings/5/status').send({ status: 'closed' });
+    expect(badStatus.status).toBe(400);
+    // 仅 999 那次真正触达 service（返回 null → 404）；badStatus 被校验拦截
+    expect(updateFindingStatusMock).toHaveBeenCalledTimes(1);
+    expect(updateFindingStatusMock).toHaveBeenCalledWith(999, 'actioned');
   });
 });

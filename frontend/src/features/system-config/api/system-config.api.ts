@@ -30,6 +30,10 @@ export interface SystemConfigPayload {
     captchaEnabled?: string | null;
     captchaTtlSeconds?: number | null;
   };
+  inspection?: {
+    /** 逗号/换行分隔 IPv4；空串/null = 清除白名单 */
+    trustedIps?: string | null;
+  };
 }
 
 export interface SoapTestResult {

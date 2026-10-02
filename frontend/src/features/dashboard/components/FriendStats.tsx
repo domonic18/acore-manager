@@ -66,37 +66,37 @@ export default function FriendStats({ distribution, topCharacters, loading = fal
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Friend Distribution Chart */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="text-sm font-medium mb-4">角色好友数量分布</h3>
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 288 }}>
-            <BarChart data={allBuckets} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-xs text-muted-foreground mb-2">角色好友数量分布</h3>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 192 }}>
+            <BarChart data={allBuckets} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis
                 dataKey="label"
-                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                 interval={0}
                 stroke="hsl(var(--muted-foreground))"
               />
-              <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <Tooltip content={<CustomTooltip />} contentStyle={{ background: 'transparent', border: 'none', padding: 0 }} />
-              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       {/* Top 5 Characters by Friends */}
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h3 className="text-sm font-medium mb-4">好友数量 Top 5 角色</h3>
-        <div className="space-y-3">
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h3 className="text-xs text-muted-foreground mb-2">好友数量 Top 5 角色</h3>
+        <div className="space-y-2">
           {topCharacters.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">暂无数据</p>
+            <p className="text-sm text-muted-foreground text-center py-8">暂无数据</p>
           ) : (
             topCharacters.map((character, index) => (
               <div
                 key={character.guid}
-                className="flex items-center justify-between rounded-md bg-muted/50 px-4 py-3 cursor-pointer hover:bg-muted transition-colors"
+                className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 cursor-pointer hover:bg-muted transition-colors"
                 onClick={() => navigate(`/characters/${character.guid}`)}
               >
                 <div className="flex items-center gap-3">
@@ -112,7 +112,7 @@ export default function FriendStats({ distribution, topCharacters, loading = fal
                   <span className="text-sm font-medium">{character.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-lg font-bold">{character.friendCount}</span>
+                  <span className="text-base font-bold tabular-nums">{character.friendCount}</span>
                   <span className="text-xs text-muted-foreground">好友</span>
                 </div>
               </div>

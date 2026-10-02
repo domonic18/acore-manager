@@ -35,33 +35,18 @@ interface PopulationStatsProps {
   loading?: boolean;
 }
 
+// 图标刻度：仅图标无文字（名称在 tooltip 中展示），压缩 XAxis 高度
 function IconTick(props: { x?: number; y?: number; payload?: { value: string }; type?: 'race' | 'class' }) {
   const { x = 0, y = 0, payload, type = 'race' } = props;
   const id = parseInt(payload?.value || '0', 10);
-  const map = type === 'race' ? RACE_MAP : CLASS_MAP;
   const iconUrl = type === 'race' ? getRaceIconUrl(id) : getClassIconUrl(id);
-  const name = map[id]?.name || `${type === 'race' ? '种族' : '职业'} ${id}`;
+  const name = (type === 'race' ? RACE_MAP : CLASS_MAP)[id]?.name || '';
   const absUrl = typeof window !== 'undefined' ? `${window.location.origin}${iconUrl}` : iconUrl;
 
   return (
     <g transform={`translate(${x},${y})`}>
-      <image
-        href={absUrl}
-        x={-12}
-        y={-28}
-        width={24}
-        height={24}
-        preserveAspectRatio="xMidYMid meet"
-      />
-      <text
-        x={0}
-        y={10}
-        textAnchor="middle"
-        fill="hsl(var(--muted-foreground))"
-        fontSize={11}
-      >
-        {name}
-      </text>
+      <title>{name}</title>
+      <image href={absUrl} x={-10} y={-2} width={20} height={20} preserveAspectRatio="xMidYMid meet" />
     </g>
   );
 }
@@ -70,13 +55,22 @@ function LevelTick(props: { x?: number; y?: number; payload?: { value: string } 
   return (
     <text
       x={props.x || 0}
-      y={(props.y || 0) + 12}
+      y={(props.y || 0) + 10}
       textAnchor="middle"
       fill="hsl(var(--muted-foreground))"
       fontSize={10}
     >
       {props.payload?.value}
     </text>
+  );
+}
+
+function ChartBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground mb-2">{title}</p>
+      <div className="h-40">{children}</div>
+    </div>
   );
 }
 
@@ -88,12 +82,12 @@ export default function PopulationStats({
   loading = false,
 }: PopulationStatsProps) {
   if (loading) {
-    // 骨架与加载完成后的布局同构（角色总数卡 + 三张图卡），避免卡片数变化造成跳动
+    // 骨架与加载完成后的布局同构（单卡头行 + 三张图），避免卡片数变化造成跳动
     return (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-border bg-card p-6">
-          <p className="text-sm text-muted-foreground">角色总数</p>
-          <Skeleton className="mt-2 h-9 w-24" />
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-6 w-28" />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {['等级分布', '种族分布', '职业分布'].map((name) => (
@@ -132,87 +126,80 @@ export default function PopulationStats({
       .sort((a, b) => parseInt(a.level, 10) - parseInt(b.level, 10));
   })();
 
+  const chartTooltip = <Tooltip content={<CustomTooltip />} contentStyle={{ background: 'transparent', border: 'none', padding: 0 }} />;
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-card p-6">
-        <p className="text-sm text-muted-foreground">角色总数</p>
-        <p className="text-3xl font-bold mt-2">{totalCharacters}</p>
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-sm font-medium">人口结构</h2>
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg font-bold tabular-nums">{totalCharacters}</span>
+          <span className="text-xs text-muted-foreground">角色总数</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Level Distribution */}
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="text-sm font-medium mb-4">等级分布</h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 288 }}>
-              <BarChart data={levelData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="level"
-                  tick={<LevelTick />}
-                  interval={0}
-                  height={30}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip content={<CustomTooltip />} contentStyle={{ background: 'transparent', border: 'none', padding: 0 }} />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <ChartBlock title="等级分布">
+          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 160 }}>
+            <BarChart data={levelData} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis
+                dataKey="level"
+                tick={<LevelTick />}
+                interval={0}
+                height={24}
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              {chartTooltip}
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartBlock>
 
-        {/* Race Distribution */}
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="text-sm font-medium mb-4">种族分布</h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 288 }}>
-              <BarChart data={raceData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="id"
-                  tick={<IconTick type="race" />}
-                  interval={0}
-                  height={60}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip content={<CustomTooltip />} contentStyle={{ background: 'transparent', border: 'none', padding: 0 }} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {raceData.map((entry, index) => (
-                    <Cell key={`cell-race-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <ChartBlock title="种族分布">
+          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 160 }}>
+            <BarChart data={raceData} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis
+                dataKey="id"
+                tick={<IconTick type="race" />}
+                interval={0}
+                height={28}
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              {chartTooltip}
+              <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                {raceData.map((entry, index) => (
+                  <Cell key={`cell-race-${index}`} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartBlock>
 
-        {/* Class Distribution */}
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="text-sm font-medium mb-4">职业分布</h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 288 }}>
-              <BarChart data={classData} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="id"
-                  tick={<IconTick type="class" />}
-                  interval={0}
-                  height={60}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip content={<CustomTooltip />} contentStyle={{ background: 'transparent', border: 'none', padding: 0 }} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {classData.map((entry, index) => (
-                    <Cell key={`cell-class-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <ChartBlock title="职业分布">
+          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 160 }}>
+            <BarChart data={classData} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis
+                dataKey="id"
+                tick={<IconTick type="class" />}
+                interval={0}
+                height={28}
+                stroke="hsl(var(--muted-foreground))"
+              />
+              <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+              {chartTooltip}
+              <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                {classData.map((entry, index) => (
+                  <Cell key={`cell-class-${index}`} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartBlock>
       </div>
     </div>
   );

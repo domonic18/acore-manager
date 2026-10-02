@@ -299,9 +299,11 @@ export interface AuthFailureAggregate {
   bruteForceSuspect: boolean;
 }
 
-export function aggregateAuthFailures(events: AuthFailureEvent[], limit = 10): AuthFailureAggregate[] {
+export function aggregateAuthFailures(events: AuthFailureEvent[], limit = 10, trustedIps: Set<string> = new Set()): AuthFailureAggregate[] {
   const acc = new Map<string, { counts: Map<string, number>; first: string; last: string; count: number }>();
   for (const e of events) {
+    // 受信 IP（如站长自有 Web 服务的合法认证流量）在聚合前整体剔除，不进入巡检证据
+    if (trustedIps.has(e.ip)) continue;
     const entry = acc.get(e.ip) ?? { counts: new Map<string, number>(), first: e.time, last: e.time, count: 0 };
     entry.count++;
     entry.counts.set(e.account, (entry.counts.get(e.account) ?? 0) + 1);

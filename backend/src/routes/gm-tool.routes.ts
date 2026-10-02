@@ -70,6 +70,9 @@ router.post(
     body('body').isString().trim().isLength({ min: 1, max: 500 }),
     body('source').optional().isIn(['template', 'custom']),
     body('refReport').optional().isString().trim().isLength({ max: 64 }),
+    body('reasonsByTarget').optional().isObject(),
+    body('reasonsByTarget.*').optional().isString().trim().isLength({ max: 300 }),
+    body('reportDate').optional().isString().trim().matches(/^\d{4}-\d{2}-\d{2}$/),
   ],
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -84,12 +87,47 @@ router.post(
         body: req.body.body as string,
         source: (req.body.source as 'template' | 'custom') ?? 'custom',
         refReport: req.body.refReport as string | undefined,
+        reasonsByTarget: req.body.reasonsByTarget as Record<string, string> | undefined,
+        reportDate: req.body.reportDate as string | undefined,
         operatorId: req.user?.id || 0,
         operatorName: req.user?.username || '',
       });
       res.jsonSuccess(result);
     } catch (err) {
       res.jsonError((err as Error).message || '发送失败', 400);
+    }
+  }),
+);
+
+// 荣誉调整（守望者伪命令 wardenhonor，经 SOAP，仅在线玩家生效）：处罚级操作 gmlevel≥3 + 全量审计
+router.post(
+  '/honor-adjust',
+  authMiddleware,
+  requireGmLevel(3),
+  [
+    body('characterName').isString().trim().isLength({ min: 1, max: 12 }),
+    body('mode').isIn(['set', 'sub']),
+    body('value').isInt({ min: 0 }),
+    body('reason').optional().isString().trim().isLength({ max: 300 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const result = await gmToolService.adjustHonor({
+        characterName: req.body.characterName as string,
+        mode: req.body.mode as 'set' | 'sub',
+        value: req.body.value as number,
+        reason: req.body.reason as string | undefined,
+        operatorId: req.user?.id || 0,
+        operatorName: req.user?.username || '',
+      });
+      res.jsonSuccess(result);
+    } catch (err) {
+      res.jsonError((err as Error).message || '荣誉调整失败', 400);
     }
   }),
 );

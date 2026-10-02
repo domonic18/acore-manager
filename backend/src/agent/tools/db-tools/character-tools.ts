@@ -1,17 +1,38 @@
 import { z } from 'zod';
 import { registerTool } from '@/agent/tools/registry';
 import { matchAuraSpells } from '@/agent/tools/false-positive/aura-rules';
+import { mapName } from '@/agent/tools/log-tools/map-names';
+import { zoneName } from '@/agent/tools/log-tools/zone-names';
+import { className, formatGold, raceName } from './game-names';
 import { runReadOnly } from './query-guard';
 
 // 角色域白名单工具（需求 3.5）：全部经 runReadOnly 只读执行；
 // 行数上限/截断由护栏统一处理，SQL 列表与本地库实际列核对（mail 时间列为 deliver_time/expire_time）。
+// 输出富化：race/class/map/zone 原始 ID 旁附 raceName/className/mapName/zoneName 中文名，
+// 金钱字段附 *Text 格式化金额（X金X银X铜）——名称必须取自工具返回，禁止模型按 ID 臆测。
 
 type Row = Record<string, unknown>;
+
+function enrichOverview(r: Row): Row {
+  return {
+    ...r,
+    raceName: raceName(r.race as number | null),
+    className: className(r.class as number | null),
+    mapName: r.map != null ? mapName(r.map as number) : null,
+    zoneName: zoneName(r.zone as number | null),
+    moneyText: formatGold(r.money as number | null),
+  };
+}
+
+function enrichMoney(r: Row, fields: readonly string[]): Row {
+  return { ...r, ...Object.fromEntries(fields.map((f) => [`${f}Text`, formatGold(r[f] as number | null)])) };
+}
 
 export function registerCharacterTools(): void {
   registerTool({
     name: 'get_character_overview',
-    description: '按角色名（模糊）或 guid 查询角色概况：等级/种族/职业/金钱/在线/地图/公会/击杀数/延迟。',
+    description:
+      '按角色名（模糊）或 guid 查询角色概况：等级/种族/职业/金钱/在线/地图/公会/击杀数/延迟。raceName/className/mapName/zoneName 为中文名，moneyText 为格式化金额，报告必须直接引用这些名称字段。',
     schema: z
       .object({
         name: z.string().min(2).optional().describe('角色名（模糊匹配）'),
@@ -20,7 +41,7 @@ export function registerCharacterTools(): void {
       .refine((v) => v.name !== undefined || v.guid !== undefined, { message: 'name 与 guid 至少提供一个' }),
     handler: async (args) => {
       const { name, guid } = args as { name?: string; guid?: number };
-      return runReadOnly(
+      const result = await runReadOnly(
         'characters',
         `SELECT c.guid, c.name, c.account, c.race, c.class, c.gender, c.level, c.money, c.online, c.map, c.zone,
                 c.totalKills, c.totaltime, c.leveltime, c.latency, g.name AS guild_name
@@ -32,6 +53,7 @@ export function registerCharacterTools(): void {
          LIMIT 10`,
         [guid ?? `%${name}%`],
       );
+      return { ...result, rows: result.rows.map(enrichOverview) };
     },
   });
 
@@ -87,7 +109,7 @@ export function registerCharacterTools(): void {
   registerTool({
     name: 'get_money_flow',
     description:
-      '查询角色金钱流水（log_money）：先按 guid 解析角色名，再返回 N 天内其作为付款方（sender_guid）或收款方的记录。注意：流水表无收款方 guid，收款记录仅能按角色名匹配。',
+      '查询角色金钱流水（log_money）：先按 guid 解析角色名，再返回 N 天内其作为付款方（sender_guid）或收款方的记录，moneyText 为格式化金额。注意：流水表无收款方 guid，收款记录仅能按角色名匹配。',
     schema: z.object({
       guid: z.number().int().positive().describe('角色 guid'),
       daysBack: z.number().int().min(1).max(90).default(7).describe('回溯天数'),
@@ -101,7 +123,7 @@ export function registerCharacterTools(): void {
       const bySender = role !== 'receiver';
       const byReceiver = role !== 'sender';
       const cond = bySender && byReceiver ? '(sender_guid = ? OR receiver_name = ?)' : bySender ? 'sender_guid = ?' : 'receiver_name = ?';
-      return runReadOnly(
+      const result = await runReadOnly(
         'characters',
         `SELECT sender_guid, sender_name, sender_ip, receiver_acc, receiver_name, money, topic, date, type
          FROM log_money
@@ -110,19 +132,20 @@ export function registerCharacterTools(): void {
          LIMIT 50`,
         [daysBack, ...(bySender ? [guid] : []), ...(byReceiver ? [name] : [])],
       );
+      return { ...result, rows: result.rows.map((r) => enrichMoney(r, ['money'])) };
     },
   });
 
   registerTool({
     name: 'get_mail_transfers',
-    description: '查询角色资金相关邮件：N 天内收发的附钱（money>0）或到付（cod>0）邮件，含派送/过期时间。',
+    description: '查询角色资金相关邮件：N 天内收发的附钱（money>0）或到付（cod>0）邮件，含派送/过期时间；moneyText/codText 为格式化金额。',
     schema: z.object({
       guid: z.number().int().positive().describe('角色 guid'),
       daysBack: z.number().int().min(1).max(90).default(7).describe('回溯天数'),
     }),
     handler: async (args) => {
       const { guid, daysBack } = args as { guid: number; daysBack: number };
-      return runReadOnly(
+      const result = await runReadOnly(
         'characters',
         `SELECT id, messageType, sender, receiver, subject, money, cod, has_items, deliver_time, expire_time
          FROM mail
@@ -132,16 +155,17 @@ export function registerCharacterTools(): void {
          LIMIT 50`,
         [guid, guid, daysBack],
       );
+      return { ...result, rows: result.rows.map((r) => enrichMoney(r, ['money', 'cod'])) };
     },
   });
 
   registerTool({
     name: 'get_auction_activity',
-    description: '查询角色的拍卖行记录（itemowner=卖家，buyguid=当前买家）。仅含进行中的拍卖；成交或过期的记录会被系统清除。',
+    description: '查询角色的拍卖行记录（itemowner=卖家，buyguid=当前买家），各价格字段附 *Text 格式化金额。仅含进行中的拍卖；成交或过期的记录会被系统清除。',
     schema: z.object({ guid: z.number().int().positive().describe('角色 guid') }),
     handler: async (args) => {
       const { guid } = args as { guid: number };
-      return runReadOnly(
+      const result = await runReadOnly(
         'characters',
         `SELECT id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit
          FROM auctionhouse
@@ -150,6 +174,10 @@ export function registerCharacterTools(): void {
          LIMIT 50`,
         [guid, guid],
       );
+      return {
+        ...result,
+        rows: result.rows.map((r) => enrichMoney(r, ['buyoutprice', 'lastbid', 'startbid', 'deposit'])),
+      };
     },
   });
 }

@@ -172,6 +172,8 @@ export const env = {
   AI_AGENT_CACHE_SIZE: getEnvInt('AI_AGENT_CACHE_SIZE', 4),
   AI_TOOL_CALL_BUDGET: getEnvInt('AI_TOOL_CALL_BUDGET', 20),
   AI_TOOL_TIMEOUT_MS: getEnvInt('AI_TOOL_TIMEOUT_MS', 5000),
+  // 游戏词条外链基址（nfuwow 中文数据库，aowow 架构；与前端 VITE_AOWOW_BASE_URL 同值对应）
+  AOWOW_BASE_URL: getEnv('AOWOW_BASE_URL', 'https://db.nfuwow.com/80/'),
   // 巡检重试总时间预算（ms）：默认 1h（Job 函数已开异步执行，平台上限 24h）——
   // 覆盖弱模型最差情况（3 次 attempt 全跑满）仍有余量；剩余预算不足以完成下一轮
   // 重试时快速失败（落 failed 行 + 飞书告警），避免无界重试或被平台外部击杀。

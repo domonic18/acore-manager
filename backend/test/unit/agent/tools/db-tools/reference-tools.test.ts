@@ -24,10 +24,13 @@ describe('reference-tools', () => {
     queryMock.mockReset();
   });
 
-  it('queries quest_template by IN placeholders and reports missing ids', async () => {
+  it('queries quest_template by IN placeholders, appends nfuwow url and reports missing ids', async () => {
     queryMock.mockResolvedValueOnce([{ id: 9312, name: 'The Emitter' }]);
     const result = await toolFn('get_game_references').invoke({ type: 'quest', ids: [9312, 9473] });
-    expect(result).toEqual({ rows: [{ id: 9312, name: 'The Emitter' }], missing: [9473] });
+    expect(result).toEqual({
+      rows: [{ id: 9312, name: 'The Emitter', url: 'https://db.nfuwow.com/80/?quest=9312' }],
+      missing: [9473],
+    });
     const [sql, params] = queryMock.mock.calls[0];
     expect(sql).toContain('SELECT ID AS id, LogTitle AS name FROM quest_template WHERE ID IN (?,?)');
     expect(params).toEqual([9312, 9473]);
@@ -41,9 +44,21 @@ describe('reference-tools', () => {
     const result = await toolFn('get_game_references').invoke({ type: 'gameobject', ids: [181683, 181683, 181854] });
     expect(result.missing).toEqual([]);
     expect(result.rows).toHaveLength(2);
+    expect(result.rows).toEqual([
+      { id: 181683, name: 'Ancient Relic', url: 'https://db.nfuwow.com/80/?object=181683' },
+      { id: 181854, name: 'Sand Pear', url: 'https://db.nfuwow.com/80/?object=181854' },
+    ]);
     const [sql, params] = queryMock.mock.calls[0];
     expect(sql).toContain('FROM gameobject_template WHERE entry IN (?,?)');
     expect(params).toEqual([181683, 181854]);
+  });
+
+  it('hits creature_template for npc type with ?npc= url', async () => {
+    queryMock.mockResolvedValueOnce([{ id: 1, name: 'Guard' }]);
+    const result = await toolFn('get_game_references').invoke({ type: 'npc', ids: [1] });
+    expect(result.rows).toEqual([{ id: 1, name: 'Guard', url: 'https://db.nfuwow.com/80/?npc=1' }]);
+    const [sql] = queryMock.mock.calls[0];
+    expect(sql).toContain('FROM creature_template WHERE entry IN (?)');
   });
 
   it('rejects more than 30 ids at schema level', async () => {

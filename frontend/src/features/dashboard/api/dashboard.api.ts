@@ -11,10 +11,28 @@ export interface FriendTopCharacter {
   friendCount: number;
 }
 
+export interface RealmStatus {
+  realmId: number;
+  name: string;
+  startTime: number;
+  uptimeSeconds: number;
+  maxPlayers: number;
+  revision: string;
+}
+
+export interface LatestInspection {
+  realm: string;
+  reportDate: string;
+  healthScore: number;
+}
+
 export interface DashboardStats {
   onlinePlayers: number;
   newAccountsToday: number;
   activeAccountsToday: number;
+  bansToday: number;
+  realms: RealmStatus[];
+  latestInspection: LatestInspection | null;
   population: {
     totalCharacters: number;
     levelDistribution: DistributionItem[];
@@ -32,6 +50,19 @@ export interface DashboardStats {
   };
 }
 
+export interface HealthDetail {
+  state: string;
+  uptimeSeconds: number;
+  dependencies: {
+    authDb: boolean;
+    charactersDb: boolean;
+    worldDb: boolean;
+    acmDb: boolean;
+    redis: boolean;
+  };
+}
+
 export const dashboardApi = {
   getStats: () => apiClient.get<DashboardStats>('/api/dashboard/stats'),
+  getHealthDetail: () => apiClient.get<HealthDetail>('/api/health/detail'),
 };

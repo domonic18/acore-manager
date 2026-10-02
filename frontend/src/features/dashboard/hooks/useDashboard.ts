@@ -8,3 +8,11 @@ export function useDashboardStats() {
     refetchInterval: 30 * 1000,
   });
 }
+
+export function useHealthDetail() {
+  return useQuery({
+    queryKey: ['dashboard', 'health'],
+    queryFn: () => dashboardApi.getHealthDetail(),
+    refetchInterval: 30 * 1000,
+  });
+}

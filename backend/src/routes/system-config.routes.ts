@@ -59,6 +59,10 @@ router.put(
     body('login.lockoutMinutes').optional({ values: 'null' }).isInt({ min: 1, max: 1440 }),
     body('login.captchaEnabled').optional({ values: 'null' }).isIn(['true', 'false']),
     body('login.captchaTtlSeconds').optional({ values: 'null' }).isInt({ min: 60, max: 3600 }),
+
+    // 逐 IP 格式校验在业务层（需按逗号/换行拆分）
+    body('inspection').optional().isObject(),
+    body('inspection.trustedIps').optional({ values: 'null' }).isString().isLength({ max: 2000 }),
   ],
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);

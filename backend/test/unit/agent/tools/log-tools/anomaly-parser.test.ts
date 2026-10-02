@@ -168,5 +168,19 @@ describe('anomaly-parser', () => {
         { account: 'cc3', count: 1 },
       ]);
     });
+
+    it('drops trusted ips entirely before aggregation (owner web-server false positive)', () => {
+      const events = [
+        ...Array.from({ length: 6 }, (_, i) => fail(`2026-09-28 11:0${i}:00`, '101.42.117.123', `own${i}`)),
+        fail('2026-09-28 11:00:00', '9.9.9.9', 'attacker1'),
+        fail('2026-09-28 11:01:00', '9.9.9.9', 'attacker2'),
+      ];
+      const aggs = aggregateAuthFailures(events, 10, new Set(['101.42.117.123']));
+      // 受信 IP 整体剔除，即使达到爆破阈值也不出现在证据中；非受信 IP 不受影响
+      expect(aggs.map((a) => a.ip)).toEqual(['9.9.9.9']);
+      expect(aggs[0]).toMatchObject({ count: 2, distinctAccounts: 2, bruteForceSuspect: false });
+      // 空白名单 = 行为同原逻辑
+      expect(aggregateAuthFailures(events)).toHaveLength(2);
+    });
   });
 });

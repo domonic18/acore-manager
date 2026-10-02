@@ -4,7 +4,7 @@ import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
 import { join } from 'path';
 import { registerTool } from '@/agent/tools/registry';
-import { readDefaultRealm } from '@/config/system-config.reader';
+import { readDefaultRealm, readInspectionTrustedIps } from '@/config/system-config.reader';
 import { workspaceDir } from './log-workspace';
 import {
   aggregateAuthFailures,
@@ -118,7 +118,7 @@ export function registerAnomalyTool(): void {
         players: rolled.slice(0, 20),
         lootRespawnNote:
           'loot-respawn 单次多为节点竞速/多开采集/客户端状态残留误判；同一玩家当日跨多节点重复才是采集外挂判据',
-        authFailures: aggregateAuthFailures(authEvents),
+        authFailures: aggregateAuthFailures(authEvents, 10, await readInspectionTrustedIps()),
         truncated,
       };
     },

@@ -213,6 +213,44 @@ describe('update: feishu', () => {
   });
 });
 
+describe('update: inspection', () => {
+  const repoWithDelete = () => {
+    const del = jest.fn().mockResolvedValue(undefined);
+    getRepository.mockReturnValue({ find, findOne, upsert, delete: del });
+    return del;
+  };
+
+  it('合法 IP 列表逗号/换行混排归一化 upsert', async () => {
+    await systemConfigService.update({ inspection: { trustedIps: '101.42.117.123,\n 203.0.113.7' } }, 1, 'gm');
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configKey: SYSTEM_CONFIG_KEYS.inspectionTrustedIps,
+        configValue: '101.42.117.123,203.0.113.7',
+        isSecret: false,
+      }),
+      { conflictPaths: ['configKey'] },
+    );
+  });
+
+  it('非法 IP 抛 400 且不写库', async () => {
+    await expect(
+      systemConfigService.update({ inspection: { trustedIps: '999.1.1.1' } }, 1, 'gm'),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      systemConfigService.update({ inspection: { trustedIps: 'not-an-ip' } }, 1, 'gm'),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('空串/null 删行清除白名单', async () => {
+    const del = repoWithDelete();
+    await systemConfigService.update({ inspection: { trustedIps: '' } }, 1, 'gm');
+    await systemConfigService.update({ inspection: { trustedIps: null } }, 1, 'gm');
+    expect(del).toHaveBeenCalledTimes(2);
+    expect(del).toHaveBeenCalledWith(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
+  });
+});
+
 describe('update: ai / login', () => {
   it('数值合法 upsert，null 删行回落', async () => {
     await systemConfigService.update({ ai: { toolCallBudget: 30 }, login: { maxAttempts: 10 } }, 1, 'gm');
@@ -269,6 +307,7 @@ describe('getView: 新增 section', () => {
       captchaEnabled: false,
       captchaTtlSeconds: 300,
     });
+    expect(view.inspection).toEqual({ trustedIps: '' });
   });
 
   it('DB 值优先生效，secret 回显掩码', async () => {

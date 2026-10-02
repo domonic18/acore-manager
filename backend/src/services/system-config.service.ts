@@ -1,6 +1,6 @@
 import { acmDataSource } from '@/config/database';
 import { env, soapConn } from '@/config/env';
-import { DEFAULT_REALM_FALLBACK, loadConfigValues, readDefaultRealm, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
+import { DEFAULT_REALM_FALLBACK, IPV4_RE, loadConfigValues, readDefaultRealm, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { AcmSystemConfig } from '@/entities/acm/system-config.entity';
 import { auditLogService } from '@/services/audit-log.service';
 import { ServiceError } from '@/shared/errors/service-error';
@@ -49,6 +49,10 @@ export interface SystemConfigView {
     captchaEnabled: boolean;
     captchaTtlSeconds: number;
   };
+  inspection: {
+    /** 逗号分隔的受信 IPv4 列表；空串 = 未配置 */
+    trustedIps: string;
+  };
   updatedAt: string | null;
 }
 
@@ -79,6 +83,10 @@ export interface SystemConfigInput {
     lockoutMinutes?: number | null;
     captchaEnabled?: string;
     captchaTtlSeconds?: number | null;
+  };
+  inspection?: {
+    /** 逗号/换行分隔 IPv4；空串/null = 清除白名单 */
+    trustedIps?: string | null;
   };
 }
 
@@ -163,11 +171,14 @@ class SystemConfigService {
           (dbString(SYSTEM_CONFIG_KEYS.loginCaptchaEnabled) ?? String(env.LOGIN_CAPTCHA_ENABLED)) === 'true',
         captchaTtlSeconds: dbInt(SYSTEM_CONFIG_KEYS.loginCaptchaTtlSeconds) ?? env.LOGIN_CAPTCHA_TTL_SECONDS,
       },
+      inspection: {
+        trustedIps: dbString(SYSTEM_CONFIG_KEYS.inspectionTrustedIps) ?? '',
+      },
       updatedAt: latest?.updatedAt ? new Date(latest.updatedAt).toISOString() : null,
     };
   }
 
-  // 五配置组按序生效：defaultRealm → soap → feishu → ai → login；任一组校验失败即中止
+  // 六配置组按序生效：defaultRealm → soap → feishu → ai → login → inspection；任一组校验失败即中止
   //（已生效的组不回滚——KV 单键写入天然原子，审计只记录实际变更的键）
   async update(input: SystemConfigInput, operatorId: number, operatorName: string): Promise<SystemConfigView> {
     const changedKeys: string[] = [];
@@ -176,6 +187,7 @@ class SystemConfigService {
     if (input.feishu) await this.applyFeishu(input.feishu, changedKeys, operatorName);
     if (input.ai) await this.applyAi(input.ai, changedKeys, operatorName);
     if (input.login) await this.applyLogin(input.login, changedKeys, operatorName);
+    if (input.inspection) await this.applyInspection(input.inspection, changedKeys, operatorName);
 
     if (changedKeys.length > 0) {
       await auditLogService.record({
@@ -285,6 +297,30 @@ class SystemConfigService {
       changedKeys,
       operatorName,
     );
+  }
+
+  /** 巡检组：受信 IP 白名单，逗号/换行分隔，逐个严格 IPv4 校验；空值 = 删行（无白名单） */
+  private async applyInspection(
+    inspection: NonNullable<SystemConfigInput['inspection']>,
+    changedKeys: string[],
+    operatorName: string,
+  ): Promise<void> {
+    if (inspection.trustedIps === undefined) return;
+    const ips = (inspection.trustedIps ?? '')
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const ip of ips) {
+      if (!IPV4_RE.test(ip)) {
+        throw new ServiceError(`受信 IP 格式不合法：${ip} / invalid trusted ip`, 400);
+      }
+    }
+    if (ips.length === 0) {
+      await this.repo.delete(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
+    } else {
+      await this.upsert(SYSTEM_CONFIG_KEYS.inspectionTrustedIps, ips.join(','), false, operatorName);
+    }
+    changedKeys.push(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
   }
 
   /** 数字组统一处理：undefined 跳过 / null 删行回落 env / 区间校验后保存 */

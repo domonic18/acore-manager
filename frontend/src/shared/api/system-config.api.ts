@@ -29,6 +29,10 @@ export interface SystemConfig {
     captchaEnabled: boolean;
     captchaTtlSeconds: number;
   };
+  inspection: {
+    /** 逗号分隔的受信 IPv4 列表；空串 = 未配置 */
+    trustedIps: string;
+  };
   updatedAt: string | null;
 }
 

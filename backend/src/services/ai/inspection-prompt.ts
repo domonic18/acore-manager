@@ -72,6 +72,9 @@ export function buildInspectionTaskPrompt(
     EXECUTION_DISCIPLINE,
     ``,
     `硬性要求：falsePositiveSignals 非空的玩家 suggestedAction 不得为 "ban"；证据必须来自工具返回的原文摘录，禁止编造；无日志支撑的维度如实写"无数据"。`,
+    `游戏信息表述：金额引用工具返回的 *Text 格式化字段（如 21金50银6铜），禁止"约 X 万"式换算；`,
+    `种族/职业/地图/区域名引用 raceName/className/mapName/zoneName，坐标不得用于推断区域名；`,
+    `任务/物品/节点 ID 引用前先 get_game_references 查名，查不到以纯 ID 表述，禁止自行翻译 ID 或编造名称。`,
   ].join('\n');
   return { messages: [{ role: 'user', content }] };
 }

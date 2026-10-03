@@ -1,6 +1,7 @@
 import { useReportFilters } from '@/features/ai-diagnosis/hooks/useReportFilters';
 import { UploadStatusStrip } from '@/features/ai-diagnosis/components/UploadStatusStrip';
 import { ReportCalendar } from '@/features/ai-diagnosis/components/ReportCalendar';
+import { FindingsQueueEntry } from '@/features/ai-diagnosis/components/FindingsQueueEntry';
 import { ReportCalendarSkeleton, UploadStatusSkeleton } from '@/features/ai-diagnosis/components/ReportSkeletons';
 import { ReportListTable } from '@/features/ai-diagnosis/components/ReportListTable';
 import { TriggerInspectionButton } from '@/features/ai-diagnosis/components/TriggerInspectionButton';
@@ -18,7 +19,10 @@ export default function AiDiagnosisPage() {
       <div className='grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]'>
         <aside className='order-2 lg:order-none'>
           {filters.realm && filters.reports ? (
-            <ReportCalendar reports={filters.reports} realm={filters.realm} />
+            <div className='space-y-2'>
+              <ReportCalendar reports={filters.reports} realm={filters.realm} />
+              <FindingsQueueEntry />
+            </div>
           ) : (
             <ReportCalendarSkeleton />
           )}

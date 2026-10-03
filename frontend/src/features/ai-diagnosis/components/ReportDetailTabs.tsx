@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AiReportDetail, ReportServerHealth } from '../api/ai-diagnosis.api';
+import type { PatrolFindingType } from '../api/patrol-findings.api';
 import { aiDiagnosisApi } from '../api/ai-diagnosis.api';
 import { useUpdateReport } from '../hooks/useAiDiagnosis';
 import { Markdown } from '@/shared/components/Markdown';
@@ -8,6 +9,7 @@ import { usePermission } from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/utils/toast.util';
 import { SuspiciousPlayerTable } from './SuspiciousPlayerTable';
 import { PatrolFindingsTab } from './PatrolFindingsTab';
+import { ReportDimensionCards } from './ReportDimensionCards';
 import { GameRefText } from './GameRefText';
 
 // 报告详情五 Tab（T4.1 + T4.2 全文 + T4.3 处置表 + 违规巡检）：结构化呈现 + 色块高亮，
@@ -168,10 +170,17 @@ function FullTab({ realm, reportDate, contentMarkdown }: { realm: string; report
 
 export function ReportDetailTabs({ report }: { report: AiReportDetail }) {
   const [tab, setTab] = useState<TabKey>('health');
+  const [patrolType, setPatrolType] = useState<PatrolFindingType | ''>('');
   const players = report.contentJson?.suspiciousPlayers ?? [];
+
+  const goDimensionTab = (t: 'health' | 'players' | 'patrol', focusType?: PatrolFindingType): void => {
+    if (t === 'patrol') setPatrolType(focusType ?? '');
+    setTab(t);
+  };
 
   return (
     <div className="space-y-4">
+      <ReportDimensionCards report={report} onGoTab={goDimensionTab} />
       <div className="flex gap-1 border-b border-border">
         {TABS.map((t) => (
           <button
@@ -188,7 +197,9 @@ export function ReportDetailTabs({ report }: { report: AiReportDetail }) {
       </div>
       {tab === 'health' && <HealthTab serverHealth={report.contentJson?.serverHealth} summary={report.summary} />}
       {tab === 'players' && <SuspiciousPlayerTable players={players} realm={report.realm} reportDate={report.reportDate} />}
-      {tab === 'patrol' && <PatrolFindingsTab realm={report.realm} reportDate={report.reportDate} />}
+      {tab === 'patrol' && (
+        <PatrolFindingsTab realm={report.realm} defaultDate={report.reportDate} initialType={patrolType} />
+      )}
       {tab === 'recs' && <RecsTab recommendations={report.contentJson?.recommendations} />}
       {tab === 'full' && <FullTab realm={report.realm} reportDate={report.reportDate} contentMarkdown={report.contentMarkdown} />}
     </div>

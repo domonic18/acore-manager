@@ -23,6 +23,7 @@ const ModelConfigPage = lazy(() => import('@/pages/ModelConfigPage'));
 const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
 const AiDiagnosisPage = lazy(() => import('@/pages/AiDiagnosisPage'));
 const AiDiagnosisReportDetailPage = lazy(() => import('@/pages/AiDiagnosisReportDetailPage'));
+const AiDiagnosisFindingsPage = lazy(() => import('@/pages/AiDiagnosisFindingsPage'));
 const TargetedAnalysisPage = lazy(() => import('@/pages/TargetedAnalysisPage'));
 const TargetedAnalysisDetailPage = lazy(() => import('@/pages/TargetedAnalysisDetailPage'));
 const AiAssistantDock = lazy(() =>
@@ -96,6 +97,7 @@ export const router = createBrowserRouter([
             children: [
               { path: 'ip-bans', element: withSuspense(IpBanPage) },
               { path: 'ai-diagnosis', element: withSuspense(AiDiagnosisPage) },
+              { path: 'ai-diagnosis/findings', element: withSuspense(AiDiagnosisFindingsPage) },
               { path: 'ai-diagnosis/targeted', element: withSuspense(TargetedAnalysisPage) },
               { path: 'ai-diagnosis/targeted/:id', element: withSuspense(TargetedAnalysisDetailPage) },
               { path: 'ai-diagnosis/:realm/:date', element: withSuspense(AiDiagnosisReportDetailPage) },

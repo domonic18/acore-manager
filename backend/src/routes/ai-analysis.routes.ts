@@ -202,6 +202,29 @@ router.get(
   }),
 );
 
+// 按日聚合（日历角标 / 报告页维度卡）：gmlevel≥1，跨度 ≤31 天
+router.get(
+  '/patrol-findings/daily-summary',
+  authMiddleware,
+  requireGmLevel(1),
+  [query('from').matches(DATE_RE), query('to').matches(DATE_RE)],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    const from = req.query.from as string;
+    const to = req.query.to as string;
+    if (invalidRange(from, to)) {
+      res.jsonError('from/to 不合法：起点不得晚于终点，跨度不得超过 31 天', 400);
+      return;
+    }
+    const days = await abusePatrolService.dailyFindingsSummary(from, to);
+    res.jsonSuccess({ days });
+  }),
+);
+
 router.post(
   '/patrol-findings/:id/status',
   authMiddleware,

@@ -55,6 +55,12 @@ export interface PatrolFindingsFilter {
   pageSize?: number;
 }
 
+export interface PatrolFindingDaySummary {
+  date: string;
+  total: number;
+  open: number;
+}
+
 export const patrolFindingsApi = {
   list: (filter: PatrolFindingsFilter) => {
     const q = new URLSearchParams({ page: String(filter.page ?? 1), pageSize: String(filter.pageSize ?? 20) });
@@ -63,6 +69,10 @@ export const patrolFindingsApi = {
     if (filter.status) q.set('status', filter.status);
     return apiClient.get<{ items: PatrolFinding[]; total: number }>(`/api/ai/analysis/patrol-findings?${q.toString()}`);
   },
+  dailySummary: (from: string, to: string) =>
+    apiClient.get<{ days: PatrolFindingDaySummary[] }>(
+      `/api/ai/analysis/patrol-findings/daily-summary?from=${from}&to=${to}`,
+    ),
   updateStatus: (id: number, status: PatrolFindingStatus) =>
     apiClient.post<PatrolFinding>(`/api/ai/analysis/patrol-findings/${id}/status`, { status }),
 };

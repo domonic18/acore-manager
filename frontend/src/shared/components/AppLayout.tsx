@@ -20,7 +20,6 @@ import {
   Crown,
   MessageSquareOff,
   SlidersHorizontal,
-  Bot,
   FileSearch,
   Crosshair,
   Radar,
@@ -69,7 +68,6 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
   {
     title: 'AI 智能',
     items: [
-      { path: '/model-config', label: '模型配置', icon: Bot },
       { path: '/ai-diagnosis', label: '巡检报告', icon: FileSearch, end: true },
       { path: '/ai-diagnosis/findings', label: '违规巡检', icon: Radar },
       { path: '/ai-diagnosis/targeted', label: '深度分析', icon: Crosshair },

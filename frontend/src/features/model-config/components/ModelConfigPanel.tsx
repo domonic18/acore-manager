@@ -11,7 +11,8 @@ import { ModelConfigFormDialog } from '@/features/model-config/components/ModelC
 import { ModelConfigDeleteDialog } from '@/features/model-config/components/ModelConfigDeleteDialog';
 import { toast } from '@/shared/utils/toast.util';
 
-export default function ModelConfigPage() {
+// AI 模型配置面板：嵌入设置页 tab（原独立页面合并而来），标题由外层 tab 提供
+export function ModelConfigPanel() {
   const { data: configs, isLoading } = useModelConfigs();
   const setDefaultMutation = useSetDefaultModelConfig();
   const testMutation = useTestModelConfig();
@@ -58,13 +59,8 @@ export default function ModelConfigPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">AI 模型配置</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            管理诊断与对话的 LLM 出口；api_key 加密存储，界面上仅显示掩码
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">管理诊断与对话的 LLM 出口；api_key 加密存储，界面上仅显示掩码</p>
         <button
           onClick={openCreate}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"

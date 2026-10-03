@@ -404,6 +404,25 @@ export class AbusePatrolService {
     return repo.findOne({ where: { id } });
   }
 
+  // 按日聚合（日历角标 / 报告页维度卡）：detectedAt 为 CST 墙钟字符串，按 CST 日窗分组计数
+  async dailyFindingsSummary(from: string, to: string): Promise<Array<{ date: string; total: number; open: number }>> {
+    const startMs = new Date(`${from}T00:00:00+08:00`).getTime();
+    const endMs = new Date(`${to}T00:00:00+08:00`).getTime() + 86400_000;
+    const rows: Array<{ day: string; total: string; open: string }> = await acmDataSource
+      .getRepository(PatrolFinding)
+      .createQueryBuilder('f')
+      .select("to_char(f.detectedAt, 'YYYY-MM-DD')", 'day')
+      .addSelect('COUNT(*)', 'total')
+      .addSelect("COUNT(*) FILTER (WHERE f.status = 'open')", 'open')
+      .where('f.detectedAt >= :start AND f.detectedAt < :end', {
+        start: formatCstDateTime(new Date(startMs)),
+        end: formatCstDateTime(new Date(endMs)),
+      })
+      .groupBy("to_char(f.detectedAt, 'YYYY-MM-DD')")
+      .getRawMany();
+    return rows.map((r) => ({ date: r.day, total: Number(r.total), open: Number(r.open) }));
+  }
+
   // ---------- 游标 ----------
 
   // 游标存 epoch 毫秒：datetime 字符串经 JS Date 解析随容器时区漂移，逐轮累计会撑大窗口

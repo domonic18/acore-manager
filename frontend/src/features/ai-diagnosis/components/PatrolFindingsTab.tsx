@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/utils/toast.util';
@@ -8,8 +8,9 @@ import type { BgFarmEvidence, CarryEvidence, PatrolFinding, PatrolFindingType } 
 import { usePatrolFindings, useUpdateFindingStatus } from '../hooks/usePatrolFindings';
 import { SendWarningMailDialog } from './SendWarningMailDialog';
 
-// 违规巡检 tab（需求一/二）：展示全部反滥用巡检发现（战场互刷 / 硬核被带），
-// 日期为可选过滤（默认全量分页）；行内处置：警告邮件 / 深度分析 / 荣誉调整（仅互刷类，gm3）/ 状态流转（gm2）。
+// 违规巡检列表（需求一/二）：默认展示初始日期窗内的反滥用巡检发现（战场互刷 / 硬核被带），
+// 日期可放宽为全量；跨天待办以提示条挂出（点击放宽）。行内处置：警告邮件 / 深度分析 /
+// 荣誉调整（仅互刷类，gm3）/ 状态流转（gm2）。报告页与跨天队列页复用本组件。
 
 const TYPE_LABEL: Record<PatrolFindingType, string> = {
   bg_honor_farm: '战场互刷',
@@ -30,8 +31,20 @@ const STATUS_STYLE = {
 
 const MAX_ANALYSIS_SUBJECTS = 10;
 
-function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+function datetimeOf(iso: string): string {
+  return new Date(iso).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function dateOf(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function reasonOf(finding: PatrolFinding): string {
@@ -76,14 +89,29 @@ function EvidenceSummary({ finding }: { finding: PatrolFinding }) {
 
 const PAGE_SIZE = 20;
 
-export function PatrolFindingsTab({ realm, reportDate }: { realm: string; reportDate: string }) {
+export function PatrolFindingsTab({
+  realm,
+  defaultDate,
+  initialType = '',
+}: {
+  realm: string;
+  /** 初始日期窗（'' = 全部日期）：报告页传报告日期，队列页传 '' */
+  defaultDate: string;
+  initialType?: PatrolFindingType | '';
+}) {
   const { hasGmLevel } = usePermission();
   const navigate = useNavigate();
-  const [typeFilter, setTypeFilter] = useState<PatrolFindingType | ''>('');
-  const [dateFilter, setDateFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState<PatrolFindingType | ''>(initialType);
+  const [dateFilter, setDateFilter] = useState(defaultDate);
   const [page, setPage] = useState(1);
   const [mailTarget, setMailTarget] = useState<PatrolFinding | null>(null);
   const [honorTarget, setHonorTarget] = useState<string | null>(null);
+
+  // 跟随外部日期（报告页切换报告日期时重置；可再手动放宽为全量）
+  useEffect(() => {
+    setDateFilter(defaultDate);
+    setPage(1);
+  }, [defaultDate]);
 
   const { data, isLoading } = usePatrolFindings({
     ...(dateFilter ? { date: dateFilter } : {}),
@@ -94,6 +122,14 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
   const updateStatus = useUpdateFindingStatus();
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // 跨天待办：全量 open 与当前日期窗口 open 之差，>0 时提示条挂出（点击放宽查看全部）
+  const { data: allOpenData } = usePatrolFindings({ status: 'open', page: 1, pageSize: 1 }, { enabled: dateFilter !== '' });
+  const { data: scopedOpenData } = usePatrolFindings(
+    { ...(dateFilter ? { date: dateFilter } : {}), status: 'open', page: 1, pageSize: 1 },
+    { enabled: dateFilter !== '' },
+  );
+  const otherOpenCount = (allOpenData?.total ?? 0) - (scopedOpenData?.total ?? 0);
 
   const findings = useMemo(() => data?.items ?? [], [data]);
 
@@ -118,8 +154,9 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
 
   const startDeepAnalysis = (finding: PatrolFinding): void => {
     const names = finding.subjectsJson.map((s) => s.characterName).slice(0, MAX_ANALYSIS_SUBJECTS);
+    const date = dateOf(finding.detectedAt);
     navigate('/ai-diagnosis/targeted', {
-      state: { subjectType: 'character', subjectNames: names, timeFrom: reportDate, timeTo: reportDate },
+      state: { subjectType: 'character', subjectNames: names, timeFrom: date, timeTo: date },
     });
   };
 
@@ -151,8 +188,35 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
           className="rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground"
           aria-label="按发现日期过滤"
         />
-        <span className="ml-auto self-center text-xs text-muted-foreground">共 {total} 条</span>
+        {dateFilter && (
+          <button
+            type="button"
+            onClick={() => {
+              setDateFilter('');
+              setPage(1);
+            }}
+            className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+          >
+            全部日期
+          </button>
+        )}
+        <span className="ml-auto self-center text-xs text-muted-foreground">
+          {dateFilter ? `${dateFilter} 共 ${total} 条` : `共 ${total} 条`}
+        </span>
       </div>
+
+      {dateFilter && otherOpenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setDateFilter('');
+            setPage(1);
+          }}
+          className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-left text-xs text-amber-400 hover:bg-amber-500/20"
+        >
+          其他日期还有 {otherOpenCount} 条待处置，点击查看全部日期
+        </button>
+      )}
 
       {isLoading ? (
         <div className="py-6 text-center text-sm text-muted-foreground">加载中...</div>
@@ -168,7 +232,7 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
                 {f.occurrenceCount > 1 && (
                   <span className="rounded bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-400">第 {f.occurrenceCount} 轮共现</span>
                 )}
-                <span className="text-xs text-muted-foreground">{timeOf(f.detectedAt)}</span>
+                <span className="text-xs text-muted-foreground">{datetimeOf(f.detectedAt)}</span>
               </div>
 
               <EvidenceSummary finding={f} />
@@ -249,8 +313,8 @@ export function PatrolFindingsTab({ realm, reportDate }: { realm: string; report
       <SendWarningMailDialog
         targets={mailTargets}
         reasonsByTarget={mailReasons}
-        reportDate={reportDate}
-        refReport={`${realm}:${reportDate}`}
+        reportDate={mailTarget ? dateOf(mailTarget.detectedAt) : ''}
+        refReport={`${realm}:${mailTarget ? dateOf(mailTarget.detectedAt) : ''}`}
         open={!!mailTarget}
         onClose={() => setMailTarget(null)}
       />

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { AiReportSummary } from '../api/ai-diagnosis.api';
+import { usePatrolFindingsDailySummary } from '../hooks/usePatrolFindings';
 
 // 巡检月历：有报告的日期显示健康色点（绿≥80 正常 / 黄 60-79 需关注 / 红<60 异常），
+// 有违规发现的日期右上角挂数量角标（含待处置数提示）；
 // 点击有报告的日期跳转当日报告详情；月份可前后切换，默认落在最近一份报告所在月。
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
@@ -70,6 +72,15 @@ export function ReportCalendar({
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
+  // 当月违规发现聚合：日期 → { total, open }，角标展示当日新增数
+  const monthFrom = `${year}-${pad(month + 1)}-01`;
+  const monthTo = `${year}-${pad(month + 1)}-${pad(daysInMonth)}`;
+  const { data: summaryData } = usePatrolFindingsDailySummary(monthFrom, monthTo);
+  const findingsByDate = useMemo(
+    () => new Map((summaryData?.days ?? []).map((d) => [d.date, d])),
+    [summaryData],
+  );
+
   const move = (delta: number): void => {
     syncedRef.current = true;
     setView(new Date(year, month + delta, 1));
@@ -125,6 +136,7 @@ export function ReportCalendar({
           if (day == null) return <div key={`blank-${i}`} />;
           const key = `${year}-${pad(month + 1)}-${pad(day)}`;
           const report = byDate.get(key);
+          const findings = findingsByDate.get(key);
           const date = new Date(year, month, day);
           return (
             <button
@@ -137,7 +149,9 @@ export function ReportCalendar({
               title={
                 report
                   ? `${key} 健康分 ${report.healthScore}，点击查看详情`
-                  : undefined
+                  : findings
+                    ? `${key} 新增违规发现 ${findings.total} 条（待处置 ${findings.open}），当日无巡检报告`
+                    : undefined
               }
               className={`relative flex h-8 items-center justify-center rounded text-xs transition-colors ${
                 report
@@ -150,6 +164,11 @@ export function ReportCalendar({
                 <span
                   className={`absolute bottom-0.5 h-1 w-1 rounded-full ${dotClass(report.healthScore)}`}
                 />
+              )}
+              {findings && findings.total > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-semibold leading-none text-white">
+                  {findings.total > 9 ? '9+' : findings.total}
+                </span>
               )}
             </button>
           );
@@ -172,6 +191,12 @@ export function ReportCalendar({
         <span className='flex items-center gap-1'>
           <span className='h-2.5 w-2.5 rounded-full ring-1 ring-primary' />
           今日
+        </span>
+        <span className='flex items-center gap-1'>
+          <span className='flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-semibold leading-none text-white'>
+            N
+          </span>
+          当日新增违规发现
         </span>
       </div>
     </div>

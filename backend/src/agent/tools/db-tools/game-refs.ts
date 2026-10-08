@@ -9,6 +9,7 @@ const LINK_PATHS = {
   item: 'item',
   gameobject: 'object',
   npc: 'npc',
+  achievement: 'achievement',
 } as const;
 
 export type GameRefLinkType = keyof typeof LINK_PATHS;
@@ -17,10 +18,10 @@ export function buildGameRefUrl(type: GameRefLinkType, id: number): string {
   return `${env.AOWOW_BASE_URL}?${LINK_PATHS[type]}=${id}`;
 }
 
-// 报告文本链接化：仅"前缀+ID"形如「任务 9312 / 物品 17 / 节点 181683 / GameObject 181683 / NPC 123」
+// 报告文本链接化：仅"前缀+ID"形如「任务 9312 / 物品 17 / 节点 181683 / GameObject 181683 / NPC 123 / 成就 456」
 // 命中（前缀后必须紧跟数字，"节点竞速/任务越权"等标记词不误伤）；先按已有 markdown 链接
 // [文本](url) 分段、只处理非链接段，防止对模型已写链接的二次嵌套。
-const REF_PATTERN = /(任务|物品|节点|GameObject|NPC)\s*#?(\d{1,7})(?!\d)/g;
+const REF_PATTERN = /(任务|物品|节点|GameObject|NPC|成就)\s*#?(\d{1,7})(?!\d)/g;
 const MD_LINK_SEGMENT = /(\[[^\]]*\]\([^)]*\))/g;
 
 function prefixToType(prefix: string): GameRefLinkType {
@@ -31,6 +32,8 @@ function prefixToType(prefix: string): GameRefLinkType {
       return 'item';
     case 'NPC':
       return 'npc';
+    case '成就':
+      return 'achievement';
     default:
       return 'gameobject';
   }

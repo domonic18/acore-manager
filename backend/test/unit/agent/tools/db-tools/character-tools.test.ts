@@ -5,11 +5,12 @@ jest.mock('@/config/database', () => ({
   acmDataSource: { getRepository: jest.fn(() => ({ insert: jest.fn().mockResolvedValue({}), find: jest.fn().mockResolvedValue([]) })) },
 }));
 
-import { charactersDataSource } from '@/config/database';
+import { charactersDataSource, worldDataSource } from '@/config/database';
 import { registerAllDbTools } from '@/agent/tools/db-tools';
 import { clearTools, exportTools } from '@/agent/tools/registry';
 
 const queryMock = charactersDataSource.query as jest.Mock;
+const worldQueryMock = worldDataSource.query as jest.Mock;
 
 function toolFn(name: string): { invoke: (a: unknown) => Promise<Record<string, unknown>> } {
   const found = exportTools().find((t) => (t as { name?: string }).name === name);
@@ -22,6 +23,7 @@ describe('character-tools', () => {
     clearTools();
     registerAllDbTools();
     queryMock.mockReset();
+    worldQueryMock.mockReset();
   });
 
   it('get_character_overview matches by name LIKE when no guid', async () => {
@@ -120,5 +122,81 @@ describe('character-tools', () => {
     expect(result.rows[0]).toMatchObject({ spell: 546, movementHint: '水上行走类光环' });
     expect(result.rows[1]).toEqual({ spell: 12345, stackCount: 2, remainTime: 30 });
     expect(result.movementRules).toHaveLength(1);
+  });
+
+  it('get_character_quests enriches names and reports rewarded without timestamps', async () => {
+    queryMock.mockResolvedValueOnce([{ quest: 12757, status: 1 }]); // inProgress
+    queryMock.mockResolvedValueOnce([{ total: 2 }]); // rewarded count
+    queryMock.mockResolvedValueOnce([{ quest: 12757 }, { quest: 12801 }]); // rewarded sample
+    queryMock.mockResolvedValueOnce([]); // quest_tracker recent
+    worldQueryMock.mockResolvedValueOnce([
+      { ID: 12757, LogTitle: 'Scarlet Armies Approach...' },
+      { ID: 12801, LogTitle: 'The Light of Dawn' },
+    ]);
+    const result = (await toolFn('get_character_quests').invoke({ guid: 5, days: 7 })) as {
+      inProgress: { rows: { quest: number; name: string | null }[]; truncated: boolean };
+      rewarded: { total: number; sampled: { quest: number; name: string | null }[]; truncated: boolean; note: string };
+      recentActivity: { rows: unknown[]; note: string };
+    };
+    expect(result.inProgress.rows[0]).toMatchObject({ quest: 12757, name: 'Scarlet Armies Approach...' });
+    expect(result.rewarded).toMatchObject({ total: 2, truncated: false });
+    expect(result.rewarded.note).toContain('无时间戳');
+    expect(result.rewarded.sampled[1]).toEqual({ quest: 12801, name: 'The Light of Dawn' });
+    expect(result.recentActivity.rows).toEqual([]);
+    expect(result.recentActivity.note).toContain('QuestTracker');
+    const [worldSql, worldParams] = worldQueryMock.mock.calls[0];
+    expect(worldSql).toContain('quest_template');
+    expect(worldParams).toEqual([12757, 12801]);
+  });
+
+  it('get_character_quests returns timeline rows without an empty note when tracker has data', async () => {
+    queryMock.mockResolvedValueOnce([]); // inProgress
+    queryMock.mockResolvedValueOnce([{ total: 0 }]); // rewarded count
+    queryMock.mockResolvedValueOnce([]); // rewarded sample
+    queryMock.mockResolvedValueOnce([{ id: 12801, quest_complete_time: '2026-10-08 10:00:00', completed_by_gm: 0 }]);
+    worldQueryMock.mockResolvedValueOnce([{ ID: 12801, LogTitle: 'The Light of Dawn' }]);
+    const result = (await toolFn('get_character_quests').invoke({ guid: 5 })) as {
+      recentActivity: { rows: { id: number; name: string | null }[]; note?: string };
+    };
+    expect(result.recentActivity.rows[0]).toMatchObject({ id: 12801, name: 'The Light of Dawn' });
+    expect(result.recentActivity.note).toBeUndefined();
+  });
+
+  it('get_character_achievements maps names and formats epoch dates in Beijing time', async () => {
+    queryMock.mockResolvedValueOnce([{ achievement: 6, date: 1760000000 }]);
+    const result = (await toolFn('get_character_achievements').invoke({ guid: 274, limit: 10 })) as {
+      rows: { achievement: number; name: string; dateText: string }[];
+    };
+    expect(result.rows[0]).toMatchObject({ achievement: 6, name: '10级', dateText: '2025-10-09 16:53' });
+    const [sql] = queryMock.mock.calls[0];
+    expect(sql).toContain('ORDER BY date DESC');
+  });
+
+  it('get_character_achievements falls back to 成就{id} for unknown ids', async () => {
+    queryMock.mockResolvedValueOnce([{ achievement: 9999999, date: 1760000000 }]);
+    const result = (await toolFn('get_character_achievements').invoke({ guid: 274 })) as {
+      rows: { name: string }[];
+    };
+    expect(result.rows[0].name).toBe('成就9999999');
+  });
+
+  it('get_character_social groups entries by flag bits and resolves names', async () => {
+    queryMock.mockResolvedValueOnce([
+      { friend: 9, flags: 1, note: 'x' },
+      { friend: 10, flags: 2, note: null },
+      { friend: 11, flags: 4, note: 'spam' },
+    ]);
+    queryMock.mockResolvedValueOnce([
+      { guid: 9, name: 'Bob', level: 80, online: 1 },
+      { guid: 10, name: 'Eve', level: 1, online: 0 },
+    ]);
+    const result = (await toolFn('get_character_social').invoke({ guid: 9710 })) as {
+      friends: { guid: number; name: string | null }[];
+      ignores: { guid: number; name: string | null }[];
+      muted: { guid: number; note: string | null }[];
+    };
+    expect(result.friends).toEqual([{ guid: 9, name: 'Bob', level: 80, online: 1, note: 'x' }]);
+    expect(result.ignores).toEqual([{ guid: 10, name: 'Eve', level: 1, online: 0, note: null }]);
+    expect(result.muted).toEqual([{ guid: 11, name: null, level: null, online: null, note: 'spam' }]);
   });
 });

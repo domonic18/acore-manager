@@ -13,10 +13,12 @@ jest.mock('@/repositories/abuse-patrol.repository', () => ({
 jest.mock('@/config/system-config.reader', () => ({
   readDefaultRealm: jest.fn().mockResolvedValue('realm3'),
   readInspectionTrustedIps: jest.fn().mockResolvedValue(new Set<string>()),
+  readPatrolCarryExcludedZones: jest.fn().mockResolvedValue(new Set<number>()),
   readRuntimeValues: jest.fn().mockResolvedValue(new Map()),
   SYSTEM_CONFIG_KEYS: {
     inspectionTrustedIps: 'inspection_trusted_ips',
     patrolBgCursor: 'patrol_bg_cursor',
+    patrolCarryExcludedZones: 'patrol_carry_excluded_zones',
   },
 }));
 jest.mock('@/services/ai/feishu-notify.service', () => ({
@@ -29,8 +31,10 @@ jest.mock('@/middleware/request-logger', () => ({
 import { acmDataSource } from '@/config/database';
 import { abusePatrolService, FindingCandidate, formatCstDateTime } from '@/services/abuse-patrol.service';
 import { abusePatrolRepository, BattlePlayerRow, OnlineSnapshotRow } from '@/repositories/abuse-patrol.repository';
-import { readRuntimeValues } from '@/config/system-config.reader';
+import { readPatrolCarryExcludedZones, readRuntimeValues } from '@/config/system-config.reader';
 import { feishuNotifyService } from '@/services/ai/feishu-notify.service';
+import { mapName } from '@/agent/tools/log-tools/map-names';
+import { zoneName } from '@/agent/tools/log-tools/zone-names';
 
 const getRecentBattles = abusePatrolRepository.getRecentBattles as jest.Mock;
 const getOnlineSnapshot = abusePatrolRepository.getOnlineSnapshot as jest.Mock;
@@ -181,6 +185,90 @@ describe('AbusePatrolService.detectHardcoreCarry', () => {
   });
 });
 
+describe('AbusePatrolService.detectHardcoreCarryCrossIp', () => {
+  it('flags hardcore × main with distinct accounts and IPs, carrying ipMode evidence and Chinese names', () => {
+    const rows = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1', positionX: 1000, positionY: 2000 }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '9.9.9.1', positionX: 1020, positionY: 2030 }),
+    ];
+    const candidates = abusePatrolService.detectHardcoreCarryCrossIp(rows, new Set(), new Set(), NOW);
+
+    expect(candidates).toHaveLength(1);
+    const c = candidates[0];
+    expect(c.findingType).toBe('hardcore_carry');
+    expect(c.dedupeKey).toBe('hardcore_carry:2026-10-03:100-200');
+    expect(c.evidence).toMatchObject({
+      ipMode: 'cross-ip',
+      map: 0,
+      mapName: mapName(0),
+      zone: 12,
+      zoneName: zoneName(12),
+      pairs: [{ hardcore: 'C100(Lv20)', main: 'C200(Lv80)', distanceYd: expect.any(Number), hardcoreIp: '8.8.8.1', mainIp: '9.9.9.1' }],
+    });
+  });
+
+  it('skips same-IP pairs (left to detectHardcoreCarry) and same-account pairs', () => {
+    const sameIp = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1' }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '8.8.8.1', positionX: 1001, positionY: 2001 }),
+    ];
+    expect(abusePatrolService.detectHardcoreCarryCrossIp(sameIp, new Set(), new Set(), NOW)).toHaveLength(0);
+
+    const sameAccount = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1' }),
+      snapshotRow({ guid: 200, accountId: 11, level: 80, ip: '9.9.9.1', positionX: 1001, positionY: 2001 }),
+    ];
+    expect(abusePatrolService.detectHardcoreCarryCrossIp(sameAccount, new Set(), new Set(), NOW)).toHaveLength(0);
+  });
+
+  it('excludes default city zones, battleground maps, extra zones, trusted IPs and small level gaps', () => {
+    const cityZone = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1', zone: 1519 }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '9.9.9.1', zone: 1519, positionX: 1001, positionY: 2001 }),
+    ];
+    expect(abusePatrolService.detectHardcoreCarryCrossIp(cityZone, new Set(), new Set(), NOW)).toHaveLength(0);
+
+    const bgMap = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1', map: 489 }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '9.9.9.1', map: 489, positionX: 1001, positionY: 2001 }),
+    ];
+    expect(abusePatrolService.detectHardcoreCarryCrossIp(bgMap, new Set(), new Set(), NOW)).toHaveLength(0);
+
+    const extraZone = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1' }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '9.9.9.1', positionX: 1001, positionY: 2001 }),
+    ];
+    expect(abusePatrolService.detectHardcoreCarryCrossIp(extraZone, new Set(), new Set([12]), NOW)).toHaveLength(0);
+
+    const trusted = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '10.0.0.1' }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '9.9.9.1', positionX: 1001, positionY: 2001 }),
+    ];
+    expect(abusePatrolService.detectHardcoreCarryCrossIp(trusted, new Set(['10.0.0.1']), new Set(), NOW)).toHaveLength(0);
+
+    const smallGap = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 70, level: 70, ip: '8.8.8.1' }),
+      snapshotRow({ guid: 200, accountId: 12, level: 75, ip: '9.9.9.1', positionX: 1001, positionY: 2001 }),
+    ];
+    expect(abusePatrolService.detectHardcoreCarryCrossIp(smallGap, new Set(), new Set(), NOW)).toHaveLength(0);
+  });
+
+  it('clusters a star topology (one main carrying multiple customers) into a single candidate', () => {
+    const rows = [
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1', positionX: 1000, positionY: 2000 }),
+      snapshotRow({ guid: 101, accountId: 13, hardcore: true, hardcoreLevel: 22, level: 22, ip: '8.8.8.2', positionX: 1005, positionY: 2005 }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '9.9.9.1', positionX: 1020, positionY: 2030 }),
+    ];
+    const candidates = abusePatrolService.detectHardcoreCarryCrossIp(rows, new Set(), new Set(), NOW);
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].dedupeKey).toBe('hardcore_carry:2026-10-03:100-101-200');
+    // subjects 为 pair 插入序（100×200 先于 101×200），dedupe key 才是排序后的全 guid 串
+    expect(candidates[0].subjects.map((s) => s.characterGuid)).toEqual([100, 200, 101]);
+    expect(candidates[0].evidence.pairs).toHaveLength(2);
+  });
+});
+
 describe('AbusePatrolService.persistCandidates', () => {
   const candidate: FindingCandidate = {
     findingType: 'bg_honor_farm',
@@ -283,6 +371,7 @@ describe('AbusePatrolService.runHardcoreCarryScan', () => {
   it('scans the online snapshot and persists findings', async () => {
     const repo = mockRepo();
     repo.findOne.mockResolvedValue(null);
+    (readPatrolCarryExcludedZones as jest.Mock).mockResolvedValue(new Set<number>());
     getOnlineSnapshot.mockResolvedValue([
       snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20 }),
       snapshotRow({ guid: 200, accountId: 12, level: 80, positionX: 1001, positionY: 2001 }),
@@ -291,5 +380,18 @@ describe('AbusePatrolService.runHardcoreCarryScan', () => {
     const result = await abusePatrolService.runHardcoreCarryScan();
 
     expect(result.created).toBe(1);
+  });
+
+  it('merges same-ip and cross-ip candidates from one snapshot', async () => {
+    mockRepo();
+    (readPatrolCarryExcludedZones as jest.Mock).mockResolvedValue(new Set<number>());
+    getOnlineSnapshot.mockResolvedValue([
+      snapshotRow({ guid: 100, accountId: 11, hardcore: true, hardcoreLevel: 20, level: 20, ip: '8.8.8.1', positionX: 1000, positionY: 2000 }),
+      snapshotRow({ guid: 200, accountId: 12, level: 80, ip: '9.9.9.1', positionX: 1020, positionY: 2030 }),
+    ]);
+
+    const result = await abusePatrolService.runHardcoreCarryScan();
+
+    expect(result.candidates).toBe(1);
   });
 });

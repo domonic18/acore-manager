@@ -26,6 +26,7 @@ export const SYSTEM_CONFIG_KEYS = {
   loginCaptchaTtlSeconds: 'login_captcha_ttl_seconds',
   inspectionTrustedIps: 'inspection_trusted_ips',
   patrolBgCursor: 'patrol_bg_cursor',
+  patrolCarryExcludedZones: 'patrol_carry_excluded_zones',
 } as const;
 
 export const DEFAULT_REALM_FALLBACK = 'realm3';
@@ -58,6 +59,21 @@ export async function readInspectionTrustedIps(): Promise<Set<string>> {
     .map((s) => s.trim())
     .filter((s) => IPV4_RE.test(s));
   return new Set(ips);
+}
+
+// 跨 IP 被带检测的追加排除区域（逗号/换行分隔 zone id）：代码默认集已覆盖主城/中立城镇，
+// 此配置供 GM 追加新误报区域（并集语义）。读取失败/未配置 → 空 Set。
+export async function readPatrolCarryExcludedZones(): Promise<Set<number>> {
+  const raw = (await readRuntimeValues([SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones])).get(
+    SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones,
+  );
+  if (!raw) return new Set();
+  const zones = raw
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter((s) => /^\d+$/.test(s))
+    .map((s) => Number(s));
+  return new Set(zones);
 }
 
 // 运行时读取（消费方路径）：PG 暂不可用时静默回落——返回空 Map，由消费方回退 env 值，

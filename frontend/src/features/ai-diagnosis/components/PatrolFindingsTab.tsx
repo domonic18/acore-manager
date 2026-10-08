@@ -54,9 +54,11 @@ function reasonOf(finding: PatrolFinding): string {
   }
   const ev = finding.evidenceJson as CarryEvidence;
   const first = ev.pairs?.[0];
-  return first
-    ? `硬核被带嫌疑：${first.hardcore} 与 ${first.main} 同区域 ${first.distanceYd} 码内共现`
-    : '硬核被带嫌疑：同 IP 大号近距离护送';
+  if (!first) return '硬核被带嫌疑：同 IP 大号近距离护送';
+  if (ev.ipMode === 'cross-ip') {
+    return `硬核被带嫌疑（跨 IP）：${first.hardcore} 与 ${first.main} 同区域 ${first.distanceYd} 码内共现，双方账号与 IP 均不同，疑似有偿代练`;
+  }
+  return `硬核被带嫌疑：${first.hardcore} 与 ${first.main} 同区域 ${first.distanceYd} 码内共现`;
 }
 
 function EvidenceSummary({ finding }: { finding: PatrolFinding }) {
@@ -76,13 +78,24 @@ function EvidenceSummary({ finding }: { finding: PatrolFinding }) {
     );
   }
   const ev = finding.evidenceJson as CarryEvidence;
+  const crossIp = ev.ipMode === 'cross-ip';
+  const placeOf = (p: CarryEvidence['pairs'][number]): string =>
+    crossIp
+      ? `${ev.mapName ?? `地图${p.map}`}·${ev.zoneName ?? `区域${p.zone}`}`
+      : `地图 ${p.map} 区域 ${p.zone}`;
   return (
     <div className="space-y-0.5 text-xs text-muted-foreground">
       {(ev.pairs ?? []).map((p, i) => (
         <div key={i}>
-          {p.hardcore} ← {p.main} · 地图 {p.map} 区域 {p.zone} · 距离 <span className="text-foreground">{p.distanceYd}</span> 码
+          {p.hardcore} ← {p.main} · {placeOf(p)} · 距离 <span className="text-foreground">{p.distanceYd}</span> 码
+          {crossIp && p.hardcoreIp && p.mainIp && (
+            <span className="ml-1 text-amber-400">
+              · IP {p.hardcoreIp} ↔ {p.mainIp}
+            </span>
+          )}
         </div>
       ))}
+      {crossIp && <div className="text-amber-400">双方账号与登录 IP 均不同，疑似有偿代练</div>}
     </div>
   );
 }
@@ -228,6 +241,9 @@ export function PatrolFindingsTab({
             <div key={f.id} className="rounded-lg border border-border bg-card px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`rounded px-2 py-0.5 text-xs font-semibold ${TYPE_STYLE[f.findingType]}`}>{TYPE_LABEL[f.findingType]}</span>
+                {f.findingType === 'hardcore_carry' && (f.evidenceJson as CarryEvidence).ipMode === 'cross-ip' && (
+                  <span className="rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400">跨 IP·疑似代练</span>
+                )}
                 <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[f.status]}`}>{STATUS_LABEL[f.status]}</span>
                 {f.occurrenceCount > 1 && (
                   <span className="rounded bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-400">第 {f.occurrenceCount} 轮共现</span>

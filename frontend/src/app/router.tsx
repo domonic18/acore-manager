@@ -25,6 +25,7 @@ const AiDiagnosisReportDetailPage = lazy(() => import('@/pages/AiDiagnosisReport
 const AiDiagnosisFindingsPage = lazy(() => import('@/pages/AiDiagnosisFindingsPage'));
 const TargetedAnalysisPage = lazy(() => import('@/pages/TargetedAnalysisPage'));
 const TargetedAnalysisDetailPage = lazy(() => import('@/pages/TargetedAnalysisDetailPage'));
+const SampleRegistryPage = lazy(() => import('@/pages/SampleRegistryPage'));
 const AiAssistantDock = lazy(() =>
   import('@/features/ai-assistant/components/AiAssistantDock').then((m) => ({ default: m.AiAssistantDock })),
 );
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
               { path: 'ai-diagnosis', element: withSuspense(AiDiagnosisPage) },
               { path: 'ai-diagnosis/findings', element: withSuspense(AiDiagnosisFindingsPage) },
               { path: 'ai-diagnosis/targeted', element: withSuspense(TargetedAnalysisPage) },
+              { path: 'ai-diagnosis/samples', element: withSuspense(SampleRegistryPage) },
               { path: 'ai-diagnosis/targeted/:id', element: withSuspense(TargetedAnalysisDetailPage) },
               { path: 'ai-diagnosis/:realm/:date', element: withSuspense(AiDiagnosisReportDetailPage) },
             ],

@@ -79,6 +79,82 @@ export function useTriggerInspection() {
   });
 }
 
+export function useFpScenarios() {
+  return useQuery({
+    queryKey: ['ai-diagnosis', 'fp-scenarios'],
+    queryFn: () => aiDiagnosisApi.fpScenarios(),
+  });
+}
+
+export function useCreateFpScenario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: aiDiagnosisApi.createFpScenario,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'fp-scenarios'] });
+    },
+  });
+}
+
+export function useUpdateFpScenario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Parameters<typeof aiDiagnosisApi.updateFpScenario>[1] }) =>
+      aiDiagnosisApi.updateFpScenario(id, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'fp-scenarios'] });
+    },
+  });
+}
+
+export function useRemoveFpScenario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: aiDiagnosisApi.removeFpScenario,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'fp-scenarios'] });
+    },
+  });
+}
+
+export function useSamples(filters: { label?: string; realm?: string; q?: string }) {
+  return useQuery({
+    queryKey: ['ai-diagnosis', 'samples', filters],
+    queryFn: () => aiDiagnosisApi.samples(filters),
+  });
+}
+
+export function useCreateSample() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: aiDiagnosisApi.createSample,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'samples'] });
+    },
+  });
+}
+
+export function useUpdateSample() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Parameters<typeof aiDiagnosisApi.updateSample>[1] }) =>
+      aiDiagnosisApi.updateSample(id, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'samples'] });
+    },
+  });
+}
+
+export function useRemoveSample() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: aiDiagnosisApi.removeSample,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'samples'] });
+    },
+  });
+}
+
 export function useMailTemplate(enabled: boolean) {
   return useQuery({
     queryKey: ['ai-diagnosis', 'mail-template'],

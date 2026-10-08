@@ -2,10 +2,13 @@ import { acmDataSource } from '@/config/database';
 import {
   readDefaultRealm,
   readInspectionTrustedIps,
+  readPatrolCarryExcludedZones,
   readRuntimeValues,
   SYSTEM_CONFIG_KEYS,
 } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
+import { mapName } from '@/agent/tools/log-tools/map-names';
+import { zoneName } from '@/agent/tools/log-tools/zone-names';
 import {
   PatrolFinding,
   PatrolFindingSubject,
@@ -35,6 +38,34 @@ const BG_MIN_SUSPECT_SIGNALS = 2;
 const CARRY_MIN_LEVEL_GAP = 10;
 const CARRY_MAX_DISTANCE_YD = 50;
 const CARRY_MIN_SAME_IP_ACCOUNTS = 2;
+
+// 跨 IP 被带（疑似有偿代练）：同 IP 自带规则的绕过形态——雇人大号与客户硬核号 IP/账号均不同。
+// 无 IP 强关联可用，误报防线改为：主城/中立城镇排除 + 战场/竞技场整图排除 + occurrence≥2 才告警。
+// 默认 zone 集取自主城与中立 AH 城镇（zone-names.ts 实测 id）；系统配置 patrol_carry_excluded_zones 只追加。
+const DEFAULT_CARRY_EXCLUDED_ZONES = new Set<number>([
+  35, // 藏宝海湾
+  392, // 棘齿城
+  407, // 奥格瑞玛
+  976, // 加基森
+  1497, // 幽暗城
+  1519, // 暴风城
+  1537, // 铁炉堡
+  1657, // 达纳苏斯
+  2255, // 永望镇
+  3487, // 银月城
+  3557, // 埃索达
+  3703, // 沙塔斯城
+  4395, // 达拉然
+  1637, // 奥格瑞玛（AreaTable 双条目）
+]);
+const DEFAULT_CARRY_EXCLUDED_MAPS = new Set<number>([
+  30, // 奥特兰克山谷
+  489, // 战歌峡谷
+  529, // 阿拉希盆地
+  559, 562, 566, 572, 617, 618, // 竞技场
+  607, // 远古海滩
+  628, // 征服之岛
+]);
 
 // 游标缺失/损坏时的兜底扫描窗口
 const DEFAULT_SCAN_WINDOW_HOURS = 1;
@@ -210,6 +241,7 @@ export class AbusePatrolService {
           extra: r.hardcore ? { hardcoreLevel: r.hardcoreLevel } : {},
         })),
         evidence: {
+          ipMode: 'same-ip',
           pairs: pairs.map((p) => ({
             hardcore: `${p.hardcore.name}(Lv${p.hardcore.hardcoreLevel})`,
             main: `${p.main.name}(Lv${p.main.level})`,
@@ -220,6 +252,97 @@ export class AbusePatrolService {
           coords: Object.fromEntries(
             rows.map((r) => [r.guid, { map: r.map, zone: r.zone, x: r.positionX, y: r.positionY }]),
           ),
+        },
+      });
+    }
+    return candidates;
+  }
+
+  // 跨 IP 被带（疑似有偿代练）纯检测：硬核号 × 大号 账号与 IP 均不同（同 IP 场景留给
+  // detectHardcoreCarry，避免双报），同图同区近坐标 + 等级差；误报防线 = 排除主城/战场 +
+  // 多轮累积（persistCandidates occurrence≥2 才告警）。pair 连通分量聚簇，星型拓扑自然成簇。
+  detectHardcoreCarryCrossIp(
+    snapshot: OnlineSnapshotRow[],
+    trustedIps: Set<string>,
+    extraExcludedZones: Set<number>,
+    now: Date = new Date(),
+  ): FindingCandidate[] {
+    const filtered = snapshot.filter((r) => r.ip && !trustedIps.has(r.ip) && !DEFAULT_CARRY_EXCLUDED_MAPS.has(r.map));
+    const hardcoreList = filtered.filter((m) => m.hardcore);
+    const mains = filtered.filter((m) => !m.hardcore);
+
+    type Pair = { hc: OnlineSnapshotRow; main: OnlineSnapshotRow; distance: number };
+    const pairs: Pair[] = [];
+    for (const hc of hardcoreList) {
+      if (DEFAULT_CARRY_EXCLUDED_ZONES.has(hc.zone) || extraExcludedZones.has(hc.zone)) continue;
+      for (const main of mains) {
+        if (main.accountId === hc.accountId || main.ip === hc.ip) continue;
+        if (main.level - (hc.hardcoreLevel ?? 0) < CARRY_MIN_LEVEL_GAP) continue;
+        if (main.map !== hc.map || main.zone !== hc.zone) continue;
+        const dx = main.positionX - hc.positionX;
+        const dy = main.positionY - hc.positionY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= CARRY_MAX_DISTANCE_YD) pairs.push({ hc, main, distance: Math.round(distance * 10) / 10 });
+      }
+    }
+    if (pairs.length === 0) return [];
+
+    // 连通分量聚簇：同一点位的多客/多号关系归为一个候选，dedupe key 覆盖全部涉案 guid
+    const parent = new Map<number, number>();
+    const find = (x: number): number => {
+      let root = x;
+      while (parent.get(root) !== root) root = parent.get(root)!;
+      return root;
+    };
+    for (const p of pairs) {
+      for (const g of [p.hc.guid, p.main.guid]) if (!parent.has(g)) parent.set(g, g);
+    }
+    for (const p of pairs) {
+      const a = find(p.hc.guid);
+      const b = find(p.main.guid);
+      if (a !== b) parent.set(a, b);
+    }
+
+    const clusters = groupBy(pairs, (p) => String(find(p.hc.guid)));
+    const candidates: FindingCandidate[] = [];
+    for (const [, clusterPairs] of clusters) {
+      const involved = new Map<number, OnlineSnapshotRow>();
+      for (const p of clusterPairs) {
+        involved.set(p.hc.guid, p.hc);
+        involved.set(p.main.guid, p.main);
+      }
+      const rows = [...involved.values()];
+      const zoneId = clusterPairs[0].hc.zone;
+      const mapId = clusterPairs[0].hc.map;
+      candidates.push({
+        findingType: 'hardcore_carry',
+        dedupeKey: dedupeKeyFor('hardcore_carry', formatCstDate(now), rows.map((r) => r.guid)),
+        detectedAt: now,
+        subjects: rows.map((r) => ({
+          accountId: r.accountId,
+          accountName: r.username,
+          characterGuid: r.guid,
+          characterName: r.name,
+          level: r.level,
+          hardcore: r.hardcore,
+          ip: r.ip,
+          extra: r.hardcore ? { hardcoreLevel: r.hardcoreLevel } : {},
+        })),
+        evidence: {
+          ipMode: 'cross-ip',
+          map: mapId,
+          mapName: mapName(mapId),
+          zone: zoneId,
+          zoneName: zoneName(zoneId),
+          pairs: clusterPairs.map((p) => ({
+            hardcore: `${p.hc.name}(Lv${p.hc.hardcoreLevel})`,
+            main: `${p.main.name}(Lv${p.main.level})`,
+            map: mapId,
+            zone: zoneId,
+            distanceYd: p.distance,
+            hardcoreIp: p.hc.ip,
+            mainIp: p.main.ip,
+          })),
         },
       });
     }
@@ -274,7 +397,13 @@ export class AbusePatrolService {
   }
 
   private async notifyFinding(realm: string, type: PatrolFindingType, occurrence: number, candidate: FindingCandidate): Promise<boolean> {
-    const label = type === 'bg_honor_farm' ? '战场互刷嫌疑' : '硬核被带嫌疑';
+    const ipMode = type === 'hardcore_carry' ? ((candidate.evidence as { ipMode?: string }).ipMode ?? 'same-ip') : null;
+    const label =
+      type === 'bg_honor_farm'
+        ? '战场互刷嫌疑'
+        : ipMode === 'cross-ip'
+          ? '硬核被带嫌疑（跨 IP，疑似有偿代练）'
+          : '硬核被带嫌疑';
     const mdEl = (content: string) => ({ tag: 'markdown', content });
 
     const subjectLines = candidate.subjects.map((s) => {
@@ -305,13 +434,29 @@ export class AbusePatrolService {
         `- 命中特征：${signals.join('、')}——符合互相击杀刷荣誉的行为模式`,
       ];
     } else {
-      const ev = candidate.evidence as { pairs: Array<{ hardcore: string; main: string; map: number; zone: number; distanceYd: number }> };
-      evidenceLines = [
-        ...ev.pairs.map(
-          (p) => `- 硬核角色 **${p.hardcore}** 与大号 **${p.main}** 同地图同区域共现，直线距离仅 **${p.distanceYd}** 码`,
-        ),
-        `- 命中特征：登录 IP 相同且等级差距明显——疑似大号护送硬核角色升级`,
-      ];
+      const ev = candidate.evidence as {
+        ipMode?: 'same-ip' | 'cross-ip';
+        mapName?: string;
+        zoneName?: string;
+        pairs: Array<{ hardcore: string; main: string; map: number; zone: number; distanceYd: number; hardcoreIp?: string; mainIp?: string }>;
+      };
+      if (ev.ipMode === 'cross-ip') {
+        const place = [ev.mapName ?? `地图${ev.pairs[0].map}`, ev.zoneName ?? `区域${ev.pairs[0].zone}`].join('·');
+        evidenceLines = [
+          ...ev.pairs.map(
+            (p) =>
+              `- 硬核角色 **${p.hardcore}** 与大号 **${p.main}** 在 ${place} 共现，直线距离仅 **${p.distanceYd}** 码（IP 对照：${p.hardcoreIp} ↔ ${p.mainIp}）`,
+          ),
+          `- 命中特征：账号与登录 IP 均不同却持续同点共现且等级差距明显——已绕过同 IP 自带规则，疑似有偿代练`,
+        ];
+      } else {
+        evidenceLines = [
+          ...ev.pairs.map(
+            (p) => `- 硬核角色 **${p.hardcore}** 与大号 **${p.main}** 同地图同区域共现，直线距离仅 **${p.distanceYd}** 码`,
+          ),
+          `- 命中特征：登录 IP 相同且等级差距明显——疑似大号护送硬核角色升级`,
+        ];
+      }
     }
 
     const elements = [
@@ -359,18 +504,20 @@ export class AbusePatrolService {
 
   async runHardcoreCarryScan(): Promise<PatrolScanResult> {
     const now = new Date();
-    const [realm, trustedIps, snapshot] = await Promise.all([
+    const [realm, trustedIps, extraExcludedZones, snapshot] = await Promise.all([
       readDefaultRealm(),
       readInspectionTrustedIps(),
+      readPatrolCarryExcludedZones(),
       abusePatrolRepository.getOnlineSnapshot(),
     ]);
-    const candidates = this.detectHardcoreCarry(snapshot, trustedIps, now);
-    const { created, upgraded, notified } = await this.persistCandidates(realm, candidates);
+    const sameIp = this.detectHardcoreCarry(snapshot, trustedIps, now);
+    const crossIp = this.detectHardcoreCarryCrossIp(snapshot, trustedIps, extraExcludedZones, now);
+    const { created, upgraded, notified } = await this.persistCandidates(realm, [...sameIp, ...crossIp]);
 
     logger.info(
-      `[abuse-patrol] hardcore-carry scan @ ${formatCstDateTime(now)}: online=${snapshot.length} candidates=${candidates.length} created=${created} upgraded=${upgraded} notified=${notified}`,
+      `[abuse-patrol] hardcore-carry scan @ ${formatCstDateTime(now)}: online=${snapshot.length} sameIp=${sameIp.length} crossIp=${crossIp.length} created=${created} upgraded=${upgraded} notified=${notified}`,
     );
-    return { scannedFrom: '', scannedTo: formatCstDateTime(now), candidates: candidates.length, created, upgraded, notified };
+    return { scannedFrom: '', scannedTo: formatCstDateTime(now), candidates: sameIp.length + crossIp.length, created, upgraded, notified };
   }
 
   // ---------- 发现查询 / 处置（路由调用） ----------

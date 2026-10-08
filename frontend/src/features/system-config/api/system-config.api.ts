@@ -33,6 +33,8 @@ export interface SystemConfigPayload {
   inspection?: {
     /** 逗号/换行分隔 IPv4；空串/null = 清除白名单 */
     trustedIps?: string | null;
+    /** 逗号/换行分隔 zone id（非负整数）；空串/null = 清除追加排除集 */
+    carryExcludedZones?: string | null;
   };
 }
 

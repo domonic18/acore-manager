@@ -39,6 +39,7 @@ export function SystemConfigForm() {
   const [captchaTtlSeconds, setCaptchaTtlSeconds] = useState('');
 
   const [trustedIps, setTrustedIps] = useState('');
+  const [carryExcludedZones, setCarryExcludedZones] = useState('');
 
   useEffect(() => {
     if (!config) return;
@@ -62,6 +63,7 @@ export function SystemConfigForm() {
     setCaptchaTtlSeconds(String(config.login.captchaTtlSeconds));
 
     setTrustedIps(config.inspection.trustedIps);
+    setCarryExcludedZones(config.inspection.carryExcludedZones);
   }, [config]);
 
   const handleSave = async (e: FormEvent) => {
@@ -100,8 +102,9 @@ export function SystemConfigForm() {
         ai,
         login,
         inspection: {
-          // 空串/null 语义 = 清除白名单（后端删 KV 行）
+          // 空串/null 语义 = 清除白名单/追加排除集（后端删 KV 行）
           trustedIps: trustedIps.trim() === '' ? null : trustedIps.trim(),
+          carryExcludedZones: carryExcludedZones.trim() === '' ? null : carryExcludedZones.trim(),
         },
       });
       setPassword('');
@@ -417,7 +420,7 @@ export function SystemConfigForm() {
       </section>
 
       <section className='rounded-lg border border-border bg-card p-4 space-y-3'>
-        <h2 className='text-base font-semibold'>巡检信任 IP</h2>
+        <h2 className='text-base font-semibold'>巡检与反滥用</h2>
         <p className='text-xs text-muted-foreground'>
           每日巡检爆破判定前整体剔除的来源 IP（如站长自有 Web 服务器的合法认证日志），不会进入报告证据。每行一个或逗号分隔；留空保存 = 清除白名单。
         </p>
@@ -431,6 +434,20 @@ export function SystemConfigForm() {
             placeholder={'101.42.117.123\n203.0.113.7'}
             className={`${inputClass} resize-none font-mono`}
           />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor='inspection-carry-excluded-zones'>带级检测排除区域（zone ID 追加）</label>
+          <textarea
+            id='inspection-carry-excluded-zones'
+            value={carryExcludedZones}
+            onChange={(e) => setCarryExcludedZones(e.target.value)}
+            rows={3}
+            placeholder={'3576, 3606'}
+            className={`${inputClass} resize-none font-mono`}
+          />
+          <p className='mt-1 text-xs text-muted-foreground'>
+            跨 IP 被带检测默认已排除主城/中立城镇与战场竞技场；若发现新误报区域（如任务聚集点），在此追加 zone ID，与默认集取并集。留空保存 = 清除追加配置。
+          </p>
         </div>
       </section>
 

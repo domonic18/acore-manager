@@ -32,6 +32,8 @@ export interface SystemConfig {
   inspection: {
     /** 逗号分隔的受信 IPv4 列表；空串 = 未配置 */
     trustedIps: string;
+    /** 逗号分隔的带级检测排除 zone id 列表（追加到代码默认集）；空串 = 未配置 */
+    carryExcludedZones: string;
   };
   updatedAt: string | null;
 }

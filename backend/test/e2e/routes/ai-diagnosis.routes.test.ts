@@ -6,6 +6,22 @@ jest.mock('@/services/ai/anticheat-exemption.service', () => ({
     remove: jest.fn(),
   },
 }));
+jest.mock('@/services/ai/fp-scenario.service', () => ({
+  fpScenarioService: {
+    list: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+  },
+}));
+jest.mock('@/services/ai/inspection-sample.service', () => ({
+  inspectionSampleService: {
+    list: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+  },
+}));
 jest.mock('@/services/job-trigger.service', () => ({
   triggerJob: jest.fn().mockResolvedValue({ requestId: 'req-1' }),
 }));
@@ -44,6 +60,8 @@ import { ServiceError } from '@/shared/errors/service-error';
 import { JOB_TASK } from '@/shared/enums/job-task';
 import { reportService } from '@/services/ai/report.service';
 import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
+import { fpScenarioService } from '@/services/ai/fp-scenario.service';
+import { inspectionSampleService } from '@/services/ai/inspection-sample.service';
 
 describe('AI Diagnosis Routes: manual inspection trigger', () => {
   let app: Application;
@@ -250,5 +268,96 @@ describe('AI Diagnosis Routes: PUT /reports/:realm/:date (T4.7)', () => {
     (reportService.update as jest.Mock).mockRejectedValueOnce(new ServiceError('报告不存在', 404));
     const res = await request(app).put('/api/ai/diagnosis/reports/realm3/2001-01-01').send({ gmRemark: 'x' });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('AI Diagnosis Routes: fp-scenarios & samples (巡查优化 2026-10)', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    app = express();
+    app.use(express.json());
+    app.use(responseFormatter);
+    app.use('/api/ai/diagnosis', aiDiagnosisRoutes);
+  });
+
+  it('lists fp scenarios', async () => {
+    (fpScenarioService.list as jest.Mock).mockResolvedValueOnce([{ id: 1, violationType: 'teleportplane', questId: 12757 }]);
+    const res = await request(app).get('/api/ai/diagnosis/fp-scenarios');
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(1);
+  });
+
+  it('creates a fp scenario and rejects an unknown violation type with 400', async () => {
+    (fpScenarioService.create as jest.Mock).mockResolvedValueOnce({ id: 1 });
+    const ok = await request(app)
+      .post('/api/ai/diagnosis/fp-scenarios')
+      .send({ mapId: 609, violationType: 'teleportplane', questId: 12757, reason: 'DK 任务传送' });
+    expect(ok.status).toBe(200);
+    expect(fpScenarioService.create).toHaveBeenCalledWith(
+      { mapId: 609, violationType: 'teleportplane', questId: 12757, spots: null, reason: 'DK 任务传送' },
+      0,
+      '',
+    );
+
+    const bad = await request(app).post('/api/ai/diagnosis/fp-scenarios').send({ violationType: 'wallhack', reason: 'r' });
+    expect(bad.status).toBe(400);
+  });
+
+  it('updates and removes a fp scenario', async () => {
+    (fpScenarioService.update as jest.Mock).mockResolvedValueOnce({ id: 1, reason: '校正半径' });
+    const ok = await request(app).put('/api/ai/diagnosis/fp-scenarios/1').send({ reason: '校正半径' });
+    expect(ok.status).toBe(200);
+
+    const del = await request(app).delete('/api/ai/diagnosis/fp-scenarios/1');
+    expect(del.status).toBe(200);
+    expect(fpScenarioService.remove).toHaveBeenCalledWith(1, 0, '');
+
+    (fpScenarioService.remove as jest.Mock).mockRejectedValueOnce(new ServiceError('误报场景不存在', 404));
+    const missing = await request(app).delete('/api/ai/diagnosis/fp-scenarios/99');
+    expect(missing.status).toBe(404);
+  });
+
+  it('lists samples with filter passthrough', async () => {
+    (inspectionSampleService.list as jest.Mock).mockResolvedValueOnce([{ id: 2, characterName: '元吉' }]);
+    const res = await request(app).get('/api/ai/diagnosis/samples?label=cheat&realm=realm3&q=元吉');
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(1);
+    expect(inspectionSampleService.list).toHaveBeenCalledWith({ label: 'cheat', realm: 'realm3', q: '元吉' });
+  });
+
+  it('creates a sample and rejects an invalid label with 400', async () => {
+    (inspectionSampleService.create as jest.Mock).mockResolvedValueOnce({ id: 2 });
+    const ok = await request(app).post('/api/ai/diagnosis/samples').send({
+      realm: 'realm3',
+      characterName: '元吉',
+      label: 'cheat',
+      source: 'auto_ban',
+      detectedDate: '2026-10-05',
+      summary: '穿墙外挂确认',
+    });
+    expect(ok.status).toBe(200);
+
+    const bad = await request(app)
+      .post('/api/ai/diagnosis/samples')
+      .send({ realm: 'realm3', characterName: 'x', label: 'good', source: 'gm', summary: 's' });
+    expect(bad.status).toBe(400);
+  });
+
+  it('updates a sample label and removes it', async () => {
+    (inspectionSampleService.update as jest.Mock).mockResolvedValueOnce({ id: 2, label: 'false_positive' });
+    const ok = await request(app).put('/api/ai/diagnosis/samples/2').send({ label: 'false_positive' });
+    expect(ok.status).toBe(200);
+
+    const del = await request(app).delete('/api/ai/diagnosis/samples/2');
+    expect(del.status).toBe(200);
+    expect(inspectionSampleService.remove).toHaveBeenCalledWith(2, 0, '');
+  });
+
+  it('rejects malformed sample ids with 400', async () => {
+    const res = await request(app).delete('/api/ai/diagnosis/samples/abc');
+    expect(res.status).toBe(400);
+    expect(inspectionSampleService.remove).not.toHaveBeenCalled();
   });
 });

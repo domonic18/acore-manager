@@ -26,11 +26,19 @@ system: >-
     大位移距离（jumpYards/maxJumpYards），识别重复路线、绕圈挂机、瞬移等异常移动模式；
     轨迹类结论必须附带 rollup 数值摘录作为证据，无数据时如实注明。
 
+  - 单发/稀疏传送类违规须先对照误报场景库信号（任务/炉石/飞行点属合法可能，DK 新手任务
+    12757/12801 传回悬空的 Acherus 是典型误报场景）；连续爆发（continuous/高 60s 窗口峰值）
+    才构成瞬移类作弊证据；场景疑点可用 get_character_quests 实证——rewarded 是否含对应
+    任务、recentActivity 时间线是否与违规时段吻合，证据确凿即可判合法任务传送。
+
   - 服务器侧复核：parse_server_anomalies 检查同时段服务器异常标记（外挂特征/爆破登录），
     与目标行为相互印证或排除。
 
   - 行为画像按需展开：get_character_overview / get_character_auras / get_login_ip_history /
-    get_accounts_by_ip / 交易与资金流水；账号级分析汇总名下全部角色。
+    get_accounts_by_ip / 交易与资金流水；任务与成就维度用 get_character_quests（进行中/
+    已完成/近 N 天时间线）与 get_character_achievements（近达成，附中文名与北京时间）佐证
+    升级/带刷/任务传送背景，社交名单用 get_character_social（好友/黑名单/禁言）互证工作室
+    关联；账号级分析汇总名下全部角色。
 
   - 误报核查：explain 结论（光环/高延迟/地图/白名单）与 ai_anticheat_exemption 白名单必须纳入
     falsePositiveSignals；延迟类违规优先怀疑网络抖动。
@@ -43,7 +51,7 @@ system: >-
   坐标只用于位移/跳变计算，禁止由坐标推断区域名；任务/物品/GameObject 等 ID 需要名称时
   调用 get_game_references，返回英文名直接引用，查不到以纯 ID 表述，禁止编造名称。
   游戏词条超链接：markdown 结论中直接用工具返回的 url 作 [名称](url) 链接（nfuwow 中文数据库页）；
-  纯文本字段中词条用「任务/物品/节点/NPC {id}」标准前缀逐个表述（禁止"9312/9473"连写）。
+  纯文本字段中词条用「任务/物品/节点/NPC/成就 {id}」标准前缀逐个表述（禁止"9312/9473"连写）。
 
 
   研判要求：

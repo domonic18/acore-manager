@@ -52,6 +52,8 @@ export interface SystemConfigView {
   inspection: {
     /** 逗号分隔的受信 IPv4 列表；空串 = 未配置 */
     trustedIps: string;
+    /** 逗号分隔的带级检测排除 zone id 列表（追加到代码默认集）；空串 = 未配置 */
+    carryExcludedZones: string;
   };
   updatedAt: string | null;
 }
@@ -87,6 +89,8 @@ export interface SystemConfigInput {
   inspection?: {
     /** 逗号/换行分隔 IPv4；空串/null = 清除白名单 */
     trustedIps?: string | null;
+    /** 逗号/换行分隔 zone id（非负整数）；空串/null = 清除追加排除集 */
+    carryExcludedZones?: string | null;
   };
 }
 
@@ -173,6 +177,7 @@ class SystemConfigService {
       },
       inspection: {
         trustedIps: dbString(SYSTEM_CONFIG_KEYS.inspectionTrustedIps) ?? '',
+        carryExcludedZones: dbString(SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones) ?? '',
       },
       updatedAt: latest?.updatedAt ? new Date(latest.updatedAt).toISOString() : null,
     };
@@ -299,28 +304,46 @@ class SystemConfigService {
     );
   }
 
-  /** 巡检组：受信 IP 白名单，逗号/换行分隔，逐个严格 IPv4 校验；空值 = 删行（无白名单） */
+  /** 巡检组：受信 IP 白名单 + 带级检测追加排除区域，逗号/换行分隔；空值 = 删行（回落默认/无白名单） */
   private async applyInspection(
     inspection: NonNullable<SystemConfigInput['inspection']>,
     changedKeys: string[],
     operatorName: string,
   ): Promise<void> {
-    if (inspection.trustedIps === undefined) return;
-    const ips = (inspection.trustedIps ?? '')
-      .split(/[,\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const ip of ips) {
-      if (!IPV4_RE.test(ip)) {
-        throw new ServiceError(`受信 IP 格式不合法：${ip} / invalid trusted ip`, 400);
+    if (inspection.trustedIps !== undefined) {
+      const ips = (inspection.trustedIps ?? '')
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const ip of ips) {
+        if (!IPV4_RE.test(ip)) {
+          throw new ServiceError(`受信 IP 格式不合法：${ip} / invalid trusted ip`, 400);
+        }
       }
+      if (ips.length === 0) {
+        await this.repo.delete(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
+      } else {
+        await this.upsert(SYSTEM_CONFIG_KEYS.inspectionTrustedIps, ips.join(','), false, operatorName);
+      }
+      changedKeys.push(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
     }
-    if (ips.length === 0) {
-      await this.repo.delete(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
-    } else {
-      await this.upsert(SYSTEM_CONFIG_KEYS.inspectionTrustedIps, ips.join(','), false, operatorName);
+    if (inspection.carryExcludedZones !== undefined) {
+      const zones = (inspection.carryExcludedZones ?? '')
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const zone of zones) {
+        if (!/^\d+$/.test(zone)) {
+          throw new ServiceError(`排除区域需为非负整数 zone id：${zone} / invalid excluded zone`, 400);
+        }
+      }
+      if (zones.length === 0) {
+        await this.repo.delete(SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones);
+      } else {
+        await this.upsert(SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones, zones.join(','), false, operatorName);
+      }
+      changedKeys.push(SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones);
     }
-    changedKeys.push(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
   }
 
   /** 数字组统一处理：undefined 跳过 / null 删行回落 env / 区间校验后保存 */

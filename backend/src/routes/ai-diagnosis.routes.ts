@@ -4,6 +4,8 @@ import { asyncHandler } from '@/shared/async-handler';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
 import { requireGmLevel } from '@/middleware/gm-guard';
 import { anticheatExemptionService } from '@/services/ai/anticheat-exemption.service';
+import { fpScenarioService } from '@/services/ai/fp-scenario.service';
+import { inspectionSampleService } from '@/services/ai/inspection-sample.service';
 import { reportService } from '@/services/ai/report.service';
 import { triggerInspectionJob } from '@/services/ai/inspection-trigger.service';
 import { ServiceError } from '@/shared/errors/service-error';
@@ -245,6 +247,270 @@ router.delete(
     }
     try {
       await reportService.remove((req.params.realm as string).trim(), req.params.date, req.user?.id || 0, req.user?.username || '');
+      res.jsonSuccess({ success: true });
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+// 误报场景库（巡查优化 2026-10）：任务传送点/已知误报场景，explain 引擎 quest/map 信号数据源
+router.get(
+  '/fp-scenarios',
+  authMiddleware,
+  requireGmLevel(2),
+  asyncHandler(async (_req: AuthRequest, res: Response) => {
+    const items = await fpScenarioService.list();
+    res.jsonSuccess(items, items.length);
+  }),
+);
+
+router.post(
+  '/fp-scenarios',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    body('mapId').optional({ values: 'null' }).isInt({ min: 0 }).toInt(),
+    body('violationType').isString().trim().isIn(VIOLATION_TYPES),
+    body('questId').optional({ values: 'null' }).isInt({ min: 1 }).toInt(),
+    body('spots').optional({ values: 'null' }).isArray({ max: 20 }),
+    body('reason').isString().trim().isLength({ min: 2, max: 500 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const { mapId, violationType, questId, spots, reason } = req.body as {
+        mapId?: number | null;
+        violationType: string;
+        questId?: number | null;
+        spots?: unknown;
+        reason: string;
+      };
+      const item = await fpScenarioService.create(
+        { mapId: mapId ?? null, violationType, questId: questId ?? null, spots: (spots as never) ?? null, reason },
+        req.user?.id || 0,
+        req.user?.username || '',
+      );
+      res.jsonSuccess(item);
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+router.put(
+  '/fp-scenarios/:id',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('id').isInt({ min: 1 }).toInt(),
+    body('mapId').optional({ values: 'null' }).isInt({ min: 0 }).toInt(),
+    body('violationType').optional().isString().trim().isIn(VIOLATION_TYPES),
+    body('questId').optional({ values: 'null' }).isInt({ min: 1 }).toInt(),
+    body('spots').optional({ values: 'null' }).isArray({ max: 20 }),
+    body('reason').optional().isString().trim().isLength({ min: 2, max: 500 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const { mapId, violationType, questId, spots, reason } = req.body as {
+        mapId?: number | null;
+        violationType?: string;
+        questId?: number | null;
+        spots?: unknown;
+        reason?: string;
+      };
+      const item = await fpScenarioService.update(
+        req.params.id as unknown as number,
+        { mapId, violationType, questId, spots: spots as never, reason },
+        req.user?.id || 0,
+        req.user?.username || '',
+      );
+      res.jsonSuccess(item);
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+router.delete(
+  '/fp-scenarios/:id',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('id').isInt({ min: 1 }).toInt()],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid scenario ID', 400);
+      return;
+    }
+    try {
+      await fpScenarioService.remove(req.params.id as unknown as number, req.user?.id || 0, req.user?.username || '');
+      res.jsonSuccess({ success: true });
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+// 巡查样本库（巡查优化 2026-10）：goodcase/badcase 标注语料，label 流转 pending→cheat/false_positive
+router.get(
+  '/samples',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    query('label').optional().isIn(['cheat', 'false_positive', 'pending']),
+    query('realm').optional().isString().trim().notEmpty(),
+    query('q').optional().isString().trim().isLength({ max: 100 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    const items = await inspectionSampleService.list({
+      label: req.query.label as string | undefined,
+      realm: req.query.realm as string | undefined,
+      q: req.query.q as string | undefined,
+    });
+    res.jsonSuccess(items, items.length);
+  }),
+);
+
+router.post(
+  '/samples',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    body('realm').isString().trim().isLength({ min: 1, max: 32 }),
+    body('characterGuid').optional({ values: 'null' }).isInt({ min: 1 }).toInt(),
+    body('characterName').isString().trim().isLength({ min: 1, max: 100 }),
+    body('label').isIn(['cheat', 'false_positive', 'pending']),
+    body('source').isIn(['auto_ban', 'appeal', 'deep_analysis', 'inspection', 'gm']),
+    body('detectedDate').optional({ values: 'null' }).matches(/^\d{4}-\d{2}-\d{2}$/),
+    body('summary').isString().trim().isLength({ min: 2, max: 1000 }),
+    body('evidence').optional({ values: 'null' }).isArray({ max: 50 }),
+    body('refUrl').optional({ values: 'null' }).isString().trim().isLength({ max: 500 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const { realm, characterGuid, characterName, label, source, detectedDate, summary, evidence, refUrl } = req.body as {
+        realm: string;
+        characterGuid?: number | null;
+        characterName: string;
+        label: string;
+        source: string;
+        detectedDate?: string | null;
+        summary: string;
+        evidence?: unknown;
+        refUrl?: string | null;
+      };
+      const item = await inspectionSampleService.create(
+        {
+          realm,
+          characterGuid: characterGuid ?? null,
+          characterName,
+          label: label as never,
+          source: source as never,
+          detectedDate: detectedDate ?? null,
+          summary,
+          evidence: evidence as never,
+          refUrl: refUrl ?? null,
+        },
+        req.user?.id || 0,
+        req.user?.username || '',
+      );
+      res.jsonSuccess(item);
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+router.put(
+  '/samples/:id',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('id').isInt({ min: 1 }).toInt(),
+    body('realm').optional().isString().trim().isLength({ min: 1, max: 32 }),
+    body('characterGuid').optional({ values: 'null' }).isInt({ min: 1 }).toInt(),
+    body('characterName').optional().isString().trim().isLength({ min: 1, max: 100 }),
+    body('label').optional().isIn(['cheat', 'false_positive', 'pending']),
+    body('source').optional().isIn(['auto_ban', 'appeal', 'deep_analysis', 'inspection', 'gm']),
+    body('detectedDate').optional({ values: 'null' }).matches(/^\d{4}-\d{2}-\d{2}$/),
+    body('summary').optional().isString().trim().isLength({ min: 2, max: 1000 }),
+    body('evidence').optional({ values: 'null' }).isArray({ max: 50 }),
+    body('refUrl').optional({ values: 'null' }).isString().trim().isLength({ max: 500 }),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+    try {
+      const { realm, characterGuid, characterName, label, source, detectedDate, summary, evidence, refUrl } = req.body as {
+        realm?: string;
+        characterGuid?: number | null;
+        characterName?: string;
+        label?: string;
+        source?: string;
+        detectedDate?: string | null;
+        summary?: string;
+        evidence?: unknown;
+        refUrl?: string | null;
+      };
+      const item = await inspectionSampleService.update(
+        req.params.id as unknown as number,
+        {
+          realm,
+          characterGuid,
+          characterName,
+          label: label as never,
+          source: source as never,
+          detectedDate,
+          summary,
+          evidence: evidence as never,
+          refUrl,
+        },
+        req.user?.id || 0,
+        req.user?.username || '',
+      );
+      res.jsonSuccess(item);
+    } catch (err) {
+      handleServiceError(res, err);
+    }
+  }),
+);
+
+router.delete(
+  '/samples/:id',
+  authMiddleware,
+  requireGmLevel(2),
+  [param('id').isInt({ min: 1 }).toInt()],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid sample ID', 400);
+      return;
+    }
+    try {
+      await inspectionSampleService.remove(req.params.id as unknown as number, req.user?.id || 0, req.user?.username || '');
       res.jsonSuccess({ success: true });
     } catch (err) {
       handleServiceError(res, err);

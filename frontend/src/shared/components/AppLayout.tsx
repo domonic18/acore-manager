@@ -23,6 +23,7 @@ import {
   FileSearch,
   Crosshair,
   Radar,
+  FlaskConical,
   Settings,
   ChevronDown,
   ShieldCheck,
@@ -71,6 +72,7 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
       { path: '/ai-diagnosis', label: '巡检报告', icon: FileSearch, end: true },
       { path: '/ai-diagnosis/findings', label: '违规巡检', icon: Radar },
       { path: '/ai-diagnosis/targeted', label: '深度分析', icon: Crosshair },
+      { path: '/ai-diagnosis/samples', label: '样本与场景库', icon: FlaskConical },
     ],
   },
 ];

@@ -249,6 +249,30 @@ describe('update: inspection', () => {
     expect(del).toHaveBeenCalledTimes(2);
     expect(del).toHaveBeenCalledWith(SYSTEM_CONFIG_KEYS.inspectionTrustedIps);
   });
+
+  it('carryExcludedZones 合法 zone 列表归一化 upsert，非法值抛 400', async () => {
+    await systemConfigService.update({ inspection: { carryExcludedZones: '3576,\n 3606' } }, 1, 'gm');
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configKey: SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones,
+        configValue: '3576,3606',
+        isSecret: false,
+      }),
+      { conflictPaths: ['configKey'] },
+    );
+
+    await expect(
+      systemConfigService.update({ inspection: { carryExcludedZones: '-3' } }, 1, 'gm'),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      systemConfigService.update({ inspection: { carryExcludedZones: 'abc' } }, 1, 'gm'),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(upsert).toHaveBeenCalledTimes(1);
+
+    const del = repoWithDelete();
+    await systemConfigService.update({ inspection: { carryExcludedZones: '' } }, 1, 'gm');
+    expect(del).toHaveBeenCalledWith(SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones);
+  });
 });
 
 describe('update: ai / login', () => {
@@ -307,7 +331,7 @@ describe('getView: 新增 section', () => {
       captchaEnabled: false,
       captchaTtlSeconds: 300,
     });
-    expect(view.inspection).toEqual({ trustedIps: '' });
+    expect(view.inspection).toEqual({ trustedIps: '', carryExcludedZones: '' });
   });
 
   it('DB 值优先生效，secret 回显掩码', async () => {

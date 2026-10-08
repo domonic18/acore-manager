@@ -29,8 +29,21 @@ export interface BgFarmEvidence {
 }
 
 export interface CarryEvidence {
-  pairs: Array<{ hardcore: string; main: string; map: number; zone: number; distanceYd: number }>;
-  coords: Record<string, { map: number; zone: number; x: number; y: number }>;
+  /** 存量同 IP 行无此字段（视同 same-ip）；cross-ip = 账号与登录 IP 均不同，疑似有偿代练 */
+  ipMode?: 'same-ip' | 'cross-ip';
+  /** cross-ip 行附中文地名（东部王国等），same-ip 行按 map/zone id 展示 */
+  mapName?: string;
+  zoneName?: string;
+  pairs: Array<{
+    hardcore: string;
+    main: string;
+    map: number;
+    zone: number;
+    distanceYd: number;
+    hardcoreIp?: string;
+    mainIp?: string;
+  }>;
+  coords?: Record<string, { map: number; zone: number; x: number; y: number }>;
 }
 
 export interface PatrolFinding {

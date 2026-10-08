@@ -78,6 +78,65 @@ export interface TriggerInspectionResult {
   date: string | null;
 }
 
+export interface ScenarioSpot {
+  x: number;
+  y: number;
+  z: number;
+  radiusYards: number;
+}
+
+export interface FpScenarioItem {
+  id: number;
+  mapId: number | null;
+  violationType: string;
+  questId: number | null;
+  spots: ScenarioSpot[] | null;
+  reason: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface FpScenarioInput {
+  mapId?: number | null;
+  violationType: string;
+  questId?: number | null;
+  spots?: ScenarioSpot[] | null;
+  reason: string;
+}
+
+export interface SampleEvidence {
+  source: string;
+  quote: string;
+}
+
+export interface SampleItem {
+  id: number;
+  realm: string;
+  characterGuid: number | null;
+  characterName: string;
+  label: 'cheat' | 'false_positive' | 'pending';
+  source: 'auto_ban' | 'appeal' | 'deep_analysis' | 'inspection' | 'gm';
+  detectedDate: string | null;
+  summary: string;
+  evidenceJson: SampleEvidence[];
+  refUrl: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SampleInput {
+  realm: string;
+  characterGuid?: number | null;
+  characterName: string;
+  label: SampleItem['label'];
+  source: SampleItem['source'];
+  detectedDate?: string | null;
+  summary: string;
+  evidence?: SampleEvidence[];
+  refUrl?: string | null;
+}
+
 export const aiDiagnosisApi = {
   reports: (realm?: string) =>
     apiClient.get<AiReportSummary[]>(`/api/ai/diagnosis/reports${realm ? `?realm=${encodeURIComponent(realm)}` : ''}`),
@@ -104,4 +163,20 @@ export const aiDiagnosisApi = {
   // 立即巡检（gm3）：SCF Invoke 异步受理即返回；realm/date 空则由 Job 侧缺省（default_realm / CST 昨日）
   triggerInspection: (input: { realm?: string; date?: string }) =>
     apiClient.post<TriggerInspectionResult>('/api/ai/diagnosis/inspection/trigger', input),
+  fpScenarios: () => apiClient.get<FpScenarioItem[]>('/api/ai/diagnosis/fp-scenarios'),
+  createFpScenario: (input: FpScenarioInput) => apiClient.post<FpScenarioItem>('/api/ai/diagnosis/fp-scenarios', input),
+  updateFpScenario: (id: number, patch: Partial<FpScenarioInput>) =>
+    apiClient.put<FpScenarioItem>(`/api/ai/diagnosis/fp-scenarios/${id}`, patch),
+  removeFpScenario: (id: number) => apiClient.del<{ success: boolean }>(`/api/ai/diagnosis/fp-scenarios/${id}`),
+  samples: (filters: { label?: string; realm?: string; q?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.label) params.set('label', filters.label);
+    if (filters.realm) params.set('realm', filters.realm);
+    if (filters.q) params.set('q', filters.q);
+    const qs = params.toString();
+    return apiClient.get<SampleItem[]>(`/api/ai/diagnosis/samples${qs ? `?${qs}` : ''}`);
+  },
+  createSample: (input: SampleInput) => apiClient.post<SampleItem>('/api/ai/diagnosis/samples', input),
+  updateSample: (id: number, patch: Partial<SampleInput>) => apiClient.put<SampleItem>(`/api/ai/diagnosis/samples/${id}`, patch),
+  removeSample: (id: number) => apiClient.del<{ success: boolean }>(`/api/ai/diagnosis/samples/${id}`),
 };

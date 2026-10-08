@@ -6,8 +6,9 @@ import { registerTool } from '@/agent/tools/registry';
 import { readDefaultRealm } from '@/config/system-config.reader';
 import { acmDataSource } from '@/config/database';
 import { AiAnticheatExemption } from '@/entities/acm/ai-anticheat-exemption.entity';
+import { AiFpScenario } from '@/entities/acm/ai-fp-scenario.entity';
 import { runReadOnly } from '@/agent/tools/db-tools/query-guard';
-import { explainSuspect, FpSignal, suggestAction } from '@/agent/tools/false-positive/explain';
+import { explainSuspect, FpScenarioRule, FpSignal, suggestAction } from '@/agent/tools/false-positive/explain';
 import { parseAnticheatLine, ParsedViolation } from './anticheat-parser';
 import { mapName } from './map-names';
 import { rollupPlayers } from './player-rollup';
@@ -108,7 +109,9 @@ export function registerParseTool(): void {
       explain: z
         .boolean()
         .default(false)
-        .describe('附加误报解释：查角色当前光环与 GM 豁免白名单，标注 falsePositiveSignals 与 suggestedAction'),
+        .describe(
+          '附加误报解释：查角色当前光环、GM 豁免白名单与误报场景库（任务传送点/已知场景/例行传送稀疏化），标注 falsePositiveSignals 与 suggestedAction',
+        ),
     }),
     handler: async (args) => {
       const { from, to, player, guid, type, limit, explain } = args as {
@@ -147,6 +150,8 @@ export function registerParseTool(): void {
           (type === undefined || parsed.type === type),
       );
       const acc = new Map<string, Acc>();
+      // 误报场景库坐标命中用的坐标采样旁路（≤10 条/聚合），不进入返回给 LLM 的 aggregates 输出
+      const posByAgg = new Map<string, { x: number; y: number; z: number }[]>();
       for (const { date, parsed } of filtered) {
         const key = `${parsed.guid}|${parsed.type}|${parsed.mapId ?? 'x'}`;
         const entry =
@@ -195,7 +200,12 @@ export function registerParseTool(): void {
           const yards = Math.hypot(parsed.gpsDiff.dx, parsed.gpsDiff.dy);
           entry.jumpMax = entry.jumpMax === null ? yards : Math.max(entry.jumpMax, yards);
         }
-        if (parsed.pos) entry.pos.push({ t: toEpochMs(parsed.time), ...parsed.pos });
+        if (parsed.pos) {
+          entry.pos.push({ t: toEpochMs(parsed.time), ...parsed.pos });
+          const sampled = posByAgg.get(key) ?? [];
+          if (sampled.length < 10) sampled.push(parsed.pos);
+          posByAgg.set(key, sampled);
+        }
         // 证据两条：首条 + 最大幅度条（speed 类），其余类型取前两条
         if (entry.evidence.length < 2) entry.evidence.push(parsed.raw);
         else if (parsed.speedPctAbove !== null && (entry.worstPct === null || parsed.speedPctAbove > entry.worstPct)) {
@@ -215,7 +225,7 @@ export function registerParseTool(): void {
       };
       if (explain && aggregates.length > 0) {
         result.explainNote = '光环为角色当前时刻快照，历史违规时点可能已过期；信号仅提示需复核，非定论';
-        await annotateFalsePositives(aggregates);
+        await annotateFalsePositives(aggregates, posByAgg);
       }
       return result;
     },
@@ -254,12 +264,16 @@ function toAggregate(entry: Acc): ViolationAggregate {
   };
 }
 
-/** explain 模式：批量拉取聚合条目涉及角色的当前光环与豁免白名单，逐条标注误报信号 */
-async function annotateFalsePositives(aggregates: ViolationAggregate[]): Promise<void> {
+/** explain 模式：批量拉取聚合条目涉及角色的当前光环、豁免白名单与误报场景库，逐条标注误报信号 */
+async function annotateFalsePositives(
+  aggregates: ViolationAggregate[],
+  posByAgg: Map<string, { x: number; y: number; z: number }[]>,
+): Promise<void> {
   const guids = [...new Set(aggregates.map((a) => a.guid))];
-  const [auraRes, exemptions] = await Promise.all([
+  const [auraRes, exemptions, scenarios] = await Promise.all([
     runReadOnly('characters', `SELECT guid, spell FROM character_aura WHERE guid IN (${guids.map(() => '?').join(',')})`, guids),
     acmDataSource.getRepository(AiAnticheatExemption).find({ where: { characterGuid: In(guids) } }),
+    acmDataSource.getRepository(AiFpScenario).find(),
   ]);
   const aurasByGuid = new Map<number, number[]>();
   for (const row of auraRes.rows as { guid: number; spell: number }[]) {
@@ -267,6 +281,13 @@ async function annotateFalsePositives(aggregates: ViolationAggregate[]): Promise
     list.push(row.spell);
     aurasByGuid.set(row.guid, list);
   }
+  const scenarioRules: FpScenarioRule[] = scenarios.map((s) => ({
+    mapId: s.mapId,
+    violationType: s.violationType,
+    questId: s.questId,
+    spots: s.spots ?? undefined,
+    reason: s.reason,
+  }));
   for (const agg of aggregates) {
     const signals = explainSuspect(
       {
@@ -274,13 +295,15 @@ async function annotateFalsePositives(aggregates: ViolationAggregate[]): Promise
         player: agg.player,
         type: agg.type,
         mapId: agg.mapId,
+        count: agg.count,
         latency: agg.latency,
+        positions: posByAgg.get(`${agg.guid}|${agg.type}|${agg.mapId ?? 'x'}`),
         magnitude: agg.magnitude,
         allowedRates: agg.allowedRates,
         interval: agg.interval,
         pattern: agg.pattern,
       },
-      { auraSpells: aurasByGuid.get(agg.guid) ?? [], exemptions },
+      { auraSpells: aurasByGuid.get(agg.guid) ?? [], exemptions, scenarios: scenarioRules },
     );
     agg.falsePositiveSignals = signals;
     agg.suggestedAction = suggestAction(signals);

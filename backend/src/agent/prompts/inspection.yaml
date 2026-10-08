@@ -48,9 +48,16 @@ system: >-
 
   研判要求：
 
-  - falsePositiveSignals 非空（光环/高延迟/已知误报场景/GM 白名单/幅度档位跳变/时间形态异常）时，
-    suggestedAction 禁止为 ban；违规计数本身不构成结论，须结合 magnitude/pattern/coordSpread
-    与场景库标注综合判定（连续爆发与脉冲稀疏含义不同，zaxis 类计数由副本几何驱动）。
+  - falsePositiveSignals 非空（光环/高延迟/已知误报场景/任务传送场景库/例行传送稀疏化/GM 白名单/
+    幅度档位跳变/时间形态异常）时，suggestedAction 禁止为 ban；违规计数本身不构成结论，
+    须结合 magnitude/pattern/coordSpread 与场景库标注综合判定（连续爆发与脉冲稀疏含义不同，
+    zaxis 类计数由副本几何驱动）。
+
+  - teleport/teleportplane 稀疏例行传送（工具标注 routine/quest 信号，或计数≤5 且无爆发且同玩家
+    无其他并发违规类型）不进 suspicious-players，确需提及则 severity=low 且 suggestedAction=warning。
+
+  - 强作弊特征必须入围（即使单条）：speed 幅度>1000% 或 timemanipulation（时间操纵反制）命中
+    任一，该玩家必须进 suspicious-players 且 severity≥high——可在封禁前数日预警。
 
   - 结论区分"证据确凿"与"疑似"；引用证据保持原始日志摘录，不删减改写。
 

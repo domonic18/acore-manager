@@ -64,7 +64,8 @@ export function registerAnomalyTool(): void {
       'server.log 的 cheat/anomaly 语句——loot-respawn（抢拾取刷新节点，单次多为误判，当日重复才是采集外挂判据）、' +
       '任务越权（HACK ALERT/无任务交任务/非法奖励）、拍卖行越权、盗号改扮（foreign-account-access）、' +
       'AntiDOS 封包洪水、邮箱/战场/建会作弊等——按 玩家×标记 聚合（severity/首末时间/摘录）；' +
-      'authserver.log 失败登录按 IP 聚合（跨账号数 + bruteForceSuspect 爆破判定）。可选按日期区间扫描。',
+      'authserver.log 失败登录按 IP 聚合（跨账号数 + bruteForceSuspect 爆破判定）；系统设置中的受信 IP' +
+      '（合法业务流量）已整体剔除——authFailures 为空即预期结果，trustedIpsExcluded 为剔除统计，非安全威胁。可选按日期区间扫描。',
     schema: z.object({
       from: z.string().regex(DATE_RE, 'from 需为 YYYY-MM-DD').describe('起始日期（含）'),
       to: z.string().regex(DATE_RE, 'to 需为 YYYY-MM-DD').describe('结束日期（含，跨度 ≤31 天）'),
@@ -112,13 +113,35 @@ export function registerAnomalyTool(): void {
 
       const rolled = aggregateMarkers(events, 21);
       const truncated = rolled.length > 20;
+      // 受信 IP 白名单：authFailures 只含待审可疑来源。剔除明细随结果返回，避免模型把
+      // 空 authFailures 误读为工具缺陷而自行 grep 原始日志重报受信 IP（2026-10-05 实录）
+      const trustedIps = await readInspectionTrustedIps();
+      const authFailures = aggregateAuthFailures(authEvents, 10, trustedIps);
+      const trustedIpsExcluded = trustedIps.size
+        ? aggregateAuthFailures(authEvents, Number.MAX_SAFE_INTEGER, new Set()).filter((a) => trustedIps.has(a.ip))
+        : [];
       return {
         totalMarkers: events.length,
         totalLines: serverLines + authLines,
         players: rolled.slice(0, 20),
         lootRespawnNote:
           'loot-respawn 单次多为节点竞速/多开采集/客户端状态残留误判；同一玩家当日跨多节点重复才是采集外挂判据',
-        authFailures: aggregateAuthFailures(authEvents, 10, await readInspectionTrustedIps()),
+        authFailures,
+        ...(trustedIps.size > 0 && {
+          trustedIpsApplied: [...trustedIps],
+          trustedIpsExcluded: trustedIpsExcluded.map((a) => ({
+            ip: a.ip,
+            count: a.count,
+            distinctAccounts: a.distinctAccounts,
+            firstTime: a.firstTime,
+            lastTime: a.lastTime,
+            note: '受信 IP（系统设置白名单）：合法业务流量，已整体剔除，不作为安全证据',
+          })),
+          ...(authFailures.length === 0 &&
+            trustedIpsExcluded.length > 0 && {
+              note: 'authFailures 为空是受信 IP 剔除后的预期结果：当日失败登录全部来自受信来源，禁止从原始日志重新引入这些 IP',
+            }),
+        }),
         truncated,
       };
     },

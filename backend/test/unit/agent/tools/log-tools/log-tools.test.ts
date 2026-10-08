@@ -1,8 +1,9 @@
+const mockConfigRows: Record<string, unknown>[] = [];
 jest.mock('@/config/database', () => ({
   authDataSource: { isInitialized: true, query: jest.fn().mockResolvedValue([]) },
   charactersDataSource: { isInitialized: true, query: jest.fn().mockResolvedValue([]) },
   worldDataSource: { isInitialized: true, query: jest.fn().mockResolvedValue([]) },
-  acmDataSource: { getRepository: jest.fn(() => ({ insert: jest.fn().mockResolvedValue({}), find: jest.fn().mockResolvedValue([]) })) },
+  acmDataSource: { getRepository: jest.fn(() => ({ insert: jest.fn().mockResolvedValue({}), find: jest.fn(() => Promise.resolve(mockConfigRows)) })) },
 }));
 
 jest.mock('@/shared/utils/cos.util', () => ({
@@ -70,8 +71,14 @@ describe('log-tools', () => {
     clearTools();
     registerAllTools();
     clearWorkspace();
+    mockConfigRows.length = 0;
     jsonMock.mockReset().mockResolvedValue(null);
     bufferMock.mockReset().mockResolvedValue(Buffer.alloc(0));
+    // explain 用例会整体替换 getRepository 实现，这里恢复默认避免泄漏到后续用例
+    (acmDataSource.getRepository as jest.Mock).mockReset().mockImplementation(() => ({
+      insert: jest.fn().mockResolvedValue({}),
+      find: jest.fn(() => Promise.resolve(mockConfigRows)),
+    }));
   });
 
   afterEach(() => clearWorkspace());
@@ -186,6 +193,20 @@ describe('log-tools', () => {
     const authFailures = result.authFailures as { ip: string; count: number; distinctAccounts: number; bruteForceSuspect: boolean }[];
     expect(authFailures).toHaveLength(1);
     expect(authFailures[0]).toMatchObject({ ip: '101.42.117.123', count: 2, distinctAccounts: 2, bruteForceSuspect: false });
+  });
+
+  it('parse_server_anomalies surfaces trusted-ip exclusions instead of silently empty authFailures', async () => {
+    seedServerWorkspace();
+    mockConfigRows.push({ configKey: 'inspection_trusted_ips', isSecret: false, configValue: '101.42.117.123' });
+    const result = await toolFn('parse_server_anomalies').invoke({ from: DATE, to: DATE, realm: REALM });
+    // 受信 IP 达到爆破判定形态也整体剔除；剔除统计随结果返回并带预期说明
+    expect(result.authFailures).toEqual([]);
+    expect(result.trustedIpsApplied).toEqual(['101.42.117.123']);
+    const excluded = result.trustedIpsExcluded as { ip: string; count: number; distinctAccounts: number; note: string }[];
+    expect(excluded).toHaveLength(1);
+    expect(excluded[0]).toMatchObject({ ip: '101.42.117.123', count: 2, distinctAccounts: 2 });
+    expect(excluded[0].note).toContain('合法业务流量');
+    expect(String(result.note)).toContain('预期结果');
   });
 
   it('parse_server_anomalies reports empty workspace with a fetch hint', async () => {

@@ -6,6 +6,13 @@ describe('game-refs', () => {
     expect(buildGameRefUrl('item', 17)).toBe('https://db.nfuwow.com/80/?item=17');
     expect(buildGameRefUrl('gameobject', 181683)).toBe('https://db.nfuwow.com/80/?object=181683');
     expect(buildGameRefUrl('npc', 1)).toBe('https://db.nfuwow.com/80/?npc=1');
+    expect(buildGameRefUrl('achievement', 6)).toBe('https://db.nfuwow.com/80/?achievement=6');
+  });
+
+  it('linkifies the achievement prefix to the achievement path', () => {
+    expect(linkifyGameRefs('达成成就 456 后消失')).toBe(
+      '达成[成就 456](https://db.nfuwow.com/80/?achievement=456) 后消失',
+    );
   });
 
   it('linkifies all four prefixes followed by an id', () => {

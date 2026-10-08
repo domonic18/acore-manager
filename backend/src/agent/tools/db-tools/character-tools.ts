@@ -3,6 +3,7 @@ import { registerTool } from '@/agent/tools/registry';
 import { matchAuraSpells } from '@/agent/tools/false-positive/aura-rules';
 import { mapName } from '@/agent/tools/log-tools/map-names';
 import { zoneName } from '@/agent/tools/log-tools/zone-names';
+import { achievementName } from './achievement-names';
 import { className, formatGold, raceName } from './game-names';
 import { runReadOnly } from './query-guard';
 
@@ -26,6 +27,22 @@ function enrichOverview(r: Row): Row {
 
 function enrichMoney(r: Row, fields: readonly string[]): Row {
   return { ...r, ...Object.fromEntries(fields.map((f) => [`${f}Text`, formatGold(r[f] as number | null)])) };
+}
+
+// character_achievement.date 为 Unix 秒；成就时间面向玩家行为画像，固定按北京时间呈现
+const CST_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+function achievementDateText(epochSeconds: unknown): string | null {
+  if (typeof epochSeconds !== 'number' || !Number.isFinite(epochSeconds)) return null;
+  return CST_FORMATTER.format(new Date(epochSeconds * 1000)).replace(/\//g, '-');
 }
 
 export function registerCharacterTools(): void {
@@ -178,6 +195,142 @@ export function registerCharacterTools(): void {
         ...result,
         rows: result.rows.map((r) => enrichMoney(r, ['buyoutprice', 'lastbid', 'startbid', 'deposit'])),
       };
+    },
+  });
+
+  registerTool({
+    name: 'get_character_quests',
+    description:
+      '查询角色任务足迹（巡查佐证：任务传送是否对应真实任务线、带刷痕迹）：inProgress 进行中任务（含目标进度）、' +
+      'rewarded 已完成任务总量与采样（该表无时间戳，仅证明做过，不能证明完成时间）、recentActivity 近 N 天任务时间线' +
+      '（quest_tracker，服务器未开启 QuestTracker 时恒为空）。name 为任务名（world 库 LogTitle），报告必须引用，查不到以「任务 {id}」表述。',
+    schema: z.object({
+      guid: z.number().int().positive().describe('角色 guid'),
+      days: z.number().int().min(1).max(31).default(7).describe('时间线回溯天数'),
+    }),
+    handler: async (args) => {
+      const { guid, days } = args as { guid: number; days: number };
+      const inProgress = await runReadOnly(
+        'characters',
+        `SELECT quest, status, explored, timer, mobcount1, mobcount2, mobcount3, mobcount4,
+                itemcount1, itemcount2, itemcount3, itemcount4, itemcount5, itemcount6
+         FROM character_queststatus WHERE guid = ? LIMIT 50`,
+        [guid],
+      );
+      const countRows = await runReadOnly(
+        'characters',
+        'SELECT COUNT(*) AS total FROM character_queststatus_rewarded WHERE guid = ? AND active = 1',
+        [guid],
+      );
+      const total = Number(countRows.rows[0]?.total ?? 0);
+      const rewarded = await runReadOnly(
+        'characters',
+        'SELECT quest FROM character_queststatus_rewarded WHERE guid = ? AND active = 1 ORDER BY quest LIMIT 50',
+        [guid],
+      );
+      const recent = await runReadOnly(
+        'characters',
+        `SELECT id, quest_accept_time, quest_complete_time, quest_abandon_time, completed_by_gm
+         FROM quest_tracker
+         WHERE character_guid = ?
+           AND COALESCE(quest_complete_time, quest_accept_time, quest_abandon_time) >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         ORDER BY COALESCE(quest_complete_time, quest_accept_time, quest_abandon_time) DESC
+         LIMIT 20`,
+        [guid, days],
+      );
+
+      const ids = new Set<number>();
+      for (const r of [...inProgress.rows, ...rewarded.rows]) ids.add(r.quest as number);
+      for (const r of recent.rows) ids.add(r.id as number);
+      const names = new Map<number, string | null>();
+      if (ids.size > 0) {
+        const list = [...ids].slice(0, 120);
+        const ph = list.map(() => '?').join(',');
+        const named = await runReadOnly('world', `SELECT ID, LogTitle FROM quest_template WHERE ID IN (${ph})`, list);
+        for (const r of named.rows) names.set(r.ID as number, (r.LogTitle as string) || null);
+      }
+      const questName = (id: number): string | null => names.get(id) ?? null;
+
+      return {
+        inProgress: {
+          rows: inProgress.rows.map((r) => ({ ...r, name: questName(r.quest as number) })),
+          truncated: inProgress.truncated,
+        },
+        rewarded: {
+          total,
+          sampled: rewarded.rows.map((r) => ({ quest: r.quest, name: questName(r.quest as number) })),
+          truncated: total > rewarded.rows.length,
+          note: '已完成任务表无时间戳：仅证明做过该任务，不能证明完成时间',
+        },
+        recentActivity: {
+          rows: recent.rows.map((r) => ({ ...r, name: questName(r.id as number) })),
+          ...(recent.rows.length === 0 && {
+            note: `近 ${days} 天无 quest_tracker 记录（服务器未开启 QuestTracker 时该表恒为空，任务时间线不可用）`,
+          }),
+        },
+      };
+    },
+  });
+
+  registerTool({
+    name: 'get_character_achievements',
+    description:
+      '查询角色最近达成的成就（按达成时间倒序）：name 为成就中文名（DBC 静态字典），dateText 为北京时间' +
+      '（YYYY-MM-DD HH:mm）。成就是行为画像佐证（升级类成就跨度、探索/任务成就与任务足迹对照）。',
+    schema: z.object({
+      guid: z.number().int().positive().describe('角色 guid'),
+      limit: z.number().int().min(1).max(50).default(10).describe('返回条数上限'),
+    }),
+    handler: async (args) => {
+      const { guid, limit } = args as { guid: number; limit: number };
+      const result = await runReadOnly(
+        'characters',
+        `SELECT achievement, date FROM character_achievement WHERE guid = ? ORDER BY date DESC LIMIT ${limit}`,
+        [guid],
+      );
+      return {
+        rows: result.rows.map((r) => ({
+          ...r,
+          name: achievementName(r.achievement as number),
+          dateText: achievementDateText(r.date as number),
+        })),
+        truncated: result.truncated,
+      };
+    },
+  });
+
+  registerTool({
+    name: 'get_character_social',
+    description:
+      '按 flags 全量分组查询角色社交名单：friends（0x01）/ignores 黑名单（0x02）/muted 禁言（0x04），各附对方名字/等级/在线。' +
+      '与 get_character_associates 互补：后者覆盖好友/小队/公会，本工具覆盖黑名单与禁言维度（骚扰/工作室互证）。',
+    schema: z.object({ guid: z.number().int().positive().describe('角色 guid') }),
+    handler: async (args) => {
+      const { guid } = args as { guid: number };
+      const { rows, truncated } = await runReadOnly(
+        'characters',
+        'SELECT friend, flags, note FROM character_social WHERE guid = ? LIMIT 50',
+        [guid],
+      );
+      const guids = [...new Set(rows.map((r) => r.friend as number))];
+      const byGuid = new Map<number, Row>();
+      if (guids.length > 0) {
+        const ph = guids.map(() => '?').join(',');
+        const named = await runReadOnly(
+          'characters',
+          `SELECT guid, name, level, online FROM characters WHERE guid IN (${ph})`,
+          guids,
+        );
+        for (const r of named.rows) byGuid.set(r.guid as number, r);
+      }
+      const bucket = (flag: number): Row[] =>
+        rows
+          .filter((r) => ((r.flags as number) & flag) === flag)
+          .map((r) => {
+            const c = byGuid.get(r.friend as number);
+            return { guid: r.friend, name: c?.name ?? null, level: c?.level ?? null, online: c?.online ?? null, note: r.note ?? null };
+          });
+      return { friends: bucket(0x01), ignores: bucket(0x02), muted: bucket(0x04), truncated };
     },
   });
 }

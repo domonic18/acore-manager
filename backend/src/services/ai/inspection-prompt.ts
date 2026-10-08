@@ -30,7 +30,9 @@ export function buildInspectionTaskPrompt(
     `1. get_log_manifest 复核日志构成`,
     `2. fetch_log_archive 拉取 anticheat 归档（优先）及其他可用类型`,
     `3. parse_anticheat_violations(from, to, explain=true) 做代码级违规聚合与误报解释`,
-    `4. 可疑玩家用 get_anticheat_record / get_character_overview / get_character_auras 佐证`,
+    `4. 可疑玩家用 get_anticheat_record / get_character_overview / get_character_auras 佐证；` +
+    `任务传送疑点用 get_character_quests（rewarded 是否含对应任务、recentActivity 时间线是否吻合）实证，` +
+    `行为画像补 get_character_achievements（成就中文名+北京时间）与 get_character_social（黑名单/禁言）`,
     `5. parse_server_anomalies(from, to) 扫描 server/auth 日志异常标记（cheat 语句、AntiDOS 洪水、失败登录爆破）`,
     `6. 每完成一个维度立即调用 write_report_section 落盘对应分节，禁止攒到最后一次性输出`,
     ``,
@@ -43,7 +45,8 @@ export function buildInspectionTaskPrompt(
     `   且幅度大、无相反信号 → 持续外挂证据充分方可 ban；c) 其余情形 → investigate 并列明不确定点。`,
     `3. teleport/teleportplane：工具标注 routine/quest 信号（单发或稀疏 ≤5 条且无 60s 爆发，如任务传送点/炉石/飞行点/进出副本）`,
     `   的玩家不进 suspicious-players（确需提及则 severity=low 且 suggestedAction=warning）；`,
-    `   仅当同玩家 teleport 类呈 continuous/高爆发，或与其他类型（speed/fly/zaxis 等）同日并发时才入围。`,
+    `   仅当同玩家 teleport 类呈 continuous/高爆发，或与其他类型（speed/fly/zaxis 等）同日并发时才入围；`,
+    `   场景疑点可用 get_character_quests 实证任务线（rewarded 含对应任务即强佐证）。`,
     `4. zaxis 的计数与时间形态不构成判据（副本平坦地面几何性触发），只认场景库标注与 GM 复核。`,
     `5. suggestedAction 只能取 warning/investigate/ban；工具返回的 suggestedAction 已对齐契约，可直接引用。`,
     `6. 地图轨迹（players[].maps / mapMoves）：报告须写明可疑玩家的活动地图（中文名）与跨图迁移链`,
@@ -56,7 +59,10 @@ export function buildInspectionTaskPrompt(
     `   等 high 级标记须列入 suspicious-players 并给出证据摘录；authFailures.bruteForceSuspect 的 IP`,
     `   直接写入 server-health 并在 recommendations 提示封禁/拉黑。authFailures 已在代码层剔除受信 IP`,
     `   （站长自有服务的合法认证流量），返回列表中的 IP 均为待审可疑来源，禁止用 grep 等方式从原始日志`,
-    `   外推其他 IP 补入报告。`,
+    `   外推其他 IP 补入报告；trustedIpsExcluded 为受信 IP 的剔除统计（合法业务流量，非安全威胁），`,
+    `   authFailures 为空而 trustedIpsExcluded 非空属预期结果（当日失败登录全部来自受信来源），`,
+    `   authAnomalies 留空即可——禁止把受信 IP（含其尝试登录已封账号等任何行为）从原始日志`,
+    `   检索后重新写入报告或建议。`,
     `9. 强作弊特征必须入围（即使仅单条）：a) speed 幅度 >1000%（正常坐骑/状态切换不会出现，`,
     `   多为瞬移型外挂痕迹）；b) timemanipulation（"Time Diff Corrected" 主动反制 = 变速齿轮类工具，`,
     `   无法用误报解释）。命中任一的玩家必须进 suspicious-players 且 severity≥high——`,
@@ -81,7 +87,7 @@ export function buildInspectionTaskPrompt(
     `种族/职业/地图/区域名引用 raceName/className/mapName/zoneName，坐标不得用于推断区域名；`,
     `任务/物品/节点 ID 引用前先 get_game_references 查名，查不到以纯 ID 表述，禁止自行翻译 ID 或编造名称。`,
     `游戏词条超链接：markdown 输出中用工具返回的 url 作 [名称](url) 链接；纯文本分节中词条用`,
-    `「任务/物品/节点/NPC {id}」标准前缀逐个表述（禁止"9312/9473"连写），系统会自动把前缀+ID 链接化。`,
+    `「任务/物品/节点/NPC/成就 {id}」标准前缀逐个表述（禁止"9312/9473"连写），系统会自动把前缀+ID 链接化。`,
   ].join('\n');
   return { messages: [{ role: 'user', content }] };
 }

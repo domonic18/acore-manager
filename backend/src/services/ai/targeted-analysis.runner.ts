@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { acmDataSource } from '@/config/database';
 import { env } from '@/config/env';
 import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
@@ -6,13 +9,18 @@ import { logger } from '@/middleware/request-logger';
 import { getAgent } from '@/agent/runtime/agent-factory';
 import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { AiTargetedAnalysis } from '@/entities/acm/ai-targeted-analysis.entity';
+import { clearConclusionCaptureRoot, readConclusionCapture, setConclusionCaptureRoot } from '@/agent/tools/analysis-tools';
 import { llmConfigService } from './llm-config.service';
 import { tokenUsageService } from './token-usage.service';
 import { emptyTokens, sumTokens, watchAgentEvents, type RoundAccumulator } from './agent-round.util';
+import { buildAnalysisJsonFixPrompt, buildTargetedAnalysisTaskPrompt } from './targeted-analysis-prompt';
 import { describeIssues, enforceFalsePositiveRule, parseConclusion, type AnalysisConclusion } from './targeted-analysis.conclusion';
+import type { ConclusionSubject } from '@/agent/tools/analysis-tools';
 
 // 定向分析执行器（异步化拆分）：按 ai_targeted_analysis 行运行 analysis 场景 Agent 取证并产出结论，
-// 终态（ok/failed）落库后返回。不依赖 HTTP/SSE，供 manager-job 任务串行调用；web 侧只建行与触发。
+// 最终结论经 submit_conclusion 工具 schema 校验落盘捕获目录（文本解析仅作兜底），校验失败追问一轮
+// （issues 由 zod 校验清单拼装）。终态（ok/failed）落库后返回。不依赖 HTTP/SSE，
+// 供 manager-job 任务串行调用（结论捕获目录为模块态，同草稿目录的串行假设）；web 侧只建行与触发。
 
 export interface TargetedBanContext {
   date?: string;
@@ -48,6 +56,9 @@ export class TargetedAnalysisError extends Error {
 
 export async function runTargetedAnalysis(analysisId: number, subject: TargetedAnalysisSubject): Promise<TargetedAnalysisOutcome> {
   const startedAt = Date.now();
+  // 结论捕获目录每次运行独立（submit_conclusion 落盘点）；追问轮不清盘，已提交的结论仍然有效
+  const captureDir = mkdtempSync(join(tmpdir(), 'acm-analysis-capture-'));
+  setConclusionCaptureRoot(captureDir);
   try {
     const cfg = await llmConfigService.resolveDefault();
     const agent = await getAgent(cfg, 'analysis');
@@ -62,22 +73,21 @@ export async function runTargetedAnalysis(analysisId: number, subject: TargetedA
     const makeError = (message: string, code: string): Error => new TargetedAnalysisError(message, code);
     const acc: RoundAccumulator = { text: '', tokens: emptyTokens() };
 
-    for await (const ev of watchAgentEvents(agent, { messages: [{ role: 'user', content: buildTaskPrompt(subject) }] }, config, acc, makeError)) {
+    for await (const ev of watchAgentEvents(agent, { messages: [{ role: 'user', content: buildTargetedAnalysisTaskPrompt(subject) }] }, config, acc, makeError)) {
       void ev;
     }
 
     let tokens = acc.tokens;
-    let conclusion = parseConclusion(acc.text, subject);
-    if (!conclusion) {
-      // schema 校验失败追问一轮：同 thread 携带具体错误要求重出完整 JSON（巡检同款）
-      const issues = describeIssues(acc.text, subject);
-      logger.warn(`[analysis] schema repair round for #${analysisId}: ${issues}`);
+    let resolved = resolveConclusion(captureDir, acc.text, subject);
+    if (!resolved.conclusion) {
+      // schema 校验失败追问一轮：同 thread 携带 schema 错误清单要求重调 submit_conclusion（巡检同款）
+      logger.warn(`[analysis] schema repair round for #${analysisId}: ${resolved.issues}`);
       const firstRoundTokens = tokens;
       acc.text = '';
       acc.tokens = emptyTokens();
       for await (const ev of watchAgentEvents(
         agent,
-        { messages: [{ role: 'user', content: `上一次输出未通过校验：${issues}。请重新输出完整的结论 JSON 对象（包含全部字段，markdown 字段为全文）。` }] },
+        { messages: [{ role: 'user', content: buildAnalysisJsonFixPrompt(resolved.issues) }] },
         config,
         acc,
         makeError,
@@ -86,11 +96,11 @@ export async function runTargetedAnalysis(analysisId: number, subject: TargetedA
       }
       // 计量口径与巡检一致：修复轮 tokens 累加，不覆盖
       tokens = sumTokens(firstRoundTokens, acc.tokens);
-      conclusion = parseConclusion(acc.text, subject);
+      resolved = resolveConclusion(captureDir, acc.text, subject);
     }
-    if (!conclusion) throw new TargetedAnalysisError('结论 JSON 两轮校验均未通过', 'schema_mismatch');
+    if (!resolved.conclusion) throw new TargetedAnalysisError(`结论 JSON 两轮校验均未通过：${resolved.issues}`, 'schema_mismatch');
 
-    conclusion = enforceFalsePositiveRule(conclusion);
+    const conclusion = enforceFalsePositiveRule(resolved.conclusion);
     await persistSuccess(analysisId, conclusion, tokens, Date.now() - startedAt, cfg.modelName);
     return { ok: true, analysisId, conclusion, tokens };
   } catch (err) {
@@ -98,58 +108,20 @@ export async function runTargetedAnalysis(analysisId: number, subject: TargetedA
     logger.error(`[analysis] #${analysisId} ${subject.subjectType}:${subject.subjectName} failed: ${message}`);
     await persistFailure(analysisId, message).catch(() => undefined);
     return { ok: false, analysisId, error: message };
+  } finally {
+    clearConclusionCaptureRoot();
+    rmSync(captureDir, { recursive: true, force: true });
   }
 }
 
-function buildTaskPrompt(input: TargetedAnalysisSubject): string {
-  const banNote = input.banContext?.reason
-    ? `封禁背景：${input.banContext.date ?? '未知日期'} 由 ${input.banContext.bannedBy ?? '未知'} 封禁，理由「${input.banContext.reason}」。`
-    : '封禁背景：未提供（可能是申诉之外的常规核查）。';
-  const subjectNote =
-    input.subjectType === 'character'
-      ? `分析对象：角色「${input.subjectName}」（${input.realm}）`
-      : `分析对象：账号「${input.subjectName}」（${input.realm}，需汇总名下全部角色）`;
-  const content = [
-    `请对以下对象做定向分析，产出封禁申诉研判结论。`,
-    ``,
-    subjectNote,
-    `时间范围：${input.timeFrom} 至 ${input.timeTo}（含当天）`,
-    banNote,
-    ``,
-    `取证步骤建议（全方位取证，逐维度执行；某维度无数据时在结论中如实注明"无数据"）：`,
-    `1. get_account_overview / get_ban_history 查明对象背景与封禁记录`,
-    `2. parse_anticheat_violations(from, to, explain=true) 做时段内违规聚合与误报解释；`,
-    `   需聚焦目标时传入 player（角色名）或 guid 精确过滤，避免全服聚合淹没目标`,
-    `3. 移动轨迹核查：检查返回的 players 明细中目标的地图序列（maps）、换图次数（mapMoves）、`,
-    `   坐标离散度（coordSpread）、绕圈长度（loopLength）、大位移距离（jumpYards/maxJumpYards），`,
-    `   识别重复路线/绕圈挂机/瞬移等异常移动模式`,
-    `4. get_anticheat_record / get_character_overview / get_character_auras 佐证行为与光环`,
-    `5. get_login_ip_history / get_accounts_by_ip 排查关联账号与登录异常`,
-    `6. parse_server_anomalies(from, to) 复核同时段服务器侧异常标记（外挂特征/爆破登录等）`,
-    `7. 汇总输出结论 JSON`,
-    ``,
-    `游戏信息表述：金额引用工具返回的 *Text 格式化字段（如 21金50银6铜），种族/职业/地图/区域名引用`,
-    `raceName/className/mapName/zoneName；坐标不得用于推断区域名；任务/物品/节点 ID 引用前先`,
-    `get_game_references 查名，查不到以纯 ID 表述——禁止自行翻译 ID 或编造名称（如"约 X 万"）。`,
-    `游戏词条超链接：markdown 结论中用工具返回的 url 作 [名称](url) 链接；纯文本字段中词条用`,
-    `「任务/物品/节点/NPC {id}」标准前缀逐个表述（禁止"9312/9473"连写），前端会自动链接化。`,
-    ``,
-    `最终必须输出一个 JSON 对象（可置于 \`\`\`json 围栏中），字段：`,
-    `- subjectType: "${input.subjectType}"，subjectName: "${input.subjectName}"（必须与此处完全一致）`,
-    `- timeRange: {from: "${input.timeFrom}", to: "${input.timeTo}"}`,
-    `- violations: [{type, count, confirmed: true|false, note}]（时段内无违规则为空数组；`,
-    `  轨迹/绕圈/GPS 类异常也作为条目列入，type 用 "loop_patrol"/"teleport" 等语义化命名，note 写明数值依据）`,
-    `- falsePositiveSignals: []（未排除的误报信号，无则为空数组）`,
-    `- evidence: [{source: 来源工具名, quote: 原始行摘录}]（每条注明来源，禁止编造；`,
-    `  轨迹类结论必须附带 rollup 数值摘录作为证据）`,
-    `- suggestion: "maintain|lift|downgrade|manual_review" 之一`,
-    `- suggestionReason: 一段话说明处置理由（须覆盖违规、轨迹、IP 关联三个维度的综合判断）`,
-    `- markdown: 面向申诉人的完整回复全文（简体中文，结论前置）`,
-    ``,
-    `硬性要求：falsePositiveSignals 非空时 suggestion 必须为 "manual_review"；`,
-    `证据必须来自工具返回原文摘录并注明来源工具；无数据支撑的维度如实写"无数据"。`,
-  ].join('\n');
-  return content;
+// 结论统一出口：submit_conclusion 工具提交优先（已过形状校验，此处做 subject 回显等值复验），
+// 文本解析兜底（旧契约路径）。返回校验问题清单供修复轮拼装追问消息。
+function resolveConclusion(captureDir: string, text: string, subject: ConclusionSubject): { conclusion: AnalysisConclusion | null; issues: string } {
+  const captured = readConclusionCapture(captureDir, subject);
+  if (captured.conclusion) return { conclusion: captured.conclusion, issues: '' };
+  const fromText = parseConclusion(text, subject);
+  if (fromText) return { conclusion: fromText, issues: '' };
+  return { conclusion: null, issues: captured.issues || describeIssues(text, subject) };
 }
 
 async function persistSuccess(

@@ -10,6 +10,7 @@ import {
   clearReportDraftRoot,
   listMissingSections,
   readDraftedSections,
+  readFinalJson,
   renderInspectionMarkdown,
   reportDraftDir,
   resetDraftDir,
@@ -26,7 +27,8 @@ import { llmConfigService } from './llm-config.service';
 import { feishuNotifyService } from './feishu-notify.service';
 
 // 每日巡检编排（arch 3.4）：断传检查 → deep agent 取证（日志 + 白名单工具，分节结论经
-// write_report_section 边运行边落盘）→ 最终小 JSON 校验（失败追问一轮）→ 缺节抢救轮
+// write_report_section 边运行边落盘）→ 最终结论经 submit_final_report 工具 schema 提交
+// （文本解析仅作兜底；失败追问一轮，issues 由校验清单拼装）→ 缺节抢救轮
 // （同线程追问落盘，挽回整轮分析；SquadSight 局部修补模式）→ 代码层组装完整报告并渲染
 // Markdown → ai_report 幂等 upsert → COS 归档 → Redis 摘要 → 计量/飞书。
 // 失败退避重试（最多 3 次，受 AI_INSPECTION_TIME_BUDGET_MS 总预算约束），最终失败落
@@ -169,21 +171,22 @@ class InspectionService {
       };
 
       const first = await runAgentRound(agent, buildInspectionTaskPrompt(input.realm, input.date, manifestNote), config, toInspectionError);
-      let report = this.parseFinalJson(first.text, input.realm, input.date);
+      let resolved = this.resolveFinalReport(draftDir, first.text, input.realm, input.date);
       let tokens = first.tokens;
       let durationMs = first.durationMs;
-      if (!report) {
-        // 最终小 JSON 校验失败追问一轮：带具体错误让模型自我修复，同 thread 保持上下文
-        logger.warn(`[inspection] first round JSON invalid, asking model to fix`);
-        const fixRound = await runAgentRound(agent, buildJsonFixPrompt(this.parseError(first.text, input.realm, input.date)), config, toInspectionError);
+      if (!resolved.report) {
+        // 最终提交校验失败追问一轮：携带 schema 错误清单让模型自我修复，同 thread 保持上下文
+        logger.warn(`[inspection] first round final report invalid, asking model to fix`);
+        const fixRound = await runAgentRound(agent, buildJsonFixPrompt(resolved.issues), config, toInspectionError);
         // 计量口径：修复轮 tokens/耗时累加，不覆盖
         tokens = sumTokens(first.tokens, fixRound.tokens);
         durationMs += fixRound.durationMs;
-        report = this.parseFinalJson(fixRound.text, input.realm, input.date);
+        resolved = this.resolveFinalReport(draftDir, fixRound.text, input.realm, input.date);
       }
-      if (!report) throw new InspectionError('agent 两轮输出均不符合报告 schema', 'schema_mismatch');
+      if (!resolved.report) throw new InspectionError(`agent 两轮输出均不符合报告 schema：${resolved.issues}`, 'schema_mismatch');
+      let report = resolved.report;
 
-      // 分节抢救轮：JSON 已合规但草稿缺节——分析结论仍在同线程上下文中（只是没落盘），
+      // 分节抢救轮：最终结论已合规但草稿缺节——分析结论仍在同线程上下文中（只是没落盘），
       // 先追问落盘挽回整轮工作（SquadSight「缺失清单 + 局部修补」模式），仍缺才整轮重试
       const missing = listMissingSections(draftDir);
       if (missing.length > 0) {
@@ -191,8 +194,8 @@ class InspectionService {
         const salvageRound = await runAgentRound(agent, buildSectionSalvagePrompt(missing), config, toInspectionError);
         tokens = sumTokens(tokens, salvageRound.tokens);
         durationMs += salvageRound.durationMs;
-        // 抢救轮的最终小 JSON 优先（与补齐后的分节一致）；解析失败沿用上一轮
-        report = this.parseFinalJson(salvageRound.text, input.realm, input.date) ?? report;
+        // 抢救轮的最终提交优先（与补齐后的分节一致）；解析失败沿用上一轮
+        report = this.resolveFinalReport(draftDir, salvageRound.text, input.realm, input.date).report ?? report;
         const stillMissing = listMissingSections(draftDir);
         if (stillMissing.length > 0) {
           throw new InspectionError(
@@ -229,24 +232,19 @@ class InspectionService {
     }
   }
 
-  // 最终小 JSON 校验（五字段宽容校验，失败返回 null 由调用方走修复轮/抢救轮）。
-  // 分节草稿的读取与缺节判定移到 attempt 末段：缺节可抢救（追问落盘），不再解析期直接判死。
-  parseFinalJson(text: string, realm: string, date: string): ReportFinalJson | null {
-    const obj = extractJson(text);
-    const issues = validateFinalJson(obj, realm, date);
+  // 最终结论统一出口（五字段宽容校验）：submit_final_report 工具提交优先（已过形状校验，
+  // 此处做 realm/date 等值复验），未提交再走文本解析兜底（旧契约路径）。失败返回 null +
+  // 问题清单（供修复轮拼装追问消息）。缺节判定在 attempt 末段：缺节可抢救，不再解析期判死。
+  resolveFinalReport(draftDir: string, text: string, realm: string, date: string): { report: ReportFinalJson | null; issues: string } {
+    const submitted = readFinalJson(draftDir);
+    const source = submitted ?? extractJson(text);
+    const issues = validateFinalJson(source, realm, date);
     if (issues.length > 0) {
       // 记录原始输出片段：schema 拒绝在生产环境必须可回溯诊断
-      logger.warn(`[inspection] final JSON issues: ${issues.join('; ')} | raw head: ${text.slice(0, 400)}`);
-      return null;
+      logger.warn(`[inspection] final report issues: ${issues.join('; ')} | raw head: ${text.slice(0, 400)}`);
+      return { report: null, issues: issues.join('；') };
     }
-    return obj as ReportFinalJson;
-  }
-
-  parseError(text: string, realm: string, date: string): string {
-    const obj = extractJson(text);
-    if (!obj || typeof obj !== 'object') return '未找到 JSON 对象（需要以 { 开始、} 结束的完整 JSON）';
-    const issues = validateFinalJson(obj, realm, date);
-    return issues.length > 0 ? issues.join('；') : 'JSON 解析失败';
+    return { report: source as ReportFinalJson, issues: '' };
   }
 }
 

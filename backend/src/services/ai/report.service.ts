@@ -48,6 +48,9 @@ export class ReportService {
       return report; // 角色库查询失败不阻塞报告展示，降级纯文本
     }
     const byName = new Map(basics.map((b) => [b.name, b]));
+    // 存量报告兼容：模型曾把 character 写成 "名字 (guid)"，精确匹配失败时剥离尾部括注重试，
+    // 让已落库的报告无需重跑即可恢复 guid/账号富化（与 sections.ts cleanName 同款剥离）
+    const lookup = (name: string) => byName.get(name) ?? byName.get(name.replace(/\s*[（(][^（()）]*[)）]\s*$/u, '').trim());
     const guids = basics.map((b) => `guid:${b.guid}`);
     let warnedTargets: Set<string> | null = null;
     if (guids.length > 0) {
@@ -61,7 +64,7 @@ export class ReportService {
     report.contentJson = {
       ...report.contentJson,
       suspiciousPlayers: players.map((p) => {
-        const b = byName.get(p.character);
+        const b = lookup(p.character);
         if (!b) return p;
         return {
           ...p,

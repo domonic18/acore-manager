@@ -61,6 +61,21 @@ describe('report-tools: section sanitizers', () => {
     expect(result.error).toContain('top 15');
   });
 
+  it('strips trailing "(guid)" suffix drift from character/account names (2026-10-08 report incident)', () => {
+    const result = sanitizeSuspiciousPlayers([
+      player({ character: '来单挑啊 (13175)', account: 'accname (443)' }),
+      player({ character: '卡西娅（13107）' }),
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]).toMatchObject({ character: '来单挑啊', account: 'accname' });
+    expect(result.value[1].character).toBe('卡西娅');
+  });
+
+  it('rejects a character that is nothing but a parenthetical', () => {
+    expect(sanitizeSuspiciousPlayers([{ ...player(), character: '(13175)' }]).ok).toBe(false);
+  });
+
   it('rejects semantic errors: missing character, bad severity, bad action', () => {
     expect(sanitizeSuspiciousPlayers([{ ...player(), character: '  ' }]).ok).toBe(false);
     expect(sanitizeSuspiciousPlayers([{ ...player(), severity: 'extreme' }]).ok).toBe(false);

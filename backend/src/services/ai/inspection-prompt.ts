@@ -74,7 +74,7 @@ export function buildInspectionTaskPrompt(
     ``,
     `分节落盘契约（write_report_section 的 section / content）：`,
     `- "server-health"：{"crashes":[当日崩溃摘要],"errors":[错误统计],"authAnomalies":[认证异常摘要],"cheatMarkers":[server 日志异常标记摘要（玩家×标记 + 爆破 IP）]}（无则空数组）`,
-    `- "suspicious-players"：[{"character","account","severity":"high|medium|low","suggestedAction":"warning|investigate|ban","reasons":["…"],"evidence":["原始日志摘录"],"falsePositiveSignals":[],"suggestion":"…"}]，按严重度取 top ≤15 名，每人 evidence ≤5 条；suggestion 中给出地图轨迹叙事（活动地图中文名 + 从哪张图迁移到哪张图），loopLength/maxJumpYards 等关键数值直接引用`,
+    `- "suspicious-players"：[{"character","account","severity":"high|medium|low","suggestedAction":"warning|investigate|ban","reasons":["…"],"evidence":["原始日志摘录"],"falsePositiveSignals":[],"suggestion":"…"}]，按严重度取 top ≤15 名，每人 evidence ≤5 条；character/account 只写纯名称（与角色库名完全一致，guid/账号由系统按名富化），禁止附加 " (id)" 后缀、等级、括号注释或 markdown；suggestion 中给出地图轨迹叙事（活动地图中文名 + 从哪张图迁移到哪张图），loopLength/maxJumpYards 等关键数值直接引用`,
     `- "recommendations"：["处置建议…"]（≤20 条，每条 ≤200 字）`,
     ``,
     `三节全部落盘后，最终消息只输出一个五字段小 JSON（可置于 \`\`\`json 围栏中），除此之外不得输出任何明细、markdown 全文或解释文字：`,

@@ -64,6 +64,13 @@ function asStringArray(raw: unknown): string[] {
   return raw.map((v) => String(v).trim()).filter((v) => v.length > 0);
 }
 
+// 模型漂移会在名称后附加 "(guid)" 等括号注释（2026-10-08 报告事故：character="来单挑啊 (13175)"）。
+// AC 角色名不含空格/括号，尾部括注一律剥离——富化按纯名精确匹配角色库，后缀会让
+// 跳转链接/账号列/操作按钮全部失效。
+function cleanName(v: string): string {
+  return v.replace(/\s*[（(][^（()）]*[)）]\s*$/u, '').trim();
+}
+
 export function sanitizeServerHealth(raw: unknown): SanitizeResult<InspectionReportJson['serverHealth']> {
   if (raw === undefined || raw === null) return { ok: true, value: {} };
   if (typeof raw !== 'object' || Array.isArray(raw)) {
@@ -96,7 +103,7 @@ export function sanitizeSuspiciousPlayers(raw: unknown): SanitizeResult<Suspicio
       return;
     }
     const p = item as Record<string, unknown>;
-    const character = typeof p.character === 'string' ? p.character.trim() : '';
+    const character = typeof p.character === 'string' ? cleanName(p.character) : '';
     if (!character) {
       issues.push(`suspiciousPlayers[${idx}].character 不能为空`);
       return;
@@ -126,7 +133,7 @@ export function sanitizeSuspiciousPlayers(raw: unknown): SanitizeResult<Suspicio
       evidence: asStringArray(p.evidence).slice(0, MAX_EVIDENCE_PER_PLAYER),
       falsePositiveSignals,
     };
-    if (typeof p.account === 'string' && p.account.trim()) player.account = p.account.trim();
+    if (typeof p.account === 'string' && cleanName(p.account)) player.account = cleanName(p.account);
     if (typeof p.suggestion === 'string' && p.suggestion.trim()) player.suggestion = p.suggestion.trim();
     players.push(player);
   });

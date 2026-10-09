@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { registerTool } from '@/agent/tools/registry';
-import { REPORT_SECTIONS, type ReportSection } from './sections';
-import { writeReportSection } from './draft-store';
+import { REPORT_SECTIONS, REPORT_SCHEMA_VERSION, type ReportSection } from './sections';
+import { writeFinalReport, writeReportSection } from './draft-store';
+import { FinalReportJsonShapeSchema } from './final-json';
 
 export function registerReportTools(): void {
   registerTool({
@@ -21,5 +22,14 @@ export function registerReportTools(): void {
       const { section, content } = args as { section: ReportSection; content: unknown };
       return writeReportSection(section, content);
     },
+  });
+  registerTool({
+    name: 'submit_final_report',
+    description:
+      '三节全部分节落盘后提交巡检最终结论（唯一出口；提交成功后最终消息只需一句简短确认，不要再输出任何 JSON 文本）。' +
+      `参数即五字段：schemaVersion=${REPORT_SCHEMA_VERSION}；reportDate=当日 YYYY-MM-DD；realm=服务器名；` +
+      'healthScore=0-100 整数；summary=一段话总结（≤200 字）。',
+    schema: FinalReportJsonShapeSchema,
+    handler: async (args) => writeFinalReport(args),
   });
 }

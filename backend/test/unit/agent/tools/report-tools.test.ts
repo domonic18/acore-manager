@@ -17,6 +17,7 @@ import {
   assembleReport,
   clearReportDraftRoot,
   readDraftedSections,
+  readFinalJson,
   renderInspectionMarkdown,
   REPORT_SCHEMA_VERSION,
   sanitizeRecommendations,
@@ -24,6 +25,7 @@ import {
   sanitizeSuspiciousPlayers,
   setReportDraftRoot,
   validateFinalJson,
+  writeFinalReport,
   writeReportSection,
   type InspectionReportJson,
 } from '@/agent/tools/report-tools';
@@ -201,6 +203,57 @@ describe('report-tools: draft write/read/assemble', () => {
     writeReportSection('server-health', {});
     writeFileSync(join(draftDir, 'suspicious-players.json'), '{oops');
     expect(() => readDraftedSections(draftDir)).toThrow(/不是合法 JSON/);
+  });
+});
+
+describe('report-tools: submit_final_report capture', () => {
+  let draftDir: string;
+  const finalJson = () => ({ schemaVersion: REPORT_SCHEMA_VERSION, reportDate: '2026-08-22', realm: 'realm3', healthScore: 82, summary: 'ok' });
+
+  beforeEach(() => {
+    clearTools();
+    registerReportTools();
+    draftDir = mkdtempSync(join(tmpdir(), 'acm-report-draft-'));
+    setReportDraftRoot(draftDir);
+  });
+
+  afterEach(() => {
+    clearReportDraftRoot();
+    rmSync(draftDir, { recursive: true, force: true });
+  });
+
+  it('writes final.json through the tool and reads it back', async () => {
+    const out = await toolFn('submit_final_report').invoke(finalJson());
+    expect(out).toMatchObject({ ok: true });
+    expect(readFinalJson(draftDir)).toMatchObject({ schemaVersion: REPORT_SCHEMA_VERSION, realm: 'realm3', healthScore: 82, summary: 'ok' });
+  });
+
+  it('overwrites an existing final.json on resubmission', async () => {
+    await toolFn('submit_final_report').invoke(finalJson());
+    await toolFn('submit_final_report').invoke({ ...finalJson(), summary: 'v2' });
+    expect(readFinalJson(draftDir)?.summary).toBe('v2');
+  });
+
+  it('keeps lenient coercion: string healthScore and padded summary', async () => {
+    const out = await toolFn('submit_final_report').invoke({ ...finalJson(), healthScore: '82', summary: ' 平稳 ' });
+    expect(out).toMatchObject({ ok: true });
+    expect(readFinalJson(draftDir)).toMatchObject({ healthScore: 82, summary: '平稳' });
+  });
+
+  it('rejects schema-invalid submissions at the framework layer with field location', async () => {
+    // tool() 的 zod 校验在框架层拒绝（错误含字段定位），不会到达 handler 的 {error} 包装
+    await expect(toolFn('submit_final_report').invoke({ ...finalJson(), healthScore: 101 })).rejects.toThrow(/healthScore 必须为 0-100 的数字/);
+    expect(readFinalJson(draftDir)).toBeNull();
+  });
+
+  it('keeps the handler-level actionable error as defense-in-depth', () => {
+    expect(() => writeFinalReport({ ...finalJson(), healthScore: 101 })).toThrow(/submit_final_report 校验失败[\s\S]*重新调用本工具重试/);
+  });
+
+  it('rejects invocation when no draft root is injected', async () => {
+    clearReportDraftRoot();
+    const out = await toolFn('submit_final_report').invoke(finalJson());
+    expect(out).toMatchObject({ error: expect.stringContaining('草稿目录未就绪') });
   });
 });
 

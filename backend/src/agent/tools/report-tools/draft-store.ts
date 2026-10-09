@@ -5,9 +5,11 @@ import {
   REPORT_SECTIONS,
   validateSection,
   type InspectionReportJson,
+  type ReportFinalJson,
   type ReportSection,
   type SuspiciousPlayer,
 } from './sections';
+import { FinalReportJsonShapeSchema } from './final-json';
 
 // 草稿目录（模块态注入，同 setInspectionRunner 模式；巡检进程串行 + inflight 去重）
 
@@ -16,6 +18,8 @@ const SECTION_FILE: Record<ReportSection, string> = {
   'suspicious-players': 'suspicious-players.json',
   recommendations: 'recommendations.json',
 };
+
+const FINAL_FILE = 'final.json';
 
 let draftRoot: string | null = null;
 
@@ -61,6 +65,28 @@ export function writeReportSection(section: ReportSection, content: unknown): { 
 /** 只看文件存在性的缺节清单（抢救轮判定用，不读内容不校验）。 */
 export function listMissingSections(dir: string): ReportSection[] {
   return REPORT_SECTIONS.filter((section) => !existsSync(join(dir, SECTION_FILE[section])));
+}
+
+/** submit_final_report 工具执行体：五字段形状校验 → 落盘 final.json（已存在则覆盖）。校验失败抛错（经注册表转 {error} 交模型重写）。 */
+export function writeFinalReport(raw: unknown): { ok: true; bytes: number } {
+  const dir = requireDraftRoot();
+  const verdict = FinalReportJsonShapeSchema.safeParse(raw);
+  if (!verdict.success) {
+    // 错误信息必须可操作（同 write_report_section 模式）：逐字段定位 + 「同工具重试」指引
+    const issues = [...new Set(verdict.error.issues.map((i) => i.message))].join('；');
+    throw new Error(`submit_final_report 校验失败：${issues}。请修正参数后重新调用本工具重试；禁止放弃提交改为文本输出。`);
+  }
+  mkdirSync(dir, { recursive: true });
+  const body = JSON.stringify(verdict.data, null, 2);
+  writeFileSync(join(dir, FINAL_FILE), body, 'utf8');
+  return { ok: true, bytes: Buffer.byteLength(body) };
+}
+
+/** 读回工具提交的最终小 JSON：未提交返回 null（服务层降级走文本解析兜底）。 */
+export function readFinalJson(dir: string): ReportFinalJson | null {
+  const file = join(dir, FINAL_FILE);
+  if (!existsSync(file)) return null;
+  return JSON.parse(readFileSync(file, 'utf8')) as ReportFinalJson;
 }
 
 export interface DraftedSections {

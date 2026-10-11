@@ -9,6 +9,7 @@ export function buildInspectionTaskPrompt(
   realm: string,
   date: string,
   manifest: { absent: boolean; missingTypes: string[] },
+  watchlistNote: string = '观察名单：无。',
 ): { messages: { role: string; content: string }[] } {
   const manifestNote = manifest.absent
     ? `当日 manifest.json 不存在（疑似断传）。请先用 get_log_manifest 复核；若确认无日志，报告如实说明并给 healthScore 低分。`
@@ -19,6 +20,7 @@ export function buildInspectionTaskPrompt(
     realm,
     date,
     manifestNote,
+    watchlistNote,
     schemaVersion: String(REPORT_SCHEMA_VERSION),
   });
   return { messages: [{ role: 'user', content }] };

@@ -64,6 +64,19 @@ describe('buildInspectionTaskPrompt', () => {
     expect(loadPrompt('inspection')).toContain('脉冲型/偶发的移速突然增大');
   });
 
+  it('injects the watchlist digest and keeps the black/white judging rules (2026-10 名单)', () => {
+    const injected = buildInspectionTaskPrompt('realm3', '2026-10-08', complete, '黑名单（重点分析，命中即升档）：\n- [账号] fire01（聊天提及外挂）').messages[0].content;
+    expect(injected).toContain('管理员观察名单：黑名单（重点分析，命中即升档）');
+    expect(injected).toContain('[账号] fire01（聊天提及外挂）');
+
+    const content = buildInspectionTaskPrompt('realm3', '2026-10-08', complete).messages[0].content;
+    expect(content).toContain('管理员观察名单：观察名单：无。');
+    // 黑白两级匹配/升降档规则锚点
+    expect(content).toContain('账号级命中对其名下全部角色生效');
+    expect(content).toContain('命中黑名单（角色级/账号级）');
+    expect(content).toContain('suggestedAction 禁止 ban');
+  });
+
   it('applies the playtime prior: profile contract + cost-based level shifting (2026-10 时长先验)', () => {
     const content = buildInspectionTaskPrompt('realm3', '2026-10-08', complete).messages[0].content;
     // 分节契约含 profile 字段

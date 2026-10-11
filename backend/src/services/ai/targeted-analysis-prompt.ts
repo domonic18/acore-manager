@@ -4,7 +4,7 @@ import type { TargetedAnalysisSubject } from './targeted-analysis.runner';
 // 定向分析任务提示词装配（纯函数）：文案真源在 agent/prompts/analysis.yaml
 // （系统提示词 + 任务模板 + 修复追问轮），本模块只计算分支变量（封禁背景/对象类型两态）并渲染 {{var}}。
 
-export function buildTargetedAnalysisTaskPrompt(input: TargetedAnalysisSubject): string {
+export function buildTargetedAnalysisTaskPrompt(input: TargetedAnalysisSubject, watchlistNote: string = '观察名单：无。'): string {
   const banNote = input.banContext?.reason
     ? `封禁背景：${input.banContext.date ?? '未知日期'} 由 ${input.banContext.bannedBy ?? '未知'} 封禁，理由「${input.banContext.reason}」。`
     : '封禁背景：未提供（可能是申诉之外的常规核查）。';
@@ -15,6 +15,7 @@ export function buildTargetedAnalysisTaskPrompt(input: TargetedAnalysisSubject):
   return renderTemplate(loadPromptPart('analysis', 'taskTemplate'), {
     subjectNote,
     banNote,
+    watchlistNote,
     realm: input.realm,
     timeFrom: input.timeFrom,
     timeTo: input.timeTo,

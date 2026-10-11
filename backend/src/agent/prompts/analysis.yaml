@@ -84,6 +84,7 @@ taskTemplate: |-
   {{subjectNote}}
   时间范围：{{timeFrom}} 至 {{timeTo}}（含当天）
   {{banNote}}
+  {{watchlistNote}}
 
   取证步骤建议（全方位取证，逐维度执行；某维度无数据时在结论中如实注明"无数据"）：
   1. get_account_overview / get_ban_history 查明对象背景与封禁记录
@@ -117,6 +118,12 @@ taskTemplate: |-
 
   硬性要求：falsePositiveSignals 非空时 suggestion 必须为 "manual_review"；
   证据必须来自工具返回原文摘录并注明来源工具；无数据支撑的维度如实写"无数据"。
+
+  观察名单研判（角色名或账号名两级匹配，账号级命中对其名下全部角色生效）：
+  黑名单命中 → 重点分析（查全画像与违规明细），同等证据风险上调，suggestionReason 与
+  markdown 注明「命中黑名单（角色级/账号级）：{reason}」；白名单命中 → 检出异常时降风险
+  （更倾向 downgrade/manual_review，不建议 maintain），注明「白名单：{reason}」；
+  名单不可用时按无名单处理并如实注明；先验/名单只调档，结论仍以证据为准。
 followups:
   jsonFix: |-
     你上一轮的结论提交未通过校验，问题：{{issues}}。

@@ -101,6 +101,8 @@ taskTemplate: |-
 
   当日日志清单状态：{{manifestNote}}
 
+  管理员观察名单：{{watchlistNote}}
+
   取证步骤建议：
   1. get_log_manifest 复核日志构成
   2. fetch_log_archive 拉取 anticheat 归档（优先）及其他可用类型
@@ -143,6 +145,13 @@ taskTemplate: |-
      变速齿轮类工具，无法用误报解释）——此类记录可在封禁前数日出现，是提前预警的关键线索。
      注意：speed 幅度再大（含 >1000%）只要非连续出现，即不构成强制入围依据，按规则 2 的
      连续性口径判定（单发突变多为坐骑/传送/惯性形态）。
+  10. 观察名单研判（角色名或账号名两级匹配，账号级命中对其名下全部角色生效）：
+     黑名单命中（管理员从其他渠道发现的嫌疑，如聊天提及外挂协议）→ 必须查全画像重点分析
+     （get_character_overview / get_account_overview / get_anticheat_record），
+     同等证据 severity 至少升一档，suggestion 注明「命中黑名单（角色级/账号级）：{reason}」；
+     白名单命中（管理员认定的低作弊风险对象）→ 检出异常时降风险（severity 降档、
+     suggestedAction 禁止 ban），suggestion 注明「白名单：{reason}」；
+     名单不可用时按无名单处理并如实注明；先验/名单只调档，入围与 ban 仍以证据为准。
 
   历史误封校准案例（真实申诉复盘，判定口径参考）：
   - 影牙城堡(地图33) 20 级法师被带刷：当日 zaxis 103 次全部位于地图33、坐标集中约 45×15 码、延迟 0-11ms → 模块自动永封，核实为误封解封。

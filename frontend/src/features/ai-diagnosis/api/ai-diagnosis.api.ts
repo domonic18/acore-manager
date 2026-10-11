@@ -139,6 +139,27 @@ export interface SampleInput {
   refUrl?: string | null;
 }
 
+// 观察名单（2026-10 反作弊优化）：黑/白 × 角色/账号两级，(realm, subjectType, subjectName) 唯一
+export interface WatchlistItem {
+  id: number;
+  listType: 'white' | 'black';
+  subjectType: 'character' | 'account';
+  subjectName: string;
+  realm: string;
+  reason: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WatchlistInput {
+  listType: 'white' | 'black';
+  subjectType: 'character' | 'account';
+  subjectName: string;
+  realm: string;
+  reason: string;
+}
+
 export const aiDiagnosisApi = {
   reports: (realm?: string) =>
     apiClient.get<AiReportSummary[]>(`/api/ai/diagnosis/reports${realm ? `?realm=${encodeURIComponent(realm)}` : ''}`),
@@ -181,4 +202,14 @@ export const aiDiagnosisApi = {
   createSample: (input: SampleInput) => apiClient.post<SampleItem>('/api/ai/diagnosis/samples', input),
   updateSample: (id: number, patch: Partial<SampleInput>) => apiClient.put<SampleItem>(`/api/ai/diagnosis/samples/${id}`, patch),
   removeSample: (id: number) => apiClient.del<{ success: boolean }>(`/api/ai/diagnosis/samples/${id}`),
+  watchlist: (filters: { realm?: string; listType?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.realm) params.set('realm', filters.realm);
+    if (filters.listType) params.set('listType', filters.listType);
+    const qs = params.toString();
+    return apiClient.get<WatchlistItem[]>(`/api/ai/watchlist${qs ? `?${qs}` : ''}`);
+  },
+  createWatchlist: (input: WatchlistInput) => apiClient.post<WatchlistItem>('/api/ai/watchlist', input),
+  updateWatchlist: (id: number, patch: Partial<WatchlistInput>) => apiClient.put<WatchlistItem>(`/api/ai/watchlist/${id}`, patch),
+  removeWatchlist: (id: number) => apiClient.del<{ success: boolean }>(`/api/ai/watchlist/${id}`),
 };

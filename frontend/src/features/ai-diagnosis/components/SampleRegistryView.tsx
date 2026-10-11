@@ -1,13 +1,22 @@
 import { useState } from 'react';
 import { ChevronDown, ExternalLink, Plus } from 'lucide-react';
-import type { FpScenarioItem, SampleItem } from '../api/ai-diagnosis.api';
-import { useFpScenarios, useRemoveFpScenario, useRemoveSample, useSamples } from '../hooks/useAiDiagnosis';
+import type { FpScenarioItem, SampleItem, WatchlistItem } from '../api/ai-diagnosis.api';
+import {
+  useFpScenarios,
+  useRemoveFpScenario,
+  useRemoveSample,
+  useRemoveWatchlist,
+  useSamples,
+  useWatchlist,
+} from '../hooks/useAiDiagnosis';
 import { FpScenarioFormDialog } from './FpScenarioFormDialog';
 import { SampleFormDialog } from './SampleFormDialog';
+import { WatchlistFormDialog } from './WatchlistFormDialog';
 
-// 样本与场景库（巡查优化 2026-10）：两个 tab——
+// 样本与场景库（巡查优化 2026-10）：三个 tab——
 // 1) 巡查样本库：goodcase/badcase 标注语料（回归评测与提示词校准依据）；
-// 2) 误报场景库：任务传送点/已知误报场景（explain 引擎 quest/map 信号数据源，GM 可线上维护）。
+// 2) 误报场景库：任务传送点/已知误报场景（explain 引擎 quest/map 信号数据源，GM 可线上维护）；
+// 3) 观察名单：黑/白 × 角色/账号两级（巡检/定向分析注入研判，黑升档白降档）。
 
 const SAMPLE_LABEL_STYLE: Record<string, string> = {
   cheat: 'bg-red-500/20 text-red-400',
@@ -141,15 +150,61 @@ function ScenarioTable({ rows, onEdit }: { rows: FpScenarioItem[]; onEdit: (s: F
   );
 }
 
+function WatchlistTable({ rows, onEdit }: { rows: WatchlistItem[]; onEdit: (w: WatchlistItem) => void }) {
+  const remove = useRemoveWatchlist();
+  const handleRemove = (w: WatchlistItem): void => {
+    if (window.confirm(`确认将「${w.subjectName}」移出${w.listType === 'black' ? '黑' : '白'}名单？`)) {
+      remove.mutate(w.id, {
+        onError: (err) => window.alert((err as Error).message || '删除失败'),
+      });
+    }
+  };
+
+  if (rows.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">暂无名单条目，点击右上角「添加名单」维护黑/白名单</p>;
+  return (
+    <div className="space-y-2">
+      {rows.map((w) => (
+        <div key={w.id} className="rounded-lg border border-border bg-card p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                w.listType === 'black' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'
+              }`}
+            >
+              {w.listType === 'black' ? '黑名单' : '白名单'}
+            </span>
+            <span className="rounded bg-accent px-2 py-0.5 text-xs text-muted-foreground">{w.subjectType === 'account' ? '账号' : '角色'}</span>
+            <span className="text-sm font-medium">{w.subjectName}</span>
+            <span className="text-xs text-muted-foreground">
+              {w.realm} · {w.subjectType === 'account' ? '名下全部角色生效' : '按角色名匹配'} · 录入 {w.createdBy}
+            </span>
+            <span className="ml-auto flex items-center gap-1.5 text-xs">
+              <button onClick={() => onEdit(w)} className="text-muted-foreground hover:text-foreground">
+                编辑
+              </button>
+              <button onClick={() => handleRemove(w)} className="text-destructive hover:opacity-80">
+                删除
+              </button>
+            </span>
+          </div>
+          <p className="mt-1.5 whitespace-pre-wrap text-sm text-muted-foreground">{w.reason}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function SampleRegistryView() {
-  const [tab, setTab] = useState<'samples' | 'scenarios'>('samples');
+  const [tab, setTab] = useState<'samples' | 'scenarios' | 'watchlist'>('samples');
   const [labelFilter, setLabelFilter] = useState('');
   const [q, setQ] = useState('');
   const samples = useSamples({ label: labelFilter || undefined, q: q.trim() || undefined });
   const scenarios = useFpScenarios();
+  const watchlist = useWatchlist({});
 
   const [sampleDialog, setSampleDialog] = useState<{ open: boolean; editing: SampleItem | null }>({ open: false, editing: null });
   const [scenarioDialog, setScenarioDialog] = useState<{ open: boolean; editing: FpScenarioItem | null }>({ open: false, editing: null });
+  const [watchlistDialog, setWatchlistDialog] = useState<{ open: boolean; editing: WatchlistItem | null }>({ open: false, editing: null });
 
   const tabBtn = (active: boolean): string =>
     `rounded-full px-3 py-1 text-xs font-medium transition-colors ${
@@ -164,6 +219,9 @@ export function SampleRegistryView() {
         </button>
         <button type="button" onClick={() => setTab('scenarios')} className={tabBtn(tab === 'scenarios')}>
           误报场景库（{scenarios.data?.length ?? '…'}）
+        </button>
+        <button type="button" onClick={() => setTab('watchlist')} className={tabBtn(tab === 'watchlist')}>
+          观察名单（{watchlist.data?.length ?? '…'}）
         </button>
         <div className="ml-auto flex items-center gap-2">
           {tab === 'samples' ? (
@@ -191,12 +249,19 @@ export function SampleRegistryView() {
                 <Plus className="h-3.5 w-3.5" /> 录入样本
               </button>
             </>
-          ) : (
+          ) : tab === 'scenarios' ? (
             <button
               onClick={() => setScenarioDialog({ open: true, editing: null })}
               className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
             >
               <Plus className="h-3.5 w-3.5" /> 录入场景
+            </button>
+          ) : (
+            <button
+              onClick={() => setWatchlistDialog({ open: true, editing: null })}
+              className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> 添加名单
             </button>
           )}
         </div>
@@ -210,12 +275,20 @@ export function SampleRegistryView() {
         ) : (
           <SampleTable rows={samples.data ?? []} onEdit={(s) => setSampleDialog({ open: true, editing: s })} />
         )
-      ) : scenarios.isLoading ? (
+      ) : tab === 'scenarios' ? (
+        scenarios.isLoading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">加载中…</p>
+        ) : scenarios.isError ? (
+          <p className="py-6 text-center text-sm text-destructive">{(scenarios.error as Error).message}</p>
+        ) : (
+          <ScenarioTable rows={scenarios.data ?? []} onEdit={(s) => setScenarioDialog({ open: true, editing: s })} />
+        )
+      ) : watchlist.isLoading ? (
         <p className="py-6 text-center text-sm text-muted-foreground">加载中…</p>
-      ) : scenarios.isError ? (
-        <p className="py-6 text-center text-sm text-destructive">{(scenarios.error as Error).message}</p>
+      ) : watchlist.isError ? (
+        <p className="py-6 text-center text-sm text-destructive">{(watchlist.error as Error).message}</p>
       ) : (
-        <ScenarioTable rows={scenarios.data ?? []} onEdit={(s) => setScenarioDialog({ open: true, editing: s })} />
+        <WatchlistTable rows={watchlist.data ?? []} onEdit={(w) => setWatchlistDialog({ open: true, editing: w })} />
       )}
 
       <SampleFormDialog open={sampleDialog.open} editing={sampleDialog.editing} onClose={() => setSampleDialog({ open: false, editing: null })} />
@@ -223,6 +296,11 @@ export function SampleRegistryView() {
         open={scenarioDialog.open}
         editing={scenarioDialog.editing}
         onClose={() => setScenarioDialog({ open: false, editing: null })}
+      />
+      <WatchlistFormDialog
+        open={watchlistDialog.open}
+        editing={watchlistDialog.editing}
+        onClose={() => setWatchlistDialog({ open: false, editing: null })}
       />
     </div>
   );

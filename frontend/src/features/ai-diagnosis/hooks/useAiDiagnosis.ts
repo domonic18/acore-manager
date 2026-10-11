@@ -155,6 +155,44 @@ export function useRemoveSample() {
   });
 }
 
+export function useWatchlist(filters: { realm?: string; listType?: string }) {
+  return useQuery({
+    queryKey: ['ai-diagnosis', 'watchlist', filters],
+    queryFn: () => aiDiagnosisApi.watchlist(filters),
+  });
+}
+
+export function useCreateWatchlist() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: aiDiagnosisApi.createWatchlist,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'watchlist'] });
+    },
+  });
+}
+
+export function useUpdateWatchlist() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: Parameters<typeof aiDiagnosisApi.updateWatchlist>[1] }) =>
+      aiDiagnosisApi.updateWatchlist(id, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'watchlist'] });
+    },
+  });
+}
+
+export function useRemoveWatchlist() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: aiDiagnosisApi.removeWatchlist,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-diagnosis', 'watchlist'] });
+    },
+  });
+}
+
 export function useMailTemplate(enabled: boolean) {
   return useQuery({
     queryKey: ['ai-diagnosis', 'mail-template'],

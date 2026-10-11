@@ -25,6 +25,7 @@ import { buildInspectionTaskPrompt, buildJsonFixPrompt, buildSectionSalvagePromp
 import { persistInspection, recordInspectionFailure } from './inspection-persist';
 import { llmConfigService } from './llm-config.service';
 import { feishuNotifyService } from './feishu-notify.service';
+import { watchlistService } from './watchlist.service';
 
 // 每日巡检编排（arch 3.4）：断传检查 → deep agent 取证（日志 + 白名单工具，分节结论经
 // write_report_section 边运行边落盘）→ 最终结论经 submit_final_report 工具 schema 提交
@@ -170,7 +171,12 @@ class InspectionService {
         },
       };
 
-      const first = await runAgentRound(agent, buildInspectionTaskPrompt(input.realm, input.date, manifestNote), config, toInspectionError);
+      const first = await runAgentRound(
+        agent,
+        buildInspectionTaskPrompt(input.realm, input.date, manifestNote, await watchlistService.digestForRealm(input.realm)),
+        config,
+        toInspectionError,
+      );
       let resolved = this.resolveFinalReport(draftDir, first.text, input.realm, input.date);
       let tokens = first.tokens;
       let durationMs = first.durationMs;

@@ -93,6 +93,21 @@ describe('report-tools: section sanitizers', () => {
     expect(result.value[0].suggestedAction).toBe('investigate');
   });
 
+  it('keeps, trims and clamps the optional profile; drops blank ones (时长先验画像)', () => {
+    const result = sanitizeSuspiciousPlayers([
+      player({ profile: '  游戏时长 3200 小时 · 等级 80 · 账号注册 1240 天  ' }),
+      player({ profile: `x`.repeat(150) }),
+      player({ profile: '   ' }),
+      player(),
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0].profile).toBe('游戏时长 3200 小时 · 等级 80 · 账号注册 1240 天');
+    expect(result.value[1].profile).toHaveLength(120);
+    expect(result.value[2].profile).toBeUndefined();
+    expect(result.value[3].profile).toBeUndefined();
+  });
+
   it('normalizes serverHealth scalars into arrays and rejects non-objects', () => {
     const result = sanitizeServerHealth({ crashes: 'one crash', errors: ['e1', 'e2'], authAnomalies: null });
     expect(result.ok).toBe(true);
@@ -295,6 +310,7 @@ describe('report-tools: markdown renderer', () => {
         reasons: ['speed 12 次'],
         evidence: ['2026-08-22 10:01 Speed-Hack'],
         falsePositiveSignals: [{ latency: 230 }],
+        profile: '游戏时长 45 小时 · 等级 23 · 账号注册 3 天',
         suggestion: '人工核查',
       },
     ],
@@ -310,6 +326,7 @@ describe('report-tools: markdown renderer', () => {
     expect(md).toContain('## 作弊检测（可疑玩家 1 名）');
     expect(md).toContain('### Unparalleled（severity=high → investigate）');
     expect(md).toContain('- 账号：cheater@x');
+    expect(md).toContain('- 画像：游戏时长 45 小时 · 等级 23 · 账号注册 3 天');
     expect(md).toContain('  - `2026-08-22 10:01 Speed-Hack`');
     expect(md).toContain('- 误报信号：');
     expect(md).toContain('- 处置建议：人工核查');

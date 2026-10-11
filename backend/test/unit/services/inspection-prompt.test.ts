@@ -8,6 +8,7 @@ jest.mock('@/middleware/request-logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
+import { loadPrompt } from '@/agent/core/prompt-loader';
 import { REPORT_SCHEMA_VERSION } from '@/agent/tools/report-tools';
 import { LOG_TYPES } from '@/agent/tools/log-tools/log-workspace';
 import { buildInspectionTaskPrompt, buildJsonFixPrompt, buildSectionSalvagePrompt } from '@/services/ai/inspection-prompt';
@@ -47,6 +48,45 @@ describe('buildInspectionTaskPrompt', () => {
     expect(content).toContain('submit_final_report');
     expect(content).toContain('write_report_section');
     expect(content).toContain('执行纪律');
+  });
+
+  it('judges speed on continuity only: pulse/occasional spikes are not cheating (2026-10 口径修订)', () => {
+    const content = buildInspectionTaskPrompt('realm3', '2026-10-08', complete).messages[0].content;
+    expect(content).toContain('speed 只认连续性');
+    // 旧规则残留必须清零：幅度>1000% 强制入围、脉冲档位三步判定、其余情形 investigate
+    expect(content).not.toContain('speed 幅度 >1000%');
+    expect(content).not.toContain('三步判定');
+    expect(content).not.toContain('其余情形 → investigate');
+    // timemanipulation 仍是唯一强制入围特征
+    expect(content).toContain('timemanipulation');
+
+    // system 段同步锚定：脉冲型/偶发移速增大不是作弊
+    expect(loadPrompt('inspection')).toContain('脉冲型/偶发的移速突然增大');
+  });
+
+  it('injects the watchlist digest and keeps the black/white judging rules (2026-10 名单)', () => {
+    const injected = buildInspectionTaskPrompt('realm3', '2026-10-08', complete, '黑名单（重点分析，命中即升档）：\n- [账号] fire01（聊天提及外挂）').messages[0].content;
+    expect(injected).toContain('管理员观察名单：黑名单（重点分析，命中即升档）');
+    expect(injected).toContain('[账号] fire01（聊天提及外挂）');
+
+    const content = buildInspectionTaskPrompt('realm3', '2026-10-08', complete).messages[0].content;
+    expect(content).toContain('管理员观察名单：观察名单：无。');
+    // 黑白两级匹配/升降档规则锚点
+    expect(content).toContain('账号级命中对其名下全部角色生效');
+    expect(content).toContain('命中黑名单（角色级/账号级）');
+    expect(content).toContain('suggestedAction 禁止 ban');
+  });
+
+  it('applies the playtime prior: profile contract + cost-based level shifting (2026-10 时长先验)', () => {
+    const content = buildInspectionTaskPrompt('realm3', '2026-10-08', complete).messages[0].content;
+    // 分节契约含 profile 字段
+    expect(content).toContain('"profile":"游戏时长 x 小时 · 等级 x · 账号注册 N 天"');
+    // system 段锚定：时长先验取画像（totaltime/level/joindate）并写入 profile；先验只调档不单独入围/ban
+    const system = loadPrompt('inspection');
+    expect(system).toContain('游戏时长先验');
+    expect(system).toContain('totaltime');
+    expect(system).toContain('joindate');
+    expect(system).toContain('先验只调档');
   });
 });
 

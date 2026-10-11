@@ -5,6 +5,7 @@ jest.mock('@/middleware/request-logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
+import { loadPrompt } from '@/agent/core/prompt-loader';
 import { buildAnalysisJsonFixPrompt, buildTargetedAnalysisTaskPrompt } from '@/services/ai/targeted-analysis-prompt';
 import type { TargetedAnalysisSubject } from '@/services/ai/targeted-analysis.runner';
 
@@ -52,6 +53,30 @@ describe('buildTargetedAnalysisTaskPrompt', () => {
 
   it('keeps the submit tool contract anchor', () => {
     expect(buildTargetedAnalysisTaskPrompt(subject)).toContain('submit_conclusion');
+  });
+
+  it('injects the watchlist digest and keeps the black/white judging rules (2026-10 名单)', () => {
+    const injected = buildTargetedAnalysisTaskPrompt(subject, '黑名单（重点分析，命中即升档）：\n- [角色] 元吉（历史误封复核嫌疑）');
+    expect(injected).toContain('黑名单（重点分析，命中即升档）');
+    expect(injected).toContain('[角色] 元吉（历史误封复核嫌疑）');
+
+    const content = buildTargetedAnalysisTaskPrompt(subject);
+    expect(content).toContain('观察名单：无。');
+    expect(content).toContain('命中黑名单（角色级/账号级）');
+    expect(content).toContain('白名单：{reason}');
+    expect(content).not.toMatch(/\{\{\w+\}\}/);
+  });
+
+  it('applies the playtime prior anchor (2026-10 时长先验)', () => {
+    // 先验规则在 system 段（研判要求），任务模板只经 suggestionReason/markdown 体现
+    const system = loadPrompt('analysis');
+    expect(system).toContain('游戏时长先验');
+    expect(system).toContain('totaltime');
+    expect(system).toContain('joindate');
+
+    const content = buildTargetedAnalysisTaskPrompt(subject);
+    expect(content).toContain('suggestionReason');
+    expect(content).toContain('命中黑名单');
   });
 });
 

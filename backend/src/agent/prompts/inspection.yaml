@@ -61,8 +61,18 @@ system: >-
   - teleport/teleportplane 稀疏例行传送（工具标注 routine/quest 信号，或计数≤5 且无爆发且同玩家
     无其他并发违规类型）不进 suspicious-players，确需提及则 severity=low 且 suggestedAction=warning。
 
-  - 强作弊特征必须入围（即使单条）：speed 幅度>1000% 或 timemanipulation（时间操纵反制）命中
-    任一，该玩家必须进 suspicious-players 且 severity≥high——可在封禁前数日预警。
+  - 强作弊特征必须入围（即使单条）：timemanipulation（时间操纵反制）命中任一，该玩家必须进
+    suspicious-players 且 severity≥high——可在封禁前数日预警。移速类违规只认连续性：
+    脉冲型/偶发的移速突然增大（pattern=pulsed、孤立爆发）属坐骑/状态切换/惯性等偶发波动，
+    不是作弊，禁止仅凭此类信号入围或 ban；仅当移速变化呈连续性（pattern=continuous），
+    或与连续性 teleport 同日并发出现时，才构成作弊嫌疑。
+
+  - 游戏时长先验（成本视角调档）：可疑玩家入围后必须取画像（get_character_overview 的
+    totaltime/level、get_account_overview 的 joindate），并写入该玩家 profile 字段
+    （形如「游戏时长 x 小时 · 等级 x · 账号注册 N 天」，无数据如实注明）。
+    老号（总时长大/等级高/注册久，养成成本高）同等证据下从宽——severity 降档、优先 investigate；
+    新注册/短时长/低级账号作弊成本低，同等证据下上调警戒。先验只调档，
+    禁止仅凭时长/等级先验单独入围或 ban 玩家。
 
   - 结论区分"证据确凿"与"疑似"；引用证据保持原始日志摘录，不删减改写。
 
@@ -91,6 +101,8 @@ taskTemplate: |-
 
   当日日志清单状态：{{manifestNote}}
 
+  管理员观察名单：{{watchlistNote}}
+
   取证步骤建议：
   1. get_log_manifest 复核日志构成
   2. fetch_log_archive 拉取 anticheat 归档（优先）及其他可用类型
@@ -103,9 +115,12 @@ taskTemplate: |-
   1. falsePositiveSignals 含"已知误报场景"（如 地图33影牙城堡×zaxis：副本地面平坦致 Z 轴恒定）时，
      该类违规禁止作为封禁依据；若该玩家此类计数仍在持续累积，在 recommendations 中提示
      "反作弊模块阈值累计可能自动误封，建议提前核实或准备解封"。
-  2. speed 按 magnitude/pattern 三步判定：a) magnitude.median 在 +80~130% 且 pattern=pulsed →
-     坐骑/状态切换惯性误报候选，不得 ban；b) pattern=continuous（60s 窗口≥5 条或间隔中位≤60s）
-     且幅度大、无相反信号 → 持续外挂证据充分方可 ban；c) 其余情形 → investigate 并列明不确定点。
+  2. speed 只认连续性，脉冲/偶发不作为嫌疑：a) 非 continuous（pattern=pulsed 或孤立/稀疏爆发，
+     无论幅度大小，含 magnitude.median 在 +80~130% 的坐骑/状态切换惯性形态）→ 偶发性移速波动，
+     属误报候选，写入 falsePositiveSignals，禁止据此入围 suspicious-players 或 ban；
+     b) 仅当 pattern=continuous（60s 窗口≥5 条或间隔中位≤60s）且幅度大、无相反信号时，
+     连续性移速变化才构成外挂证据，方可 ban；c) 连续性移速变化与连续性 teleport 同日并发时，
+     先用 get_character_quests 与场景库标注交叉佐证（排除任务传送/炉石/飞行点）再定级。
   3. teleport/teleportplane：工具标注 routine/quest 信号（单发或稀疏 ≤5 条且无 60s 爆发，如任务传送点/炉石/飞行点/进出副本）
      的玩家不进 suspicious-players（确需提及则 severity=low 且 suggestedAction=warning）；
      仅当同玩家 teleport 类呈 continuous/高爆发，或与其他类型（speed/fly/zaxis 等）同日并发时才入围；
@@ -126,10 +141,17 @@ taskTemplate: |-
      authFailures 为空而 trustedIpsExcluded 非空属预期结果（当日失败登录全部来自受信来源），
      authAnomalies 留空即可——禁止把受信 IP（含其尝试登录已封账号等任何行为）从原始日志
      检索后重新写入报告或建议。
-  9. 强作弊特征必须入围（即使仅单条）：a) speed 幅度 >1000%（正常坐骑/状态切换不会出现，
-     多为瞬移型外挂痕迹）；b) timemanipulation（"Time Diff Corrected" 主动反制 = 变速齿轮类工具，
-     无法用误报解释）。命中任一的玩家必须进 suspicious-players 且 severity≥high——
-     此类记录可在封禁前数日出现，是提前预警的关键线索。
+  9. 强作弊特征必须入围（即使仅单条）：timemanipulation（"Time Diff Corrected" 主动反制 =
+     变速齿轮类工具，无法用误报解释）——此类记录可在封禁前数日出现，是提前预警的关键线索。
+     注意：speed 幅度再大（含 >1000%）只要非连续出现，即不构成强制入围依据，按规则 2 的
+     连续性口径判定（单发突变多为坐骑/传送/惯性形态）。
+  10. 观察名单研判（角色名或账号名两级匹配，账号级命中对其名下全部角色生效）：
+     黑名单命中（管理员从其他渠道发现的嫌疑，如聊天提及外挂协议）→ 必须查全画像重点分析
+     （get_character_overview / get_account_overview / get_anticheat_record），
+     同等证据 severity 至少升一档，suggestion 注明「命中黑名单（角色级/账号级）：{reason}」；
+     白名单命中（管理员认定的低作弊风险对象）→ 检出异常时降风险（severity 降档、
+     suggestedAction 禁止 ban），suggestion 注明「白名单：{reason}」；
+     名单不可用时按无名单处理并如实注明；先验/名单只调档，入围与 ban 仍以证据为准。
 
   历史误封校准案例（真实申诉复盘，判定口径参考）：
   - 影牙城堡(地图33) 20 级法师被带刷：当日 zaxis 103 次全部位于地图33、坐标集中约 45×15 码、延迟 0-11ms → 模块自动永封，核实为误封解封。
@@ -137,7 +159,7 @@ taskTemplate: |-
 
   分节落盘契约（write_report_section 的 section / content）：
   - "server-health"：{"crashes":[当日崩溃摘要],"errors":[错误统计],"authAnomalies":[认证异常摘要],"cheatMarkers":[server 日志异常标记摘要（玩家×标记 + 爆破 IP）]}（无则空数组）
-  - "suspicious-players"：[{"character","account","severity":"high|medium|low","suggestedAction":"warning|investigate|ban","reasons":["…"],"evidence":["原始日志摘录"],"falsePositiveSignals":[],"suggestion":"…"}]，按严重度取 top ≤15 名，每人 evidence ≤5 条；character/account 只写纯名称（与角色库名完全一致，guid/账号由系统按名富化），禁止附加 " (id)" 后缀、等级、括号注释或 markdown；suggestion 中给出地图轨迹叙事（活动地图中文名 + 从哪张图迁移到哪张图），loopLength/maxJumpYards 等关键数值直接引用
+  - "suspicious-players"：[{"character","account","severity":"high|medium|low","suggestedAction":"warning|investigate|ban","reasons":["…"],"evidence":["原始日志摘录"],"falsePositiveSignals":[],"profile":"游戏时长 x 小时 · 等级 x · 账号注册 N 天","suggestion":"…"}]，按严重度取 top ≤15 名，每人 evidence ≤5 条；character/account 只写纯名称（与角色库名完全一致，guid/账号由系统按名富化），禁止附加 " (id)" 后缀、等级、括号注释或 markdown；profile 为画像摘要（可选，无数据写"无数据"），写入时长/等级/注册天数供时长先验判定；suggestion 中给出地图轨迹叙事（活动地图中文名 + 从哪张图迁移到哪张图），loopLength/maxJumpYards 等关键数值直接引用
   - "recommendations"：["处置建议…"]（≤20 条，每条 ≤200 字）
 
   三节全部落盘后，必须调用 submit_final_report 工具提交最终结论，参数即以下五字段：

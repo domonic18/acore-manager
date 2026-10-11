@@ -11,6 +11,7 @@ import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { AiTargetedAnalysis } from '@/entities/acm/ai-targeted-analysis.entity';
 import { clearConclusionCaptureRoot, readConclusionCapture, setConclusionCaptureRoot } from '@/agent/tools/analysis-tools';
 import { llmConfigService } from './llm-config.service';
+import { watchlistService } from './watchlist.service';
 import { tokenUsageService } from './token-usage.service';
 import { emptyTokens, sumTokens, watchAgentEvents, type RoundAccumulator } from './agent-round.util';
 import { buildAnalysisJsonFixPrompt, buildTargetedAnalysisTaskPrompt } from './targeted-analysis-prompt';
@@ -73,7 +74,8 @@ export async function runTargetedAnalysis(analysisId: number, subject: TargetedA
     const makeError = (message: string, code: string): Error => new TargetedAnalysisError(message, code);
     const acc: RoundAccumulator = { text: '', tokens: emptyTokens() };
 
-    for await (const ev of watchAgentEvents(agent, { messages: [{ role: 'user', content: buildTargetedAnalysisTaskPrompt(subject) }] }, config, acc, makeError)) {
+    const watchlistNote = await watchlistService.digestForRealm(subject.realm);
+    for await (const ev of watchAgentEvents(agent, { messages: [{ role: 'user', content: buildTargetedAnalysisTaskPrompt(subject, watchlistNote) }] }, config, acc, makeError)) {
       void ev;
     }
 

@@ -25,6 +25,7 @@ import aiDiagnosisRoutes from './routes/ai-diagnosis.routes';
 import aiAssistantRoutes from './routes/ai-assistant.routes';
 import aiAnalysisRoutes from './routes/ai-analysis.routes';
 import aiPromptRoutes from './routes/ai-prompt.routes';
+import aiWatchlistRoutes from './routes/ai-watchlist.routes';
 import { dbReadinessGate } from './middleware/db-readiness-gate';
 
 
@@ -68,6 +69,7 @@ export function createApp(): Application {
   app.use('/api/ai/model-configs', aiModelConfigRoutes);
   app.use('/api/ai/token-usage', aiTokenUsageRoutes);
   app.use('/api/ai/diagnosis', aiDiagnosisRoutes);
+  app.use('/api/ai/watchlist', aiWatchlistRoutes);
   app.use('/api/ai/assistant', aiAssistantRoutes);
   app.use('/api/ai/analysis', aiAnalysisRoutes);
   app.use('/api/ai/prompts', aiPromptRoutes);

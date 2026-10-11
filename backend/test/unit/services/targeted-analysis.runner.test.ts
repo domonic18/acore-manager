@@ -17,6 +17,9 @@ jest.mock('@/services/ai/token-usage.service', () => ({
 jest.mock('@/services/ai/llm-config.service', () => ({
   llmConfigService: { resolveDefault: jest.fn().mockResolvedValue({ id: 1, name: 'kimi', provider: 'kimi', protocol: 'anthropic', baseUrl: 'x', modelName: 'kimi-for-coding', apiKey: 'k', temperature: null, maxTokens: null }) },
 }));
+jest.mock('@/services/ai/watchlist.service', () => ({
+  watchlistService: { digestForRealm: jest.fn().mockResolvedValue('观察名单：无。') },
+}));
 jest.mock('@/agent/runtime/agent-factory', () => ({
   getAgent: jest.fn(),
 }));

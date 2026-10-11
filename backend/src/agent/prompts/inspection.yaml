@@ -61,8 +61,11 @@ system: >-
   - teleport/teleportplane 稀疏例行传送（工具标注 routine/quest 信号，或计数≤5 且无爆发且同玩家
     无其他并发违规类型）不进 suspicious-players，确需提及则 severity=low 且 suggestedAction=warning。
 
-  - 强作弊特征必须入围（即使单条）：speed 幅度>1000% 或 timemanipulation（时间操纵反制）命中
-    任一，该玩家必须进 suspicious-players 且 severity≥high——可在封禁前数日预警。
+  - 强作弊特征必须入围（即使单条）：timemanipulation（时间操纵反制）命中任一，该玩家必须进
+    suspicious-players 且 severity≥high——可在封禁前数日预警。移速类违规只认连续性：
+    脉冲型/偶发的移速突然增大（pattern=pulsed、孤立爆发）属坐骑/状态切换/惯性等偶发波动，
+    不是作弊，禁止仅凭此类信号入围或 ban；仅当移速变化呈连续性（pattern=continuous），
+    或与连续性 teleport 同日并发出现时，才构成作弊嫌疑。
 
   - 结论区分"证据确凿"与"疑似"；引用证据保持原始日志摘录，不删减改写。
 
@@ -103,9 +106,12 @@ taskTemplate: |-
   1. falsePositiveSignals 含"已知误报场景"（如 地图33影牙城堡×zaxis：副本地面平坦致 Z 轴恒定）时，
      该类违规禁止作为封禁依据；若该玩家此类计数仍在持续累积，在 recommendations 中提示
      "反作弊模块阈值累计可能自动误封，建议提前核实或准备解封"。
-  2. speed 按 magnitude/pattern 三步判定：a) magnitude.median 在 +80~130% 且 pattern=pulsed →
-     坐骑/状态切换惯性误报候选，不得 ban；b) pattern=continuous（60s 窗口≥5 条或间隔中位≤60s）
-     且幅度大、无相反信号 → 持续外挂证据充分方可 ban；c) 其余情形 → investigate 并列明不确定点。
+  2. speed 只认连续性，脉冲/偶发不作为嫌疑：a) 非 continuous（pattern=pulsed 或孤立/稀疏爆发，
+     无论幅度大小，含 magnitude.median 在 +80~130% 的坐骑/状态切换惯性形态）→ 偶发性移速波动，
+     属误报候选，写入 falsePositiveSignals，禁止据此入围 suspicious-players 或 ban；
+     b) 仅当 pattern=continuous（60s 窗口≥5 条或间隔中位≤60s）且幅度大、无相反信号时，
+     连续性移速变化才构成外挂证据，方可 ban；c) 连续性移速变化与连续性 teleport 同日并发时，
+     先用 get_character_quests 与场景库标注交叉佐证（排除任务传送/炉石/飞行点）再定级。
   3. teleport/teleportplane：工具标注 routine/quest 信号（单发或稀疏 ≤5 条且无 60s 爆发，如任务传送点/炉石/飞行点/进出副本）
      的玩家不进 suspicious-players（确需提及则 severity=low 且 suggestedAction=warning）；
      仅当同玩家 teleport 类呈 continuous/高爆发，或与其他类型（speed/fly/zaxis 等）同日并发时才入围；
@@ -126,10 +132,10 @@ taskTemplate: |-
      authFailures 为空而 trustedIpsExcluded 非空属预期结果（当日失败登录全部来自受信来源），
      authAnomalies 留空即可——禁止把受信 IP（含其尝试登录已封账号等任何行为）从原始日志
      检索后重新写入报告或建议。
-  9. 强作弊特征必须入围（即使仅单条）：a) speed 幅度 >1000%（正常坐骑/状态切换不会出现，
-     多为瞬移型外挂痕迹）；b) timemanipulation（"Time Diff Corrected" 主动反制 = 变速齿轮类工具，
-     无法用误报解释）。命中任一的玩家必须进 suspicious-players 且 severity≥high——
-     此类记录可在封禁前数日出现，是提前预警的关键线索。
+  9. 强作弊特征必须入围（即使仅单条）：timemanipulation（"Time Diff Corrected" 主动反制 =
+     变速齿轮类工具，无法用误报解释）——此类记录可在封禁前数日出现，是提前预警的关键线索。
+     注意：speed 幅度再大（含 >1000%）只要非连续出现，即不构成强制入围依据，按规则 2 的
+     连续性口径判定（单发突变多为坐骑/传送/惯性形态）。
 
   历史误封校准案例（真实申诉复盘，判定口径参考）：
   - 影牙城堡(地图33) 20 级法师被带刷：当日 zaxis 103 次全部位于地图33、坐标集中约 45×15 码、延迟 0-11ms → 模块自动永封，核实为误封解封。

@@ -8,6 +8,7 @@ jest.mock('@/middleware/request-logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
+import { loadPrompt } from '@/agent/core/prompt-loader';
 import { REPORT_SCHEMA_VERSION } from '@/agent/tools/report-tools';
 import { LOG_TYPES } from '@/agent/tools/log-tools/log-workspace';
 import { buildInspectionTaskPrompt, buildJsonFixPrompt, buildSectionSalvagePrompt } from '@/services/ai/inspection-prompt';
@@ -47,6 +48,20 @@ describe('buildInspectionTaskPrompt', () => {
     expect(content).toContain('submit_final_report');
     expect(content).toContain('write_report_section');
     expect(content).toContain('执行纪律');
+  });
+
+  it('judges speed on continuity only: pulse/occasional spikes are not cheating (2026-10 口径修订)', () => {
+    const content = buildInspectionTaskPrompt('realm3', '2026-10-08', complete).messages[0].content;
+    expect(content).toContain('speed 只认连续性');
+    // 旧规则残留必须清零：幅度>1000% 强制入围、脉冲档位三步判定、其余情形 investigate
+    expect(content).not.toContain('speed 幅度 >1000%');
+    expect(content).not.toContain('三步判定');
+    expect(content).not.toContain('其余情形 → investigate');
+    // timemanipulation 仍是唯一强制入围特征
+    expect(content).toContain('timemanipulation');
+
+    // system 段同步锚定：脉冲型/偶发移速增大不是作弊
+    expect(loadPrompt('inspection')).toContain('脉冲型/偶发的移速突然增大');
   });
 });
 

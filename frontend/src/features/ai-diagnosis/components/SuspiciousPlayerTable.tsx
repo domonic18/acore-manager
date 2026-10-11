@@ -131,6 +131,7 @@ export function SuspiciousPlayerTable({ players, realm, reportDate }: { players:
                     ) : (
                       p.character
                     )}
+                    {p.profile && <div className="mt-0.5 text-xs font-normal text-muted-foreground">{p.profile}</div>}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     {p.accountId != null ? (

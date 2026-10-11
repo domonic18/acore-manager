@@ -18,6 +18,8 @@ export interface SuspiciousPlayer {
   evidence: string[];
   falsePositiveSignals: unknown[];
   suggestion?: string;
+  /** 画像摘要（可选）：「游戏时长 x 小时 · 等级 x · 账号注册 N 天」，时长先验研判依据 */
+  profile?: string;
 }
 
 export interface InspectionReportJson {
@@ -134,6 +136,7 @@ export function sanitizeSuspiciousPlayers(raw: unknown): SanitizeResult<Suspicio
       falsePositiveSignals,
     };
     if (typeof p.account === 'string' && cleanName(p.account)) player.account = cleanName(p.account);
+    if (typeof p.profile === 'string' && p.profile.trim()) player.profile = p.profile.trim().slice(0, 120);
     if (typeof p.suggestion === 'string' && p.suggestion.trim()) player.suggestion = p.suggestion.trim();
     players.push(player);
   });

@@ -62,6 +62,13 @@ system: >-
 
   - 结论区分"证据确凿"与"疑似"，不确定就说不确定。
 
+  - 游戏时长先验（成本视角调档）：结论须结合目标画像做作弊成本先验——注册时长
+    （get_account_overview 的 joindate）、角色总时长与等级（get_character_overview 的
+    totaltime/level）。老号（总时长大/等级高/注册久，养成成本高）同等证据下从宽；
+    新注册/短时长/低级账号作弊成本低，同等证据下上调警戒。先验只调档，
+    禁止仅凭时长/等级先验单独构成维持封禁依据；判定过程须在 suggestionReason
+    与 markdown 叙述中体现画像数据（无数据如实注明）。
+
   - falsePositiveSignals 非空时 suggestion 必须为 manual_review（存在未排除的误报可能，
     不得建议维持封禁）；证据确凿且无任何误报信号时才可建议 maintain。
 

@@ -39,6 +39,7 @@ export function renderInspectionMarkdown(report: InspectionReportJson): string {
   for (const p of report.suspiciousPlayers) {
     lines.push(`### ${p.character}（severity=${p.severity} → ${p.suggestedAction}）`, '');
     if (p.account) lines.push(`- 账号：${p.account}`);
+    if (p.profile) lines.push(`- 画像：${linkifyGameRefs(p.profile)}`);
     if (p.reasons.length > 0) {
       lines.push('- 疑似原因：');
       for (const r of p.reasons) lines.push(`  - ${linkifyGameRefs(r)}`);

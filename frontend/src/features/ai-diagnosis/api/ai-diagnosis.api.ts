@@ -21,6 +21,8 @@ export interface SuspiciousPlayer {
   severity: 'high' | 'medium' | 'low' | string;
   suggestedAction: string;
   suggestion?: string;
+  // 画像摘要：「游戏时长 x 小时 · 等级 x · 账号注册 N 天」（时长先验研判依据）
+  profile?: string;
   reasons?: string[];
   evidence?: string[];
   falsePositiveSignals?: string[];

@@ -20,7 +20,6 @@ const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
 const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
 const RbacConfigPage = lazy(() => import('@/pages/RbacConfigPage'));
 const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
-const FeishuBindingPage = lazy(() => import('@/pages/FeishuBindingPage'));
 const AiDiagnosisPage = lazy(() => import('@/pages/AiDiagnosisPage'));
 const AiDiagnosisReportDetailPage = lazy(() => import('@/pages/AiDiagnosisReportDetailPage'));
 const AiDiagnosisFindingsPage = lazy(() => import('@/pages/AiDiagnosisFindingsPage'));
@@ -113,13 +112,13 @@ export const router = createBrowserRouter([
               { path: 'gm-accounts', element: withSuspense(GmAccountPage) },
               { path: 'audit-logs', element: withSuspense(AuditLogPage) },
               { path: 'rbac-config', element: withSuspense(RbacConfigPage) },
-              { path: 'feishu-bindings', element: withSuspense(FeishuBindingPage) },
             ],
           },
           {
             element: <GmGuard minLevel={3} />,
             children: [
               { path: 'model-config', element: <Navigate to="/system-config?tab=model" replace /> },
+              { path: 'feishu-bindings', element: <Navigate to="/system-config?tab=bindings" replace /> },
               { path: 'system-config', element: withSuspense(SystemConfigPage) },
             ],
           },

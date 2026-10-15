@@ -28,7 +28,6 @@ import {
   Settings,
   ChevronDown,
   ShieldCheck,
-  Link2,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -58,7 +57,6 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
       { path: '/gm-tools', label: 'GM 工具', icon: Shield },
       { path: '/gm-accounts', label: 'GM 账号', icon: Crown },
       { path: '/rbac-config', label: 'RBAC 配置', icon: SlidersHorizontal },
-      { path: '/feishu-bindings', label: '飞书免登绑定', icon: Link2 },
     ],
   },
   {

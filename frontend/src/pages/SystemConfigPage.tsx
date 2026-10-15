@@ -2,19 +2,26 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SystemConfigForm } from '@/features/system-config/components/SystemConfigForm';
 import { ModelConfigPanel } from '@/features/model-config/components/ModelConfigPanel';
+import { FeishuBindingManager } from '@/features/feishu-binding/components/FeishuBindingManager';
 
-// 设置页（gm3）：系统配置与 AI 模型配置两个配置域合并为 tab；旧 /model-config 路由重定向至此（?tab=model）。
+// 设置页（gm3）：系统配置 / AI 模型配置 / 飞书免登绑定 三个配置域合并为 tab；
+// 旧 /model-config、/feishu-bindings 路由重定向至此（?tab=model / ?tab=bindings）。
 
-type SettingsTab = 'system' | 'model';
+type SettingsTab = 'system' | 'model' | 'bindings';
 
 const TABS: ReadonlyArray<{ key: SettingsTab; label: string }> = [
   { key: 'system', label: '系统配置' },
   { key: 'model', label: 'AI 模型配置' },
+  { key: 'bindings', label: '飞书免登绑定' },
 ];
+
+function tabFromParam(value: string | null): SettingsTab {
+  return value === 'model' || value === 'bindings' ? value : 'system';
+}
 
 export default function SystemConfigPage() {
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<SettingsTab>(searchParams.get('tab') === 'model' ? 'model' : 'system');
+  const [tab, setTab] = useState<SettingsTab>(tabFromParam(searchParams.get('tab')));
 
   return (
     <div className='space-y-4'>
@@ -41,6 +48,14 @@ export default function SystemConfigPage() {
 
       {tab === 'system' && <SystemConfigForm />}
       {tab === 'model' && <ModelConfigPanel />}
+      {tab === 'bindings' && (
+        <div className='space-y-3'>
+          <p className='text-sm text-muted-foreground'>
+            维护飞书用户与后台 AC 账号的 1:1 映射；凭证在「系统配置」的飞书段设置，未配置时免登整体关闭。
+          </p>
+          <FeishuBindingManager />
+        </div>
+      )}
     </div>
   );
 }

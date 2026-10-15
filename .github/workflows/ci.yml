@@ -274,3 +274,123 @@ jobs:
       - name: Output image info / 输出镜像信息
         run: |
           echo "Job image pushed: ${{ steps.vars.outputs.job_image_tag }}"
+
+  # ============================================================
+  # Stage 4: Staging SCF 自动部署（仅 develop）
+  # 双镜像推送成功后，调用 SCF UpdateFunctionCode 将 Staging
+  # Web/Job 函数切换到本次 {分支}-{short_sha} 镜像标签并轮询至 Active
+  # 所需 Secrets：TENCENT_SECRET_ID / TENCENT_SECRET_KEY（腾讯云 API 密钥）、
+  # SCF_STAGING_WEB_FUNCTION（必填）、SCF_STAGING_JOB_FUNCTION（可选，未配置则跳过 Job 函数更新）
+  # ============================================================
+  deploy-staging:
+    name: Deploy Staging / Staging SCF 部署
+    runs-on: ubuntu-latest
+    needs: [docker-app, docker-job]
+    # Staging 跟随 develop 分支：push 自动部署；手动 dispatch 也须在 develop 上执行
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 30
+    env:
+      # region / 命名空间用仓库变量（vars，非敏感）配置，未设置回落默认值；生产扩展命名空间对称用 SCF_PROD_NAMESPACE
+      SCF_REGION: ${{ vars.SCF_REGION || 'ap-guangzhou' }}
+      SCF_NAMESPACE: ${{ vars.SCF_STAGING_NAMESPACE || 'default' }}
+      # 条件变量须挂 job 级：步骤 if 读取时步骤自身的 env 块尚未生效
+      SCF_WEB_FUNCTION: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}
+      SCF_JOB_FUNCTION: ${{ secrets.SCF_STAGING_JOB_FUNCTION }}
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      - name: Install tccli / 安装腾讯云 CLI
+        run: pip3 install --quiet tccli
+
+      - name: Configure tccli / 配置腾讯云凭据
+        run: |
+          tccli configure set --region "$SCF_REGION"
+          tccli configure set --secretId '${{ secrets.TENCENT_SECRET_ID }}'
+          tccli configure set --secretKey '${{ secrets.TENCENT_SECRET_KEY }}'
+
+      - name: Compute image tags / 生成本次镜像标签
+        id: vars
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "app_image=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:develop-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "job_image=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_JOB }}:develop-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Update Web function / 更新 Staging Web 函数镜像
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(printf '{"ImageConfig":{"ImageType":"personal","ImageUri":"%s","ImagePort":9000}}' '${{ steps.vars.outputs.app_image }}')
+          for attempt in 1 2; do
+            if tccli scf UpdateFunctionCode \
+              --FunctionName "$SCF_WEB_FUNCTION" \
+              --Namespace "$SCF_NAMESPACE" \
+              --Code "$PAYLOAD" \
+              --output json; then
+              echo "UpdateFunctionCode accepted (attempt ${attempt})"
+              exit 0
+            fi
+            # 函数可能正处于 Updating 状态（操作冲突），等待后重试一次
+            if [ "$attempt" -lt 2 ]; then sleep 45; fi
+          done
+          echo "UpdateFunctionCode failed after retries" >&2
+          exit 1
+
+      - name: Update Job function / 更新 Staging Job 函数镜像（可选）
+        if: env.SCF_JOB_FUNCTION != ''
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(printf '{"ImageConfig":{"ImageType":"personal","ImageUri":"%s","ImagePort":-1}}' '${{ steps.vars.outputs.job_image }}')
+          for attempt in 1 2; do
+            if tccli scf UpdateFunctionCode \
+              --FunctionName "$SCF_JOB_FUNCTION" \
+              --Namespace "$SCF_NAMESPACE" \
+              --Code "$PAYLOAD" \
+              --output json; then
+              echo "UpdateFunctionCode accepted (attempt ${attempt})"
+              exit 0
+            fi
+            if [ "$attempt" -lt 2 ]; then sleep 45; fi
+          done
+          echo "UpdateFunctionCode failed after retries" >&2
+          exit 1
+
+      - name: Wait for functions Active / 等待函数镜像更新完成
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          check() {
+            local fn="$1"
+            local status=""
+            # 40 × 15s ≈ 10 分钟：镜像拉取与实例滚动可能较慢
+            for i in $(seq 1 40); do
+              status=$(tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json | jq -r '.Status')
+              case "$status" in
+                Active)
+                  echo "[OK] $fn is Active"
+                  return 0
+                  ;;
+                Updating|Creating)
+                  sleep 15
+                  ;;
+                *)
+                  echo "[FAIL] $fn status: $status" >&2
+                  tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json >&2 || true
+                  return 1
+                  ;;
+              esac
+            done
+            echo "[FAIL] timeout waiting for $fn (last status: $status)" >&2
+            return 1
+          }
+          sleep 10
+          check "$SCF_WEB_FUNCTION"
+          if [ -n "$SCF_JOB_FUNCTION" ]; then
+            check "$SCF_JOB_FUNCTION"
+          fi
+
+      - name: Output deploy info / 输出部署信息
+        run: |
+          echo "Staging Web function: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}"
+          echo "App image: ${{ steps.vars.outputs.app_image }}"
+          echo "Job image: ${{ steps.vars.outputs.job_image }}"

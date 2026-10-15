@@ -305,10 +305,12 @@ jobs:
         run: pip3 install --quiet tccli
 
       - name: Configure tccli / 配置腾讯云凭据
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         run: |
-          tccli configure set --region "$SCF_REGION"
-          tccli configure set --secretId '${{ secrets.TENCENT_SECRET_ID }}'
-          tccli configure set --secretKey '${{ secrets.TENCENT_SECRET_KEY }}'
+          # tccli configure set 用位置参数 varname value，不支持 --region/--secretId 旗标
+          tccli configure set region "$SCF_REGION" secretId "$TENCENT_SECRET_ID" secretKey "$TENCENT_SECRET_KEY"
 
       - name: Compute image tags / 生成本次镜像标签
         id: vars

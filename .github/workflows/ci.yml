@@ -290,9 +290,9 @@ jobs:
     if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     timeout-minutes: 30
     env:
-      # region / 命名空间用仓库变量（vars，非敏感）配置，未设置回落默认值；生产扩展命名空间对称用 SCF_PROD_NAMESPACE
-      SCF_REGION: ${{ vars.SCF_REGION || 'ap-guangzhou' }}
-      SCF_NAMESPACE: ${{ vars.SCF_STAGING_NAMESPACE || 'default' }}
+      # region / 命名空间用仓库变量（vars，非敏感）配置，未设置回落本账号实际值；生产扩展命名空间对称用 SCF_PROD_NAMESPACE
+      SCF_REGION: ${{ vars.SCF_REGION || 'ap-beijing' }}
+      SCF_NAMESPACE: ${{ vars.SCF_STAGING_NAMESPACE || 'staging' }}
       # 条件变量须挂 job 级：步骤 if 读取时步骤自身的 env 块尚未生效
       SCF_WEB_FUNCTION: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}
       SCF_JOB_FUNCTION: ${{ secrets.SCF_STAGING_JOB_FUNCTION }}

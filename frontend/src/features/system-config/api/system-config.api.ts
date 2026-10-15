@@ -16,6 +16,8 @@ export interface SystemConfigPayload {
     webhookUrl?: string | null;
     webhookSecret?: string | null;
     webBaseUrl?: string | null;
+    appId?: string | null;
+    appSecret?: string | null;
   };
   ai?: {
     dailyTokenBudget?: number | null;

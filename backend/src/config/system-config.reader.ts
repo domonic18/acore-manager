@@ -14,6 +14,8 @@ export const SYSTEM_CONFIG_KEYS = {
   soapPassword: 'soap_password',
   feishuWebhookUrl: 'feishu_webhook_url',
   feishuWebhookSecret: 'feishu_webhook_secret',
+  feishuAppId: 'feishu_app_id',
+  feishuAppSecret: 'feishu_app_secret',
   acmWebBaseUrl: 'acm_web_base_url',
   aiDailyTokenBudget: 'ai_daily_token_budget',
   aiAgentCacheSize: 'ai_agent_cache_size',

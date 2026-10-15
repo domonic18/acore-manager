@@ -27,6 +27,10 @@ export function SystemConfigForm() {
   const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
   const [webBaseUrl, setWebBaseUrl] = useState('');
 
+  const [feishuAppId, setFeishuAppId] = useState('');
+  const [feishuAppSecret, setFeishuAppSecret] = useState('');
+  const [clearFeishuAppSecret, setClearFeishuAppSecret] = useState(false);
+
   const [dailyTokenBudget, setDailyTokenBudget] = useState('');
   const [agentCacheSize, setAgentCacheSize] = useState('');
   const [toolCallBudget, setToolCallBudget] = useState('');
@@ -50,6 +54,7 @@ export function SystemConfigForm() {
 
     setWebhookUrl(config.feishu.webhookUrl);
     setWebBaseUrl(config.feishu.webBaseUrl);
+    setFeishuAppId(config.feishu.appId);
 
     setDailyTokenBudget(String(config.ai.dailyTokenBudget));
     setAgentCacheSize(String(config.ai.agentCacheSize));
@@ -98,6 +103,9 @@ export function SystemConfigForm() {
           // 密钥 write-only：输入新值覆盖、勾选清除、留空不修改（与 SOAP 密码同规则）
           ...(clearWebhookSecret ? { webhookSecret: null } : webhookSecret ? { webhookSecret } : {}),
           webBaseUrl: webBaseUrl.trim(),
+          // 免登凭证：App ID 明文回显、留空清除（= 免登关闭）；Secret 规则同加签密钥
+          appId: feishuAppId.trim(),
+          ...(clearFeishuAppSecret ? { appSecret: null } : feishuAppSecret ? { appSecret: feishuAppSecret } : {}),
         },
         ai,
         login,
@@ -110,6 +118,8 @@ export function SystemConfigForm() {
       setPassword('');
       setWebhookSecret('');
       setClearWebhookSecret(false);
+      setFeishuAppSecret('');
+      setClearFeishuAppSecret(false);
       toast.success('系统配置已保存');
     } catch (err) {
       toast.error((err as Error).message || '保存失败');
@@ -282,6 +292,47 @@ export function SystemConfigForm() {
                 className={inputClass}
               />
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className='rounded-lg border border-border bg-card p-4 space-y-3'>
+        <h2 className='text-base font-semibold'>飞书免登</h2>
+        <p className='text-xs text-muted-foreground'>
+          工作台网页应用快速登录凭证（飞书开放平台 → 凭证与基础信息）。两项均配置后免登开启，改库即热生效；任一留空/清除 = 免登关闭。
+          Secret 加密存储仅回显掩码，输入新值即覆盖、留空表示不修改。
+        </p>
+        <div className='grid gap-3 sm:grid-cols-2'>
+          <div>
+            <label className={labelClass} htmlFor='feishu-app-id'>App ID</label>
+            <input
+              id='feishu-app-id'
+              value={feishuAppId}
+              onChange={(e) => setFeishuAppId(e.target.value)}
+              placeholder='cli_xxxxxxxx'
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor='feishu-app-secret'>App Secret</label>
+            <input
+              id='feishu-app-secret'
+              type='password'
+              value={feishuAppSecret}
+              onChange={(e) => setFeishuAppSecret(e.target.value)}
+              placeholder={config?.feishu.appSecretMasked ?? '未配置（免登关闭）'}
+              className={inputClass}
+            />
+            {config?.feishu.appSecretMasked && (
+              <label className='mt-1 flex items-center gap-1.5 text-xs text-muted-foreground'>
+                <input
+                  type='checkbox'
+                  checked={clearFeishuAppSecret}
+                  onChange={(e) => setClearFeishuAppSecret(e.target.checked)}
+                />
+                保存时清除已配置 Secret（关闭免登）
+              </label>
+            )}
           </div>
         </div>
       </section>

@@ -13,6 +13,15 @@ export interface LoginResult {
   };
 }
 
+/** JWT 签发唯一出口：密码登录与飞书免登共用同一格式，middleware/auth 依赖此结构 */
+export function issueToken(account: { id: number; username: string }, gmlevel: number): string {
+  return jwt.sign(
+    { id: account.id, username: account.username, gmlevel },
+    env.JWT_SECRET,
+    { expiresIn: env.JWT_EXPIRES_IN as any },
+  );
+}
+
 export class AuthService {
   async login(username: string, password: string): Promise<LoginResult | null> {
     const account = await accountRepository.findByUsername(username);
@@ -39,16 +48,10 @@ export class AuthService {
       return null;
     }
 
-    const token = jwt.sign(
-      { id: account.id, username: account.username, gmlevel },
-      env.JWT_SECRET,
-      { expiresIn: env.JWT_EXPIRES_IN as any },
-    );
-
     logger.info({ userId: account.id, username }, 'User logged in');
 
     return {
-      token,
+      token: issueToken(account, gmlevel),
       user: {
         id: account.id,
         username: account.username,

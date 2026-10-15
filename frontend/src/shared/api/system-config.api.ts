@@ -15,6 +15,8 @@ export interface SystemConfig {
     webhookUrl: string;
     webhookSecretMasked: string | null;
     webBaseUrl: string;
+    appId: string;
+    appSecretMasked: string | null;
   };
   ai: {
     dailyTokenBudget: number;

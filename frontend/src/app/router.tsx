@@ -118,6 +118,7 @@ export const router = createBrowserRouter([
             element: <GmGuard minLevel={3} />,
             children: [
               { path: 'model-config', element: <Navigate to="/system-config?tab=model" replace /> },
+              { path: 'feishu-bindings', element: <Navigate to="/system-config?tab=bindings" replace /> },
               { path: 'system-config', element: withSuspense(SystemConfigPage) },
             ],
           },

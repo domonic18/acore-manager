@@ -26,6 +26,7 @@ import aiAssistantRoutes from './routes/ai-assistant.routes';
 import aiAnalysisRoutes from './routes/ai-analysis.routes';
 import aiPromptRoutes from './routes/ai-prompt.routes';
 import aiWatchlistRoutes from './routes/ai-watchlist.routes';
+import feishuBindingRoutes from './routes/feishu-binding.routes';
 import { dbReadinessGate } from './middleware/db-readiness-gate';
 
 
@@ -66,6 +67,7 @@ export function createApp(): Application {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/rbac', rbacRoutes);
   app.use('/api/system-config', systemConfigRoutes);
+  app.use('/api/feishu-bindings', feishuBindingRoutes);
   app.use('/api/ai/model-configs', aiModelConfigRoutes);
   app.use('/api/ai/token-usage', aiTokenUsageRoutes);
   app.use('/api/ai/diagnosis', aiDiagnosisRoutes);

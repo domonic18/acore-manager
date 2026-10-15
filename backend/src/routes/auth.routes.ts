@@ -2,14 +2,36 @@ import { asyncHandler } from '@/shared/async-handler';
 import { Request, Response, Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authService } from '@/services/auth.service';
+import { feishuAuthService } from '@/services/feishu-auth.service';
 import { bruteForceService } from '@/services/brute-force.service';
 import { captchaService } from '@/services/captcha.service';
 import { getClientIp } from '@/shared/utils/ip.util';
 import { env } from '@/config/env';
 import { readRuntimeBool, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
+import { ServiceError } from '@/shared/errors/service-error';
 
 const router = Router();
+
+// 飞书免登端点轻量限流（内存固定窗口）：code 由飞书签发且一次性，爆破无收益，
+// 限流仅防公网刷接口放大出站请求；重启清零可接受
+const FEISHU_LOGIN_RATE = { limit: 30, windowMs: 60_000 };
+const feishuRateMap = new Map<string, { count: number; resetAt: number }>();
+function checkFeishuRate(ip: string): boolean {
+  const now = Date.now();
+  if (feishuRateMap.size > 1000) {
+    for (const [key, entry] of feishuRateMap) {
+      if (entry.resetAt <= now) feishuRateMap.delete(key);
+    }
+  }
+  const entry = feishuRateMap.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    feishuRateMap.set(ip, { count: 1, resetAt: now + FEISHU_LOGIN_RATE.windowMs });
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= FEISHU_LOGIN_RATE.limit;
+}
 
 function buildIpKey(ip: string): string {
   return `login:attempts:ip:${ip}`;
@@ -110,6 +132,41 @@ router.post(
     await bruteForceService.recordSuccess(ipKey, accountKey);
 
     res.jsonSuccess(result);
+  }),
+);
+
+router.get(
+  '/feishu/status',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.jsonSuccess(await feishuAuthService.getStatus());
+  }),
+);
+
+router.post(
+  '/feishu/login',
+  [body('code').isString().trim().isLength({ min: 8, max: 256 })],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request', 400);
+      return;
+    }
+
+    const ip = getClientIp(req);
+    if (!checkFeishuRate(ip)) {
+      res.jsonError('请求过于频繁，请稍后再试 / Too many requests', 429);
+      return;
+    }
+
+    try {
+      res.jsonSuccess(await feishuAuthService.loginWithCode(req.body.code));
+    } catch (err) {
+      if (err instanceof ServiceError) {
+        res.jsonError(err.message, err.status);
+        return;
+      }
+      throw err;
+    }
   }),
 );
 

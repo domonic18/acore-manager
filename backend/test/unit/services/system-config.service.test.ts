@@ -322,6 +322,8 @@ describe('getView: 新增 section', () => {
       webhookUrl: 'https://env.feishu.example/hook',
       webhookSecretMasked: null,
       webBaseUrl: 'https://env-web.example',
+      appId: '',
+      appSecretMasked: null,
     });
     expect(view.ai).toEqual({ dailyTokenBudget: 5000000, agentCacheSize: 4, toolCallBudget: 20, toolTimeoutMs: 5000 });
     expect(view.login).toEqual({

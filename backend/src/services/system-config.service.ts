@@ -34,6 +34,9 @@ export interface SystemConfigView {
   feishu: {
     webhookUrl: string;
     webhookSecretMasked: string | null;
+    /** 飞书应用 App ID（免登登录用）；空串 = 未配置，免登功能关闭。仅存 DB，无 env 回落 */
+    appId: string;
+    appSecretMasked: string | null;
     webBaseUrl: string;
   };
   ai: {
@@ -67,9 +70,12 @@ export interface SystemConfigInput {
     password?: string;
   };
   feishu?: {
-    /** 空串/null = 清除该键（回落环境变量） */
+    /** 空串/null = 清除该键（回落环境变量；appId/appSecret 例外：清除 = 免登功能关闭） */
     webhookUrl?: string | null;
     webhookSecret?: string | null;
+    appId?: string | null;
+    /** write-only：输入新值覆盖、空串/null = 清除（免登功能关闭） */
+    appSecret?: string | null;
     webBaseUrl?: string | null;
   };
   ai?: {
@@ -157,6 +163,11 @@ class SystemConfigService {
         webhookSecretMasked:
           dbString(SYSTEM_CONFIG_KEYS.feishuWebhookSecret) !== undefined
             ? maskToken(dbString(SYSTEM_CONFIG_KEYS.feishuWebhookSecret) ?? '')
+            : null,
+        appId: dbString(SYSTEM_CONFIG_KEYS.feishuAppId) ?? '',
+        appSecretMasked:
+          dbString(SYSTEM_CONFIG_KEYS.feishuAppSecret) !== undefined
+            ? maskToken(dbString(SYSTEM_CONFIG_KEYS.feishuAppSecret) ?? '')
             : null,
         webBaseUrl: dbString(SYSTEM_CONFIG_KEYS.acmWebBaseUrl) ?? env.ACM_WEB_BASE_URL,
       },
@@ -253,6 +264,22 @@ class SystemConfigService {
         message: '加签密钥过长 / invalid webhook secret',
       });
       changedKeys.push(SYSTEM_CONFIG_KEYS.feishuWebhookSecret);
+    }
+    if (feishu.appId !== undefined) {
+      // 免登应用凭证仅存 DB（无 env 回落）：清除 = 飞书免登登录整体关闭
+      await this.saveOrClear(SYSTEM_CONFIG_KEYS.feishuAppId, feishu.appId, operatorName, {
+        pattern: /^cli_[A-Za-z0-9]{6,}$/,
+        message: 'App ID 需为飞书开放平台凭证格式（cli_ 开头）/ invalid feishu app id',
+      });
+      changedKeys.push(SYSTEM_CONFIG_KEYS.feishuAppId);
+    }
+    if (feishu.appSecret !== undefined) {
+      await this.saveOrClear(SYSTEM_CONFIG_KEYS.feishuAppSecret, feishu.appSecret, operatorName, {
+        encrypt: true,
+        maxLength: 256,
+        message: 'App Secret 过长 / invalid feishu app secret',
+      });
+      changedKeys.push(SYSTEM_CONFIG_KEYS.feishuAppSecret);
     }
     if (feishu.webBaseUrl !== undefined) {
       await this.saveOrClear(SYSTEM_CONFIG_KEYS.acmWebBaseUrl, feishu.webBaseUrl, operatorName, {

@@ -396,3 +396,62 @@ jobs:
           echo "Staging Web function: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}"
           echo "App image: ${{ steps.vars.outputs.app_image }}"
           echo "Job image: ${{ steps.vars.outputs.job_image }}"
+
+  # ============================================================
+  # Stage 5: 生产 acm 库迁移（仅 main）
+  # 双镜像推送成功后，SSH 到生产主机对 acm 库增量应用 docker/database/migrations/
+  # 中尚未在 acm_migrations 记账的迁移（单事务：迁移文件 + 记账 INSERT，失败即中止）。
+  # 迁移先于云函数切换执行：旧镜像 + 新表是安全的中间态。
+  # 需 Secret：PROD_MIGRATE_SSH_KEY（CI 专用私钥，公钥已装到生产 ubuntu@101.42.41.169）
+  # ============================================================
+  deploy-prod-migration:
+    name: Prod DB Migration / 生产库迁移
+    runs-on: ubuntu-latest
+    needs: [docker-app, docker-job]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      - name: Setup SSH key / 配置 CI 专用私钥
+        env:
+          PROD_MIGRATE_SSH_KEY: ${{ secrets.PROD_MIGRATE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$PROD_MIGRATE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 101.42.41.169 >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Apply pending migrations / 增量应用未执行迁移
+        env:
+          PROD_HOST: ubuntu@101.42.41.169
+        run: |
+          set -euo pipefail
+          MIGRATION_DIR=docker/database/migrations
+          applied=0
+          for file in "$MIGRATION_DIR"/*.sql; do
+            name=$(basename "$file")
+            # 已记账则跳过（幂等，可重复执行）
+            if ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+              "sudo -n -u postgres psql -d acm -tAc \"SELECT 1 FROM acm_migrations WHERE name = '$name'\"" | grep -qx 1; then
+              echo "[skip] $name already applied"
+              continue
+            fi
+            echo "[apply] $name"
+            scp -o BatchMode=yes -o IdentitiesOnly=yes -q "$file" "$PROD_HOST:/tmp/$name"
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+              "sudo -n -u postgres psql -d acm -v ON_ERROR_STOP=1 -1 -f '/tmp/$name' -c \"INSERT INTO acm_migrations (name) VALUES ('$name');\""
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" "rm -f '/tmp/$name'"
+            applied=$((applied + 1))
+          done
+          echo "Applied $applied migration(s)"
+
+      - name: Verify table owners / 验证表 owner
+        env:
+          PROD_HOST: ubuntu@101.42.41.169
+        # 2026-10-08 生产事故教训：postgres 建表后 acm 角色无权限 → 页面 500；迁移文件已内嵌 OWNER TO，此处留验证输出
+        run: |
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+            "sudo -n -u postgres psql -d acm -c \"SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\""

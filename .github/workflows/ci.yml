@@ -125,8 +125,9 @@ jobs:
   # Stage 3: Docker 镜像构建与推送（app/job 双镜像并行 job，互不拖累；
   # 单镜像失败可 re-run failed jobs 单独重试）
   # 跨境推送（海外 runner → TCR）偶发 stall：首推步骤级超时 25 分钟兜底，
-  # 失败后构建走 GHA cache 秒级重建、立即重推一次；provenance 关闭，
-  # 免除 TCR 不认的 attestation manifest 并减小推送体积
+  # 失败后构建走 GHA cache 秒级重建、立即重推一次；首推 continue-on-error，
+  # 结论由 gate 步骤裁定（任一次成功即绿），避免首推超时把 job 判死、Stage 4 被 needs 跳过；
+  # provenance 关闭，免除 TCR 不认的 attestation manifest 并减小推送体积
   # ============================================================
   docker-app:
     name: Docker App / App 镜像构建推送
@@ -168,8 +169,11 @@ jobs:
           echo "app_version=${APP_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push / 构建并推送（第 1 次尝试）
+        id: push
         uses: docker/build-push-action@v7
         # 步骤级超时：stall 时 25 分钟强制失败，把剩余预算留给重试
+        # continue-on-error：首推失败不直接判死 job，最终结论由 gate 步骤裁定
+        continue-on-error: true
         timeout-minutes: 25
         with:
           context: .
@@ -185,7 +189,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and Push / 构建并推送（重试）
-        if: failure()
+        if: steps.push.outcome == 'failure'
+        id: push-retry
         uses: docker/build-push-action@v7
         timeout-minutes: 30
         with:
@@ -200,6 +205,17 @@ jobs:
             VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Conclude push outcome / 推送结论裁定
+        if: always()
+        # 任一次尝试成功即 job 成功；两次皆败才判红（否则首推超时失败会把 job 判死、Stage 4 被 needs 跳过）
+        run: |
+          if [ "${{ steps.push.outcome }}" = "success" ] || [ "${{ steps.push-retry.outcome }}" = "success" ]; then
+            echo "[OK] image push succeeded"
+          else
+            echo "[FAIL] image push failed in both attempts" >&2
+            exit 1
+          fi
 
       - name: Output image info / 输出镜像信息
         run: |
@@ -242,8 +258,11 @@ jobs:
           echo "job_latest_tag=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_JOB }}:latest" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push Job Image / 构建并推送 Job 镜像（第 1 次尝试）
+        id: push
         uses: docker/build-push-action@v7
         # 步骤级超时：stall 时 25 分钟强制失败，把剩余预算留给重试
+        # continue-on-error：首推失败不直接判死 job，最终结论由 gate 步骤裁定
+        continue-on-error: true
         timeout-minutes: 25
         with:
           context: .
@@ -257,7 +276,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and Push Job Image / 构建并推送 Job 镜像（重试）
-        if: failure()
+        if: steps.push.outcome == 'failure'
+        id: push-retry
         uses: docker/build-push-action@v7
         timeout-minutes: 30
         with:
@@ -270,6 +290,17 @@ jobs:
             ${{ steps.vars.outputs.job_latest_tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Conclude push outcome / 推送结论裁定
+        if: always()
+        # 任一次尝试成功即 job 成功；两次皆败才判红（否则首推超时失败会把 job 判死、Stage 4 被 needs 跳过）
+        run: |
+          if [ "${{ steps.push.outcome }}" = "success" ] || [ "${{ steps.push-retry.outcome }}" = "success" ]; then
+            echo "[OK] job image push succeeded"
+          else
+            echo "[FAIL] job image push failed in both attempts" >&2
+            exit 1
+          fi
 
       - name: Output image info / 输出镜像信息
         run: |
@@ -396,3 +427,62 @@ jobs:
           echo "Staging Web function: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}"
           echo "App image: ${{ steps.vars.outputs.app_image }}"
           echo "Job image: ${{ steps.vars.outputs.job_image }}"
+
+  # ============================================================
+  # Stage 5: 生产 acm 库迁移（仅 main）
+  # 双镜像推送成功后，SSH 到生产主机对 acm 库增量应用 docker/database/migrations/
+  # 中尚未在 acm_migrations 记账的迁移（单事务：迁移文件 + 记账 INSERT，失败即中止）。
+  # 迁移先于云函数切换执行：旧镜像 + 新表是安全的中间态。
+  # 需 Secret：PROD_MIGRATE_SSH_KEY（CI 专用私钥，公钥已装到生产 ubuntu@101.42.41.169）
+  # ============================================================
+  deploy-prod-migration:
+    name: Prod DB Migration / 生产库迁移
+    runs-on: ubuntu-latest
+    needs: [docker-app, docker-job]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      - name: Setup SSH key / 配置 CI 专用私钥
+        env:
+          PROD_MIGRATE_SSH_KEY: ${{ secrets.PROD_MIGRATE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$PROD_MIGRATE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 101.42.41.169 >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Apply pending migrations / 增量应用未执行迁移
+        env:
+          PROD_HOST: ubuntu@101.42.41.169
+        run: |
+          set -euo pipefail
+          MIGRATION_DIR=docker/database/migrations
+          applied=0
+          for file in "$MIGRATION_DIR"/*.sql; do
+            name=$(basename "$file")
+            # 已记账则跳过（幂等，可重复执行）
+            if ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+              "sudo -n -u postgres psql -d acm -tAc \"SELECT 1 FROM acm_migrations WHERE name = '$name'\"" | grep -qx 1; then
+              echo "[skip] $name already applied"
+              continue
+            fi
+            echo "[apply] $name"
+            scp -o BatchMode=yes -o IdentitiesOnly=yes -q "$file" "$PROD_HOST:/tmp/$name"
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+              "sudo -n -u postgres psql -d acm -v ON_ERROR_STOP=1 -1 -f '/tmp/$name' -c \"INSERT INTO acm_migrations (name) VALUES ('$name');\""
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" "rm -f '/tmp/$name'"
+            applied=$((applied + 1))
+          done
+          echo "Applied $applied migration(s)"
+
+      - name: Verify table owners / 验证表 owner
+        env:
+          PROD_HOST: ubuntu@101.42.41.169
+        # 2026-10-08 生产事故教训：postgres 建表后 acm 角色无权限 → 页面 500；迁移文件已内嵌 OWNER TO，此处留验证输出
+        run: |
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+            "sudo -n -u postgres psql -d acm -c \"SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\""

@@ -9,17 +9,24 @@ const H5SDK_URL = 'https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5
 
 interface AuthCodeResult {
   errno?: number;
+  errCode?: number;
+  errMsg?: string;
   code?: string;
+}
+
+interface JsapiFn {
+  (opts: Record<string, unknown>): void;
 }
 
 interface H5SdkWindow {
   h5sdk?: {
     ready: (fn: () => void) => void;
-    requestAccess?: (opts: Record<string, unknown>, cb: (r: AuthCodeResult) => void) => void;
-    requestAuthCode?: (opts: Record<string, unknown>, cb: (r: AuthCodeResult) => void) => void;
+    requestAccess?: JsapiFn;
+    requestAuthCode?: JsapiFn;
   };
   tt?: {
-    requestAccess?: (opts: Record<string, unknown>, cb: (r: AuthCodeResult) => void) => void;
+    requestAccess?: JsapiFn;
+    requestAuthCode?: JsapiFn;
   };
 }
 
@@ -55,23 +62,34 @@ function loadH5Sdk(): Promise<H5SdkWindow> {
 
 function requestAuthCode(w: H5SdkWindow, appId: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const onCode = (r: AuthCodeResult) => {
-      if (r.errno === 0 && r.code) {
+    // 飞书 JSAPI 标准对象约定：success/fail 是 opts 内的回调属性，而非第二位置参数；
+    // 传错位置（旧实现）会被 SDK 静默忽略，表现为"正在通过飞书登录"无限挂起
+    const finish = (timer: ReturnType<typeof setTimeout>) => (r: AuthCodeResult) => {
+      clearTimeout(timer);
+      if (r && r.code) {
         resolve(r.code);
         return;
       }
-      reject(new Error(`飞书授权失败（errno ${r.errno ?? 'unknown'}）/ feishu auth failed`));
+      reject(new Error(`飞书授权失败（errno=${r?.errno ?? '?'} errCode=${r?.errCode ?? '?'} ${r?.errMsg ?? ''}）/ feishu auth failed`));
     };
 
-    // 免登授权须在 h5sdk.ready 后调用；requestAccess 缺失（旧客户端）时回退 requestAuthCode
+    // 超时兜底：SDK 无响应（如客户端版本过旧/弹层被拦）时不再无限挂起，回落密码登录
+    const timer = setTimeout(
+      () => reject(new Error('飞书授权超时，请重试或使用密码登录 / feishu auth timeout')),
+      20_000,
+    );
+    const onCode = finish(timer);
+
+    // 免登授权须在 h5sdk.ready 后调用；官方示例经 tt.* 调用，缺 requestAccess（旧客户端）回退 requestAuthCode
     w.h5sdk?.ready(() => {
-      if (typeof w.h5sdk?.requestAccess === 'function') {
-        w.h5sdk.requestAccess({ appID: appId, scopeList: [], state: '' }, onCode);
-      } else if (typeof w.h5sdk?.requestAuthCode === 'function') {
-        w.h5sdk.requestAuthCode({ appId }, onCode);
-      } else if (typeof w.tt?.requestAccess === 'function') {
-        w.tt.requestAccess({ appID: appId, scopeList: [] }, onCode);
+      const requestAccess = w.tt?.requestAccess ?? w.h5sdk?.requestAccess;
+      const requestAuthCodeFn = w.tt?.requestAuthCode ?? w.h5sdk?.requestAuthCode;
+      if (typeof requestAccess === 'function') {
+        requestAccess({ appID: appId, scopeList: [], state: '', success: onCode, fail: onCode });
+      } else if (typeof requestAuthCodeFn === 'function') {
+        requestAuthCodeFn({ appId, success: onCode, fail: onCode });
       } else {
+        clearTimeout(timer);
         reject(new Error('当前环境不支持飞书免登 / feishu jsapi unavailable'));
       }
     });

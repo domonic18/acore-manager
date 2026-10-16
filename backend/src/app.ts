@@ -33,7 +33,19 @@ import { dbReadinessGate } from './middleware/db-readiness-gate';
 export function createApp(): Application {
   const app = express();
 
-  app.use(helmet());
+  // 飞书工作台免登需加载外域 h5-js-sdk（bytegoofy CDN，响应无 CORP 头）：
+  // CSP 放行其 script-src 与授权页 frame-src；关闭 COEP（默认 require-corp 会拦无 CORP 的跨域脚本）
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          scriptSrc: ["'self'", 'https://lf1-cdn-tos.bytegoofy.com'],
+          frameSrc: ["'self'", 'https://*.feishu.cn'],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
   const allowedOrigins = env.ALLOWED_ORIGINS ? env.ALLOWED_ORIGINS.split(',') : [];
   app.use(cors({
     origin: (origin, callback) => {

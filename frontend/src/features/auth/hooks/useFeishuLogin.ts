@@ -3,8 +3,8 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { toast } from '@/shared/utils/toast.util';
 import { feishuAuthApi } from '../api/feishu-auth.api';
 
-// 飞书工作台免登：动态加载 h5sdk，requestAccess 取一次性 code（新客户端），
-// 客户端过旧回退 requestAuthCode；code 交后端换取 JWT。appId 用 ref 传递避免闭包过期。
+// 飞书工作台免登：动态加载 h5sdk，requestAccess 取一次性 code（需客户端 V6.9.0+），
+// 8s 静默回退 requestAuthCode，20s 超时兜底；code 交后端换取 JWT。appId 用 ref 传递避免闭包过期。
 const H5SDK_URL = 'https://lf1-cdn-tos.bytegoofy.com/goofy/lark/op/h5-js-sdk-1.5.26.js';
 
 interface AuthCodeResult {
@@ -19,6 +19,7 @@ interface JsapiFn {
 }
 
 interface H5SdkWindow {
+  __JSSDK_VERSION__?: { SDKVersion?: string; SDKCDNVersion?: string };
   h5sdk?: {
     ready: (fn: () => void) => void;
     requestAccess?: JsapiFn;
@@ -62,36 +63,83 @@ function loadH5Sdk(): Promise<H5SdkWindow> {
 
 function requestAuthCode(w: H5SdkWindow, appId: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    // 飞书 JSAPI 标准对象约定：success/fail 是 opts 内的回调属性，而非第二位置参数；
-    // 传错位置（旧实现）会被 SDK 静默忽略，表现为"正在通过飞书登录"无限挂起
-    const finish = (timer: ReturnType<typeof setTimeout>) => (r: AuthCodeResult) => {
-      clearTimeout(timer);
+    let readyFired = false;
+    let settled = false;
+    let branch = '-';
+
+    // 诊断串进错误消息：免登静默失败时无需远程调试即可定位卡点
+    // （bridge setup 未完成=ready=0；旧客户端原生层不识别 requestAccess=access 静默）
+    const diag = () => {
+      const v = w.__JSSDK_VERSION__;
+      return [
+        `sdk=${v?.SDKVersion ?? '?'}/${v?.SDKCDNVersion ?? '?'}`,
+        `h5sdk=${w.h5sdk ? 1 : 0}`,
+        `tt=${w.tt ? 1 : 0}`,
+        `access=${typeof (w.tt?.requestAccess ?? w.h5sdk?.requestAccess)}`,
+        `authcode=${typeof (w.tt?.requestAuthCode ?? w.h5sdk?.requestAuthCode)}`,
+        `ready=${readyFired ? 1 : 0}`,
+        `branch=${branch}`,
+        `appIdLen=${appId.length}`,
+      ].join(' ');
+    };
+
+    const finish = (r: AuthCodeResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(mainTimer);
       if (r && r.code) {
         resolve(r.code);
         return;
       }
-      reject(new Error(`飞书授权失败（errno=${r?.errno ?? '?'} errCode=${r?.errCode ?? '?'} ${r?.errMsg ?? ''}）/ feishu auth failed`));
+      reject(new Error(`飞书授权失败（errno=${r?.errno ?? '?'} errCode=${r?.errCode ?? '?'} ${r?.errMsg ?? ''}）[${diag()}] / feishu auth failed`));
     };
 
-    // 超时兜底：SDK 无响应（如客户端版本过旧/弹层被拦）时不再无限挂起，回落密码登录
-    const timer = setTimeout(
-      () => reject(new Error('飞书授权超时，请重试或使用密码登录 / feishu auth timeout')),
-      20_000,
-    );
-    const onCode = finish(timer);
+    const fail = (msg: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(mainTimer);
+      reject(new Error(`${msg} [${diag()}]`));
+    };
 
-    // 免登授权须在 h5sdk.ready 后调用；官方示例经 tt.* 调用，缺 requestAccess（旧客户端）回退 requestAuthCode
-    w.h5sdk?.ready(() => {
-      const requestAccess = w.tt?.requestAccess ?? w.h5sdk?.requestAccess;
-      const requestAuthCodeFn = w.tt?.requestAuthCode ?? w.h5sdk?.requestAuthCode;
-      if (typeof requestAccess === 'function') {
-        requestAccess({ appID: appId, scopeList: [], state: '', success: onCode, fail: onCode });
-      } else if (typeof requestAuthCodeFn === 'function') {
-        requestAuthCodeFn({ appId, success: onCode, fail: onCode });
-      } else {
-        clearTimeout(timer);
-        reject(new Error('当前环境不支持飞书免登 / feishu jsapi unavailable'));
+    // 超时兜底：SDK 无响应（bridge 未就绪/客户端过旧/弹层被拦）时不再无限挂起，回落密码登录
+    const mainTimer = setTimeout(() => fail('飞书授权超时，请重试或使用密码登录 / feishu auth timeout'), 20_000);
+
+    const guarded = (invoke: () => void, fnName: string): boolean => {
+      try {
+        invoke();
+        return true;
+      } catch (err) {
+        fail(`飞书免登调用异常 ${fnName}: ${err instanceof Error ? err.message : String(err)}`);
+        return true;
       }
+    };
+
+    const callAuthCode = () => {
+      const fn = w.tt?.requestAuthCode ?? w.h5sdk?.requestAuthCode;
+      if (typeof fn !== 'function') return false;
+      branch = 'authcode';
+      return guarded(() => fn({ appId, success: finish, fail: finish }), 'requestAuthCode');
+    };
+
+    const callAccess = () => {
+      const fn = w.tt?.requestAccess ?? w.h5sdk?.requestAccess;
+      if (typeof fn !== 'function') return false;
+      branch = 'access';
+      return guarded(() => fn({ appID: appId, scopeList: [], state: '', success: finish, fail: finish }), 'requestAccess');
+    };
+
+    // 免登授权须在 h5sdk.ready 后调用；requestAccess 需客户端 V6.9.0+，
+    // 旧客户端原生层不识别该方法且静默丢弃 → 8s 无响应回退 requestAuthCode
+    w.h5sdk?.ready(() => {
+      readyFired = true;
+      if (settled) return;
+      if (callAccess()) {
+        setTimeout(() => {
+          if (!settled && branch === 'access') callAuthCode();
+        }, 8_000);
+        return;
+      }
+      if (!callAuthCode()) fail('当前环境不支持飞书免登 / feishu jsapi unavailable');
     });
   });
 }

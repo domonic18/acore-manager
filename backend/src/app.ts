@@ -35,11 +35,12 @@ export function createApp(): Application {
 
   // 飞书工作台免登需加载外域 h5-js-sdk（bytegoofy CDN，响应无 CORP 头）：
   // CSP 放行其 script-src 与授权页 frame-src；关闭 COEP（默认 require-corp 会拦无 CORP 的跨域脚本）
+  // lf-package-cn.feishucdn.com 为飞书官方远程调试脚本（前端 ?debug=1 时加载）
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
-          scriptSrc: ["'self'", 'https://lf1-cdn-tos.bytegoofy.com'],
+          scriptSrc: ["'self'", 'https://lf1-cdn-tos.bytegoofy.com', 'https://lf-package-cn.feishucdn.com'],
           frameSrc: ["'self'", 'https://*.feishu.cn'],
         },
       },

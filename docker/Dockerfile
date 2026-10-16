@@ -1,7 +1,8 @@
 # Stage 1: Frontend build
 # Use Debian-based image because rolldown (Vite 8 bundler) lacks musl native bindings
 # node:22：deepagents 传递依赖 openai@7 要求 node>=22，且 npm 10.8(node20) 有 Exit handler never called 损坏安装 bug
-FROM node:22 AS frontend-builder
+# 构建层钉在构建机原生架构（Mac arm64 原生编译，产物为架构无关 JS/静态资源）
+FROM --platform=$BUILDPLATFORM node:22 AS frontend-builder
 WORKDIR /app/frontend
 
 ARG VITE_APP_VERSION
@@ -13,7 +14,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Backend build
-FROM node:22-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS backend-builder
 WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm ci --legacy-peer-deps

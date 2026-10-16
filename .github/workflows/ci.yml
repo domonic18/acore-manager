@@ -112,6 +112,19 @@ jobs:
         working-directory: backend
         run: npx tsc --noEmit
 
+      # Dockerfile 静态检查放美国 runner（hadolint 无 darwin-arm64 原生版，构建机为 macOS）
+      - name: Dockerfile Lint / Dockerfile 检查
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile
+          failure-threshold: error
+
+      - name: Job Dockerfile Lint / Job Dockerfile 检查
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile.job
+          failure-threshold: error
+
       - name: Test / 运行测试
         if: github.event.inputs.skip_test != 'true'
         working-directory: backend
@@ -124,14 +137,14 @@ jobs:
   # ============================================================
   # Stage 3: Docker 镜像构建与推送（app/job 双镜像并行 job，互不拖累；
   # 单镜像失败可 re-run failed jobs 单独重试）
-  # 跨境推送（海外 runner → TCR）偶发 stall：首推步骤级超时 25 分钟兜底，
-  # 失败后构建走 GHA cache 秒级重建、立即重推一次；首推 continue-on-error，
-  # 结论由 gate 步骤裁定（任一次成功即绿），避免首推超时把 job 判死、Stage 4 被 needs 跳过；
+  # 构建机为自托管 runner（Mac，本机直推 TCR 国内链路）；保留首推失败重试兜底，
+  # 失败后构建走 buildx 本地缓存秒级重建、立即重推一次；首推 continue-on-error，
+  # 结论由 gate 步骤裁定（任一次成功即绿），避免首推失败把 job 判死、Stage 4 被 needs 跳过；
   # provenance 关闭，免除 TCR 不认的 attestation manifest 并减小推送体积
   # ============================================================
   docker-app:
     name: Docker App / App 镜像构建推送
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     needs: [frontend, backend]
     if: (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
     timeout-minutes: 60
@@ -140,14 +153,9 @@ jobs:
       - name: Checkout / 检出代码
         uses: actions/checkout@v6
 
-      - name: Dockerfile Lint / Dockerfile 检查
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: docker/Dockerfile
-          failure-threshold: error
-
-      - name: Set up Docker Buildx / 配置 Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      # 本机持久 builder（buildkitd 配国内 docker.io 镜像源 + 本地缓存跨 job 持久，见 ~/actions-runner/buildkitd.toml）
+      - name: Select builder / 选择构建器
+        run: docker buildx use ci-builder
 
       - name: Login to TCR / 登录腾讯云容器镜像服务
         uses: docker/login-action@v4
@@ -180,13 +188,12 @@ jobs:
           file: docker/Dockerfile
           push: true
           provenance: false
+          platforms: linux/amd64
           tags: |
             ${{ steps.vars.outputs.image_tag }}
             ${{ steps.vars.outputs.latest_tag }}
           build-args: |
             VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Build and Push / 构建并推送（重试）
         if: steps.push.outcome == 'failure'
@@ -198,13 +205,12 @@ jobs:
           file: docker/Dockerfile
           push: true
           provenance: false
+          platforms: linux/amd64
           tags: |
             ${{ steps.vars.outputs.image_tag }}
             ${{ steps.vars.outputs.latest_tag }}
           build-args: |
             VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Conclude push outcome / 推送结论裁定
         if: always()
@@ -224,7 +230,7 @@ jobs:
 
   docker-job:
     name: Docker Job / Job 镜像构建推送
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     needs: [frontend, backend]
     if: (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
     timeout-minutes: 60
@@ -233,14 +239,9 @@ jobs:
       - name: Checkout / 检出代码
         uses: actions/checkout@v6
 
-      - name: Job Dockerfile Lint / Job Dockerfile 检查
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: docker/Dockerfile.job
-          failure-threshold: error
-
-      - name: Set up Docker Buildx / 配置 Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      # 本机持久 builder（buildkitd 配国内 docker.io 镜像源 + 本地缓存跨 job 持久，见 ~/actions-runner/buildkitd.toml）
+      - name: Select builder / 选择构建器
+        run: docker buildx use ci-builder
 
       - name: Login to TCR / 登录腾讯云容器镜像服务
         uses: docker/login-action@v4
@@ -269,11 +270,10 @@ jobs:
           file: docker/Dockerfile.job
           push: true
           provenance: false
+          platforms: linux/amd64
           tags: |
             ${{ steps.vars.outputs.job_image_tag }}
             ${{ steps.vars.outputs.job_latest_tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Build and Push Job Image / 构建并推送 Job 镜像（重试）
         if: steps.push.outcome == 'failure'
@@ -285,11 +285,10 @@ jobs:
           file: docker/Dockerfile.job
           push: true
           provenance: false
+          platforms: linux/amd64
           tags: |
             ${{ steps.vars.outputs.job_image_tag }}
             ${{ steps.vars.outputs.job_latest_tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Conclude push outcome / 推送结论裁定
         if: always()

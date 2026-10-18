@@ -5,6 +5,8 @@ import { CharacterDetailInfo } from '@/features/character/components/CharacterDe
 import { CharacterInventoryPanel } from '@/features/character/components/CharacterInventoryPanel';
 import { CharacterDetailActions } from '@/features/character/components/CharacterDetailActions';
 import { MuteDialog } from '@/features/character/components/MuteDialog';
+import { KickDialog } from '@/features/character/components/KickDialog';
+import { MessageDialog } from '@/features/character/components/MessageDialog';
 import { CharacterUnmuteConfirmDialog } from '@/features/character/components/CharacterUnmuteConfirmDialog';
 import { BanFlowDialogs } from '@/shared/components/BanFlowDialogs';
 import { BanHistoryTable } from '@/shared/components/BanHistoryTable';
@@ -51,6 +53,8 @@ export default function CharacterDetailPage() {
           onOpenMute={() => actions.setShowMuteDialog(true)}
           onOpenUnmute={() => actions.setShowUnmuteConfirmDialog(true)}
           onOpenHonor={() => actions.setShowHonorDialog(true)}
+          onOpenKick={() => actions.setShowKickDialog(true)}
+          onOpenMessage={() => actions.setShowMessageDialog(true)}
         />
       </div>
 
@@ -102,6 +106,23 @@ export default function CharacterDetailPage() {
         characterName={character.name}
         open={actions.showHonorDialog}
         onClose={() => actions.setShowHonorDialog(false)}
+      />
+      <KickDialog
+        open={actions.showKickDialog}
+        onClose={() => actions.setShowKickDialog(false)}
+        characterName={character.name}
+        characterGuid={character.guid}
+        onSubmit={actions.handleExecuteKick}
+        pending={actions.kickPending}
+      />
+      <MessageDialog
+        open={actions.showMessageDialog}
+        onClose={() => actions.setShowMessageDialog(false)}
+        characterName={character.name}
+        characterGuid={character.guid}
+        online={character.online === 1}
+        onSubmit={actions.handleExecuteMessage}
+        pending={actions.messagePending}
       />
     </div>
   );

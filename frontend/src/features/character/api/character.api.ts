@@ -78,4 +78,10 @@ export const characterApi = {
 
   unmute: (guid: number) =>
     apiClient.post<{ success: boolean }>(`/api/characters/${guid}/unmute`),
+
+  kick: (guid: number, data?: { reason?: string }) =>
+    apiClient.post<{ ok: boolean; message: string }>(`/api/characters/${guid}/kick`, data),
+
+  sendMessage: (guid: number, data: { message: string }) =>
+    apiClient.post<{ ok: boolean; message: string; channel: 'chat' | 'mail' }>(`/api/characters/${guid}/message`, data),
 };

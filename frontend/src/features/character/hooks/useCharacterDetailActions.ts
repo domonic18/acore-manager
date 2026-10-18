@@ -24,6 +24,8 @@ export function useCharacterDetailActions(characterGuid: number) {
   const [kickPending, setKickPending] = useState(false);
   const [showMessageDialog, setShowMessageDialog] = useState(false);
   const [messagePending, setMessagePending] = useState(false);
+  const [showMailDialog, setShowMailDialog] = useState(false);
+  const [mailPending, setMailPending] = useState(false);
 
   const handleExecuteKick = (reason?: string) => {
     setKickPending(true);
@@ -33,6 +35,11 @@ export function useCharacterDetailActions(characterGuid: number) {
   const handleExecuteMessage = (message: string) => {
     setMessagePending(true);
     return characterApi.sendMessage(characterGuid, { message }).finally(() => setMessagePending(false));
+  };
+
+  const handleExecuteSendMail = (data: Parameters<typeof characterApi.sendMail>[1]) => {
+    setMailPending(true);
+    return characterApi.sendMail(characterGuid, data).finally(() => setMailPending(false));
   };
 
   const handleExecuteBan = () => {
@@ -83,6 +90,10 @@ export function useCharacterDetailActions(characterGuid: number) {
     setShowMessageDialog,
     messagePending,
     handleExecuteMessage,
+    showMailDialog,
+    setShowMailDialog,
+    mailPending,
+    handleExecuteSendMail,
     handleExecuteBan,
     handleExecuteMute,
     handleExecuteUnban,

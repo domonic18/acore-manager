@@ -131,6 +131,48 @@ class CharacterRepository {
       [guid],
     );
   }
+
+  // 管理员邮件识别（AC cs_send.cpp 控制台约定）：stationery=61（MAIL_STATIONERY_GM），
+  // .send items 控制台发送 sender=收件人自己（寄给自己），.send money sender=0 → 两者并集；
+  // 普通玩家邮件 sender 恒为真实 guid ≠ 0，无误伤
+  async getAdminMails(guid: number, limit = 50): Promise<any[]> {
+    return charactersDataSource.query(
+      `SELECT
+        m.id,
+        m.subject,
+        m.body,
+        m.money,
+        m.has_items AS hasItems,
+        m.checked,
+        m.deliver_time AS deliverTime,
+        m.expire_time AS expireTime
+      FROM mail m
+      WHERE m.receiver = ? AND m.stationery = 61 AND (m.sender = m.receiver OR m.sender = 0)
+      ORDER BY m.deliver_time DESC, m.id DESC
+      LIMIT ?`,
+      [guid, limit],
+    );
+  }
+
+  async getMailItems(mailIds: number[]): Promise<any[]> {
+    if (mailIds.length === 0) return [];
+    const placeholders = mailIds.map(() => '?').join(',');
+    return charactersDataSource.query(
+      `SELECT
+        mi.mail_id AS mailId,
+        ii.itemEntry,
+        ii.count,
+        it.displayid AS displayId,
+        it.Quality AS quality,
+        COALESCE(loc.Name, it.name) AS name
+      FROM mail_items mi
+      INNER JOIN item_instance ii ON mi.item_guid = ii.guid
+      INNER JOIN acore_world.item_template it ON ii.itemEntry = it.entry
+      LEFT JOIN acore_world.item_template_locale loc ON it.entry = loc.ID AND loc.locale = 'zhCN'
+      WHERE mi.mail_id IN (${placeholders})`,
+      mailIds,
+    );
+  }
 }
 
 export const characterRepository = new CharacterRepository();

@@ -14,6 +14,7 @@ interface CharacterDetailActionsProps {
   onOpenHonor: () => void;
   onOpenKick: () => void;
   onOpenMessage: () => void;
+  onOpenMail: () => void;
 }
 
 export function CharacterDetailActions({
@@ -27,6 +28,7 @@ export function CharacterDetailActions({
   onOpenHonor,
   onOpenKick,
   onOpenMessage,
+  onOpenMail,
 }: CharacterDetailActionsProps) {
   const navigate = useNavigate();
   const { hasGmLevel } = usePermission();
@@ -65,6 +67,14 @@ export function CharacterDetailActions({
       >
         发消息
       </button>
+      {hasGmLevel(3) && (
+        <button
+          onClick={onOpenMail}
+          className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700"
+        >
+          发送邮件
+        </button>
+      )}
       <button
         onClick={onOpenMute}
         className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"

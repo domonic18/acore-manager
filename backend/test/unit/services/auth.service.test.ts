@@ -81,4 +81,26 @@ describe('AuthService', () => {
       );
     });
   });
+
+  describe('verifyPassword', () => {
+    it('returns false when account not found', async () => {
+      (accountRepository.findById as jest.Mock).mockResolvedValue(null);
+
+      await expect(authService.verifyPassword(1, 'password')).resolves.toBe(false);
+      expect(verifySRP6Password).not.toHaveBeenCalled();
+    });
+
+    it('delegates to SRP6 verification with DB username', async () => {
+      (accountRepository.findById as jest.Mock).mockResolvedValue({
+        id: 1,
+        username: 'admin',
+        salt: Buffer.alloc(32),
+        verifier: Buffer.alloc(32),
+      });
+      (verifySRP6Password as jest.Mock).mockReturnValue(true);
+
+      await expect(authService.verifyPassword(1, 'good-pass')).resolves.toBe(true);
+      expect(verifySRP6Password).toHaveBeenCalledWith('admin', 'good-pass', expect.any(Buffer), expect.any(Buffer));
+    });
+  });
 });

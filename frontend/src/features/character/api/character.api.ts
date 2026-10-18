@@ -55,6 +55,42 @@ export interface CharacterInventoryItem {
   icon: string | null;
 }
 
+export interface ItemSearchResult {
+  entry: number;
+  name: string;
+  description: string;
+  displayId: number;
+  quality: number;
+  stackable: number;
+  maxCount: number;
+  icon: string | null;
+}
+
+export interface SendAdminMailPayload {
+  subject: string;
+  body: string;
+  items: { entry: number; count: number }[];
+  money: { gold: number; silver: number; copper: number };
+}
+
+export interface AdminMailReceipt {
+  type: 'items' | 'money';
+  ok: boolean;
+  message: string;
+}
+
+export interface AdminMailHistoryItem {
+  id: number;
+  subject: string;
+  body: string;
+  money: number;
+  hasItems: boolean;
+  read: boolean;
+  deliverTime: string;
+  expireTime: string;
+  items: { itemEntry: number; count: number; displayId: number; quality: number; name: string; icon: string | null }[];
+}
+
 export const characterApi = {
   list: (params: { page?: number; pageSize?: number; search?: string; includeDeleted?: boolean; online?: boolean }) =>
     apiClient.get<CharacterListResult>(
@@ -84,4 +120,15 @@ export const characterApi = {
 
   sendMessage: (guid: number, data: { message: string }) =>
     apiClient.post<{ ok: boolean; message: string; channel: 'chat' | 'mail' }>(`/api/characters/${guid}/message`, data),
+
+  searchItems: (q: string, limit = 10) =>
+    apiClient.get<ItemSearchResult[]>(
+      `/api/items/search?q=${encodeURIComponent(q)}&limit=${limit}`
+    ),
+
+  sendMail: (guid: number, data: SendAdminMailPayload) =>
+    apiClient.post<{ ok: boolean; receipts: AdminMailReceipt[] }>(`/api/characters/${guid}/mail`, data),
+
+  adminMails: (guid: number) =>
+    apiClient.get<AdminMailHistoryItem[]>(`/api/characters/${guid}/admin-mails`),
 };

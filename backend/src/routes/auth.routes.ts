@@ -9,6 +9,7 @@ import { getClientIp } from '@/shared/utils/ip.util';
 import { env } from '@/config/env';
 import { readRuntimeBool, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { authMiddleware, AuthRequest } from '@/middleware/auth';
+import { requireGmLevel } from '@/middleware/gm-guard';
 import { ServiceError } from '@/shared/errors/service-error';
 
 const router = Router();
@@ -173,5 +174,39 @@ router.post(
 router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
   res.jsonSuccess(req.user);
 });
+
+// 高危操作密码二次确认（管理员发件等）：须已登录且 gmlevel=3（当前唯一消费方为发件链路），
+// 按 JWT 身份验本人密码，复用登录爆破防护（同 attempts 键空间策略，独立键前缀）
+router.post(
+  '/verify-password',
+  authMiddleware,
+  requireGmLevel(3),
+  [body('password').isString().isLength({ min: 1, max: 128 })],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request', 400);
+      return;
+    }
+
+    const ipKey = `verify:attempts:ip:${getClientIp(req)}`;
+    const accountKey = `verify:attempts:account:${req.user!.username.toLowerCase()}`;
+    const defenseStatus = await bruteForceService.check(ipKey, accountKey);
+    if (!defenseStatus.allowed) {
+      res.jsonError(formatLockoutMessage(defenseStatus.remainingSeconds), 429);
+      return;
+    }
+
+    const valid = await authService.verifyPassword(req.user!.id, req.body.password);
+    if (!valid) {
+      await bruteForceService.recordFailure(ipKey, accountKey);
+      res.jsonError('密码错误 / Invalid password', 401);
+      return;
+    }
+
+    await bruteForceService.recordSuccess(ipKey, accountKey);
+    res.jsonSuccess({ valid: true });
+  }),
+);
 
 export default router;

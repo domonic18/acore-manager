@@ -25,6 +25,14 @@ export function useCharacterInventory(guid: number) {
   });
 }
 
+export function useAdminMails(guid: number) {
+  return useQuery({
+    queryKey: ['characters', 'admin-mails', guid],
+    queryFn: () => characterApi.adminMails(guid),
+    enabled: guid > 0,
+  });
+}
+
 export function useUnbanCharacter() {
   const queryClient = useQueryClient();
 

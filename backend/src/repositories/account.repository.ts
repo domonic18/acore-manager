@@ -12,6 +12,10 @@ class AccountRepository extends BaseRepository<Account> {
     return this.repo.findOne({ where: { username } });
   }
 
+  async findById(id: number): Promise<Account | null> {
+    return this.repo.findOne({ where: { id } });
+  }
+
   async getGmLevel(accountId: number): Promise<number> {
     const access = await authDataSource
       .getRepository(AccountAccess)

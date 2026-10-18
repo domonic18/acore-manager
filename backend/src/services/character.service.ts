@@ -4,6 +4,7 @@ import { logger } from '@/middleware/request-logger';
 import { characterRepository } from '@/repositories/character.repository';
 import { auditLogService } from './audit-log.service';
 import { sanitizeCommandArg, extractResultText, isReceiptError } from '@/shared/soap-command';
+import { itemService } from './item.service';
 import { ITEM_DISPLAY_INFO } from '@/generated/itemDisplayInfo';
 
 export interface CharacterListItem {
@@ -59,6 +60,41 @@ export interface CharacterInventoryItem {
   quality: number;
   name: string;
   icon: string | null;
+}
+
+export interface AdminMailItemInput {
+  entry: number;
+  count: number;
+}
+
+export interface AdminMailInput {
+  subject: string;
+  body: string;
+  items: AdminMailItemInput[];
+  money: { gold: number; silver: number; copper: number };
+}
+
+export interface MailReceipt {
+  type: 'items' | 'money';
+  ok: boolean;
+  message: string;
+}
+
+// 单封邮件附件硬上限与金币上限（AC MAX_MAIL_ITEMS=12；铜板总量须在 int32 内，
+// 99999g = 999,990,000 copper，留足余量避免溢出变负导致扣钱）
+export const ADMIN_MAIL_MAX_ITEMS = 12;
+export const ADMIN_MAIL_MAX_COPPER = 999_990_000;
+
+export interface AdminMailHistoryItem {
+  id: number;
+  subject: string;
+  body: string;
+  money: number;
+  hasItems: boolean;
+  read: boolean;
+  deliverTime: Date;
+  expireTime: Date;
+  items: { itemEntry: number; count: number; displayId: number; quality: number; name: string; icon: string | null }[];
 }
 
 export class CharacterService {
@@ -378,6 +414,134 @@ export class CharacterService {
       .catch((err: unknown) => logger.error(`[character] message audit failed: ${(err as Error).message}`));
 
     return base;
+  }
+
+  // 管理员发件（物品/金币）：AC 原生 .send items / .send money 经 SOAP，gmlevel≥2 + 审计。
+  // items 与 money 同时存在时发两封邮件（AC 单封不支持两者兼附）；
+  // 发送不可撤回（回收已暂缓），故拆堆/上限校验前置到发送前，失败即 400 不触达 worldserver
+  async sendAdminMail(
+    guid: number,
+    input: AdminMailInput,
+    operatorId: number,
+    operatorName: string,
+  ): Promise<{ ok: boolean; receipts: MailReceipt[] }> {
+    const detail = await this.getCharacterDetail(guid);
+    if (!detail) {
+      throw new Error('Character not found');
+    }
+
+    const subject = (input.subject || '').trim();
+    const body = (input.body || '').trim();
+    if (!subject || subject.length > 100) throw new Error('邮件标题须为 1-100 字');
+    if (body.length > 500) throw new Error('邮件正文不得超过 500 字');
+
+    const gold = input.money?.gold ?? 0;
+    const silver = input.money?.silver ?? 0;
+    const copper = input.money?.copper ?? 0;
+    if (![gold, silver, copper].every((v) => Number.isInteger(v) && v >= 0)) throw new Error('金币数额须为非负整数');
+    if (silver > 99 || copper > 99 || gold > 99999) throw new Error('金币数额越界（金≤99999，银/铜<100）');
+    const totalCopper = gold * 10000 + silver * 100 + copper;
+    if (totalCopper > ADMIN_MAIL_MAX_COPPER) throw new Error('单封邮件金币总额超限');
+
+    const items = input.items || [];
+    if (items.length === 0 && totalCopper === 0) throw new Error('至少需附带物品或金币');
+
+    // 拆堆：AC 按 MaxStackSize 自动拆分，此处按同规则预算格数，超 12 格直接拒绝
+    const entries = [...new Set(items.map((i) => i.entry))];
+    const templates = await itemService.getItemsByEntries(entries);
+    const pairs: { entry: number; count: number }[] = [];
+    for (const item of items) {
+      const tpl = templates.get(item.entry);
+      if (!tpl) throw new Error(`物品 ID ${item.entry} 不存在`);
+      if (!Number.isInteger(item.count) || item.count < 1 || item.count > 1000) throw new Error(`物品 ${tpl.name} 数量须为 1-1000`);
+      if (tpl.maxCount > 0 && item.count > tpl.maxCount) throw new Error(`唯一物品「${tpl.name}」单件持有上限 ${tpl.maxCount}，数量超出将被拒收`);
+      const stack = tpl.stackable > 0 ? tpl.stackable : 1;
+      let remaining = item.count;
+      while (remaining > 0) {
+        const take = Math.min(remaining, stack);
+        pairs.push({ entry: item.entry, count: take });
+        remaining -= take;
+        if (pairs.length > ADMIN_MAIL_MAX_ITEMS) throw new Error(`附件合计超过 ${ADMIN_MAIL_MAX_ITEMS} 格上限`);
+      }
+    }
+
+    const safeSubject = sanitizeCommandArg(subject);
+    const safeBody = sanitizeCommandArg(body) || ' ';
+    const receipts: MailReceipt[] = [];
+    try {
+      if (pairs.length > 0) {
+        const itemList = pairs.map((p) => `${p.entry}:${p.count}`).join(' ');
+        const raw = await soapService.sendCommand(
+          `.send items ${detail.name} "${safeSubject}" "${safeBody}" ${itemList}`,
+        );
+        const message = extractResultText(raw);
+        receipts.push({ type: 'items', ok: !isReceiptError(message), message: message || '已受理' });
+      }
+      if (totalCopper > 0) {
+        const raw = await soapService.sendCommand(
+          `.send money ${detail.name} "${safeSubject}" "${safeBody}" ${totalCopper}`,
+        );
+        const message = extractResultText(raw);
+        receipts.push({ type: 'money', ok: !isReceiptError(message), message: message || '已受理' });
+      }
+    } catch (err) {
+      receipts.push({ type: receipts.length === 0 ? 'items' : 'money', ok: false, message: (err as Error).message || 'SOAP 命令失败' });
+    }
+
+    const ok = receipts.every((r) => r.ok);
+    await auditLogService
+      .record({
+        operatorId,
+        operatorName,
+        operation: 'character.mail_item',
+        target: `guid:${guid}`,
+        details: JSON.stringify({
+          characterName: detail.name,
+          subject,
+          body,
+          items: pairs.map((p) => ({ entry: p.entry, count: p.count, name: templates.get(p.entry)?.name ?? '' })),
+          money: { gold, silver, copper, totalCopper },
+          receipts,
+          ok,
+        }),
+      })
+      .catch((err: unknown) => logger.error(`[character] admin mail audit failed: ${(err as Error).message}`));
+
+    return { ok, receipts };
+  }
+
+  // 管理员发件记录（角色详情页独立区块）：items 空 + has_items=1 即附件已领取；
+  // 已读 = checked & 1（玩家客户端打开邮件时置位）
+  async getAdminMails(guid: number): Promise<AdminMailHistoryItem[]> {
+    const mails = await characterRepository.getAdminMails(guid);
+    if (mails.length === 0) return [];
+
+    const itemRows = await characterRepository.getMailItems(mails.map((m: any) => m.id));
+    const itemsByMail = new Map<number, any[]>();
+    for (const row of itemRows) {
+      const list = itemsByMail.get(row.mailId) ?? [];
+      list.push({
+        itemEntry: row.itemEntry,
+        count: row.count,
+        displayId: row.displayId,
+        quality: row.quality,
+        name: row.name,
+        icon: ITEM_DISPLAY_INFO[row.displayId] ?? null,
+      });
+      itemsByMail.set(row.mailId, list);
+    }
+
+    return mails.map((m: any) => ({
+      id: m.id,
+      subject: m.subject ?? '',
+      body: m.body ?? '',
+      money: m.money,
+      hasItems: m.hasItems === 1,
+      read: (m.checked & 1) !== 0,
+      deliverTime: new Date(m.deliverTime * 1000),
+      expireTime: new Date(m.expireTime * 1000),
+      items: itemsByMail.get(m.id) ?? [],
+    }));
   }
 }
 

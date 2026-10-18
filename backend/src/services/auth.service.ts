@@ -23,6 +23,15 @@ export function issueToken(account: { id: number; username: string }, gmlevel: n
 }
 
 export class AuthService {
+  // 高危操作密码二次确认（管理员发件等）：复用 SRP6 校验，与 login 同一凭据源
+  async verifyPassword(accountId: number, password: string): Promise<boolean> {
+    const account = await accountRepository.findById(accountId);
+    if (!account) {
+      return false;
+    }
+    return verifySRP6Password(account.username, password, account.salt, account.verifier);
+  }
+
   async login(username: string, password: string): Promise<LoginResult | null> {
     const account = await accountRepository.findByUsername(username);
     if (!account) {

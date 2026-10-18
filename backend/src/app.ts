@@ -9,6 +9,7 @@ import { errorHandler } from './middleware/error-handler';
 import authRoutes from './routes/auth.routes';
 import accountRoutes from './routes/account.routes';
 import characterRoutes from './routes/character.routes';
+import itemRoutes from './routes/item.routes';
 import transactionRoutes from './routes/transaction.routes';
 import gmToolRoutes from './routes/gm-tool.routes';
 import auditLogRoutes from './routes/audit-log.routes';
@@ -79,6 +80,7 @@ export function createApp(): Application {
   app.use('/api/auth', authRoutes);
   app.use('/api/accounts', accountRoutes);
   app.use('/api/characters', characterRoutes);
+  app.use('/api/items', itemRoutes);
   app.use('/api/transactions', transactionRoutes);
   app.use('/api/gm', gmToolRoutes);
   app.use('/api/ip-bans', ipBanRoutes);

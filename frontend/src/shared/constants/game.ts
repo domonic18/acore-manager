@@ -47,3 +47,13 @@ export function getRaceIconUrl(raceId: number, gender: number = 0): string {
 export function getClassIconUrl(classId: number): string {
   return `/assets/icons/class/hd${classId}.png`;
 }
+
+// 物品品质边框/文字色（0粗糙 1普通 2优秀 3精良 4史诗 5传说）
+export const QUALITY_COLORS: Record<number, string> = {
+  0: '#9d9d9d',
+  1: '#ffffff',
+  2: '#1eff00',
+  3: '#0070dd',
+  4: '#a335ee',
+  5: '#ff8000',
+};

@@ -77,6 +77,25 @@ router.get(
   }),
 );
 
+// 角色物品全量（装备/背包/银行）：纯只读，前端按 bag/slot 分区渲染
+router.get(
+  '/:guid/inventory',
+  authMiddleware,
+  requireGmLevel(1),
+  [param('guid').isInt().toInt()],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid character GUID', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const items = await characterService.getCharacterInventory(guid);
+    res.jsonSuccess(items, items.length);
+  }),
+);
+
 router.post(
   '/:guid/ban',
   authMiddleware,
@@ -160,6 +179,68 @@ router.post(
     await characterService.unmuteCharacter(guid, (req as any).user?.id || 0);
 
     res.jsonSuccess({ unmuted: true });
+  }),
+);
+
+// 踢下线（AC 原生 .kick 经 SOAP）：处罚级操作 gmlevel≥2，回执与审计见 service
+router.post(
+  '/:guid/kick',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('guid').isInt().toInt(),
+    body('reason').optional().isString().trim().isLength({ max: 200 }),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    try {
+      const result = await characterService.kickCharacter(
+        guid,
+        (req as any).user?.id || 0,
+        (req as any).user?.username || '',
+        req.body.reason as string | undefined,
+      );
+      res.jsonSuccess(result);
+    } catch (err) {
+      res.jsonError((err as Error).message || '踢下线失败', 400);
+    }
+  }),
+);
+
+// 单向私信（在线 .send message / 离线降级 .send mail）：gmlevel≥2 + 审计
+router.post(
+  '/:guid/message',
+  authMiddleware,
+  requireGmLevel(2),
+  [
+    param('guid').isInt().toInt(),
+    body('message').isString().trim().isLength({ min: 1, max: 255 }),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('消息须为 1-255 字', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    try {
+      const result = await characterService.messageCharacter(
+        guid,
+        (req as any).user?.id || 0,
+        (req as any).user?.username || '',
+        req.body.message as string,
+      );
+      res.jsonSuccess(result);
+    } catch (err) {
+      res.jsonError((err as Error).message || '发送失败', 400);
+    }
   }),
 );
 

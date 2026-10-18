@@ -2,8 +2,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacterDetail } from '@/features/character/hooks/useCharacter';
 import { useCharacterDetailActions } from '@/features/character/hooks/useCharacterDetailActions';
 import { CharacterDetailInfo } from '@/features/character/components/CharacterDetailInfo';
+import { CharacterInventoryPanel } from '@/features/character/components/CharacterInventoryPanel';
 import { CharacterDetailActions } from '@/features/character/components/CharacterDetailActions';
 import { MuteDialog } from '@/features/character/components/MuteDialog';
+import { KickDialog } from '@/features/character/components/KickDialog';
+import { MessageDialog } from '@/features/character/components/MessageDialog';
 import { CharacterUnmuteConfirmDialog } from '@/features/character/components/CharacterUnmuteConfirmDialog';
 import { BanFlowDialogs } from '@/shared/components/BanFlowDialogs';
 import { BanHistoryTable } from '@/shared/components/BanHistoryTable';
@@ -50,10 +53,18 @@ export default function CharacterDetailPage() {
           onOpenMute={() => actions.setShowMuteDialog(true)}
           onOpenUnmute={() => actions.setShowUnmuteConfirmDialog(true)}
           onOpenHonor={() => actions.setShowHonorDialog(true)}
+          onOpenKick={() => actions.setShowKickDialog(true)}
+          onOpenMessage={() => actions.setShowMessageDialog(true)}
         />
       </div>
 
       <CharacterDetailInfo character={character} />
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold">物品</h2>
+        <CharacterInventoryPanel guid={character.guid} />
+      </section>
+
       <BanHistoryTable bans={character.bans} />
 
       <BanFlowDialogs
@@ -95,6 +106,23 @@ export default function CharacterDetailPage() {
         characterName={character.name}
         open={actions.showHonorDialog}
         onClose={() => actions.setShowHonorDialog(false)}
+      />
+      <KickDialog
+        open={actions.showKickDialog}
+        onClose={() => actions.setShowKickDialog(false)}
+        characterName={character.name}
+        characterGuid={character.guid}
+        onSubmit={actions.handleExecuteKick}
+        pending={actions.kickPending}
+      />
+      <MessageDialog
+        open={actions.showMessageDialog}
+        onClose={() => actions.setShowMessageDialog(false)}
+        characterName={character.name}
+        characterGuid={character.guid}
+        online={character.online === 1}
+        onSubmit={actions.handleExecuteMessage}
+        pending={actions.messagePending}
       />
     </div>
   );

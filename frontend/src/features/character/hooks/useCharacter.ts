@@ -17,6 +17,14 @@ export function useCharacterDetail(guid: number) {
   });
 }
 
+export function useCharacterInventory(guid: number) {
+  return useQuery({
+    queryKey: ['characters', 'inventory', guid],
+    queryFn: () => characterApi.inventory(guid),
+    enabled: guid > 0,
+  });
+}
+
 export function useUnbanCharacter() {
   const queryClient = useQueryClient();
 

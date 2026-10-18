@@ -77,6 +77,25 @@ router.get(
   }),
 );
 
+// 角色物品全量（装备/背包/银行）：纯只读，前端按 bag/slot 分区渲染
+router.get(
+  '/:guid/inventory',
+  authMiddleware,
+  requireGmLevel(1),
+  [param('guid').isInt().toInt()],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid character GUID', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const items = await characterService.getCharacterInventory(guid);
+    res.jsonSuccess(items, items.length);
+  }),
+);
+
 router.post(
   '/:guid/ban',
   authMiddleware,
@@ -162,5 +181,6 @@ router.post(
     res.jsonSuccess({ unmuted: true });
   }),
 );
+
 
 export default router;

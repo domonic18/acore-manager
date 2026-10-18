@@ -2,6 +2,7 @@ import { cacheService } from './cache.service';
 import { soapService } from './soap.service';
 import { logger } from '@/middleware/request-logger';
 import { characterRepository } from '@/repositories/character.repository';
+import { ITEM_DISPLAY_INFO } from '@/generated/itemDisplayInfo';
 
 export interface CharacterListItem {
   guid: number;
@@ -43,6 +44,19 @@ export interface CharacterListResult {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export interface CharacterInventoryItem {
+  itemGuid: number;
+  bag: number;
+  slot: number;
+  itemEntry: number;
+  count: number;
+  displayId: number;
+  containerSlots: number;
+  quality: number;
+  name: string;
+  icon: string | null;
 }
 
 export class CharacterService {
@@ -114,6 +128,32 @@ export class CharacterService {
       banReason: item.banReason,
       active: item.active,
     }));
+  }
+
+  // 角色物品（装备/背包/银行）：只读全量 inventory 行 + displayid→图标名映射，Redis 缓存 60s
+  async getCharacterInventory(guid: number): Promise<CharacterInventoryItem[]> {
+    const cacheKey = `character:inventory:${guid}`;
+    const cached = await cacheService.get<CharacterInventoryItem[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const rows = await characterRepository.getCharacterInventory(guid);
+    const result: CharacterInventoryItem[] = rows.map((row: any) => ({
+      itemGuid: row.itemGuid,
+      bag: row.bag,
+      slot: row.slot,
+      itemEntry: row.itemEntry,
+      count: row.count,
+      displayId: row.displayId,
+      containerSlots: row.containerSlots,
+      quality: row.quality,
+      name: row.name,
+      icon: ITEM_DISPLAY_INFO[row.displayId] ?? null,
+    }));
+
+    await cacheService.set(cacheKey, result, 60);
+    return result;
   }
 
   async getCharacterDetail(guid: number): Promise<CharacterDetail | null> {
@@ -237,6 +277,7 @@ export class CharacterService {
       throw new Error('Failed to unmute character', { cause: error });
     }
   }
+
 }
 
 export const characterService = new CharacterService();

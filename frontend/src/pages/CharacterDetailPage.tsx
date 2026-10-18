@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacterDetail } from '@/features/character/hooks/useCharacter';
 import { useCharacterDetailActions } from '@/features/character/hooks/useCharacterDetailActions';
 import { CharacterDetailInfo } from '@/features/character/components/CharacterDetailInfo';
+import { CharacterInventoryPanel } from '@/features/character/components/CharacterInventoryPanel';
 import { CharacterDetailActions } from '@/features/character/components/CharacterDetailActions';
 import { MuteDialog } from '@/features/character/components/MuteDialog';
 import { CharacterUnmuteConfirmDialog } from '@/features/character/components/CharacterUnmuteConfirmDialog';
@@ -54,6 +55,12 @@ export default function CharacterDetailPage() {
       </div>
 
       <CharacterDetailInfo character={character} />
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-bold">物品</h2>
+        <CharacterInventoryPanel guid={character.guid} />
+      </section>
+
       <BanHistoryTable bans={character.bans} />
 
       <BanFlowDialogs

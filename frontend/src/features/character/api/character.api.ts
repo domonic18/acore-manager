@@ -42,6 +42,19 @@ export interface CharacterListResult {
   pageSize: number;
 }
 
+export interface CharacterInventoryItem {
+  itemGuid: number;
+  bag: number;
+  slot: number;
+  itemEntry: number;
+  count: number;
+  displayId: number;
+  containerSlots: number;
+  quality: number;
+  name: string;
+  icon: string | null;
+}
+
 export const characterApi = {
   list: (params: { page?: number; pageSize?: number; search?: string; includeDeleted?: boolean; online?: boolean }) =>
     apiClient.get<CharacterListResult>(
@@ -51,6 +64,8 @@ export const characterApi = {
     ),
 
   detail: (guid: number) => apiClient.get<CharacterDetail>(`/api/characters/${guid}`),
+
+  inventory: (guid: number) => apiClient.get<CharacterInventoryItem[]>(`/api/characters/${guid}/inventory`),
 
   unban: (guid: number) =>
     apiClient.post<{ success: boolean }>(`/api/characters/${guid}/unban`),

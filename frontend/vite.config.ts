@@ -29,7 +29,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:9000',
+        // 本地多实例联调可覆盖：VITE_API_TARGET=http://localhost:9010 npm run dev
+        target: process.env.VITE_API_TARGET || 'http://localhost:9000',
         changeOrigin: true,
       },
     },

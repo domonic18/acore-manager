@@ -45,6 +45,8 @@ export function SystemConfigForm() {
   const [trustedIps, setTrustedIps] = useState('');
   const [carryExcludedZones, setCarryExcludedZones] = useState('');
 
+  const [iconUpstreams, setIconUpstreams] = useState('');
+
   useEffect(() => {
     if (!config) return;
     setRealm(config.defaultRealm);
@@ -69,6 +71,8 @@ export function SystemConfigForm() {
 
     setTrustedIps(config.inspection.trustedIps);
     setCarryExcludedZones(config.inspection.carryExcludedZones);
+
+    setIconUpstreams(config.icon.upstreams);
   }, [config]);
 
   const handleSave = async (e: FormEvent) => {
@@ -113,6 +117,10 @@ export function SystemConfigForm() {
           // 空串/null 语义 = 清除白名单/追加排除集（后端删 KV 行）
           trustedIps: trustedIps.trim() === '' ? null : trustedIps.trim(),
           carryExcludedZones: carryExcludedZones.trim() === '' ? null : carryExcludedZones.trim(),
+        },
+        icon: {
+          // 空串/null 语义 = 清除图标上游（后端删 KV 行并清代理缓存，回落 env/内置默认）
+          upstreams: iconUpstreams.trim() === '' ? null : iconUpstreams.trim(),
         },
       });
       setPassword('');
@@ -499,6 +507,30 @@ export function SystemConfigForm() {
           <p className='mt-1 text-xs text-muted-foreground'>
             跨 IP 被带检测默认已排除主城/中立城镇与战场竞技场；若发现新误报区域（如任务聚集点），在此追加 zone ID，与默认集取并集。留空保存 = 清除追加配置。
           </p>
+        </div>
+      </section>
+
+      <section className='rounded-lg border border-border bg-card p-4 space-y-3'>
+        <div className='flex items-center justify-between'>
+          <h2 className='text-base font-semibold'>物品图标代理</h2>
+          <span className='text-xs text-muted-foreground'>
+            {config?.icon.source === 'db' ? '当前生效：数据库配置' : '当前生效：环境变量回落/内置默认'}
+          </span>
+        </div>
+        <p className='text-xs text-muted-foreground'>
+          角色物品图标的后端代理上游（逗号分隔、按序回退）。URL 含 {'{name}'} 占位则按模板替换，不含则按 zamimg 规则追加 /{'{name}'}.jpg；
+          留空保存 = 清除并回落环境变量/内置默认（wowhead CDN）。生产环境建议配置自托管 CDN（如腾讯云 COS），保存后即时生效。
+        </p>
+        <div>
+          <label className={labelClass} htmlFor='icon-upstreams'>上游列表</label>
+          <textarea
+            id='icon-upstreams'
+            value={iconUpstreams}
+            onChange={(e) => setIconUpstreams(e.target.value)}
+            rows={3}
+            placeholder={'https://your-cos.example.com/icons/{name}, https://wow.zamimg.com/images/wow/icons/medium'}
+            className={`${inputClass} resize-none font-mono`}
+          />
         </div>
       </section>
 

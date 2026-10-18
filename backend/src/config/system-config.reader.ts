@@ -29,6 +29,7 @@ export const SYSTEM_CONFIG_KEYS = {
   inspectionTrustedIps: 'inspection_trusted_ips',
   patrolBgCursor: 'patrol_bg_cursor',
   patrolCarryExcludedZones: 'patrol_carry_excluded_zones',
+  iconUpstreams: 'icon_upstreams',
 } as const;
 
 export const DEFAULT_REALM_FALLBACK = 'realm3';

@@ -184,6 +184,9 @@ export const env = {
   COS_BUCKET: getEnv('COS_BUCKET', ''),
   COS_REGION: getEnv('COS_REGION', ''),
 
+  // 物品图标代理上游（逗号分隔，URL 支持 {name} 占位）；仅作开发回落，生产走系统配置页 DB 值
+  ICON_UPSTREAMS: getEnv('ICON_UPSTREAMS', ''),
+
   // 腾讯云统一 API 密钥（SecretId/Key 一对）：SCF Job 触发签名与 COS 上传共用，不再单设 COS_SECRET_*
   // 键名带 TENCENT_ 前缀：SCF_* 是腾讯云 SCF 运行时注入的保留前缀，用户配置同名会冲突报错（仿 SquadSight TENCENT_SCF_*）
   TENCENT_SECRET_ID: getEnv('TENCENT_SECRET_ID', ''),

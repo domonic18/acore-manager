@@ -63,6 +63,10 @@ router.put(
     // 逐 IP 格式校验在业务层（需按逗号/换行拆分）
     body('inspection').optional().isObject(),
     body('inspection.trustedIps').optional({ values: 'null' }).isString().isLength({ max: 2000 }),
+
+    // 图标代理上游：逐条 URL 格式校验在业务层（需按逗号/换行拆分）
+    body('icon').optional().isObject(),
+    body('icon.upstreams').optional({ values: 'null' }).isString().isLength({ max: 2000 }),
   ],
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);

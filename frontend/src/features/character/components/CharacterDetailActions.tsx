@@ -12,6 +12,8 @@ interface CharacterDetailActionsProps {
   onOpenMute: () => void;
   onOpenUnmute: () => void;
   onOpenHonor: () => void;
+  onOpenKick: () => void;
+  onOpenMessage: () => void;
 }
 
 export function CharacterDetailActions({
@@ -23,6 +25,8 @@ export function CharacterDetailActions({
   onOpenMute,
   onOpenUnmute,
   onOpenHonor,
+  onOpenKick,
+  onOpenMessage,
 }: CharacterDetailActionsProps) {
   const navigate = useNavigate();
   const { hasGmLevel } = usePermission();
@@ -56,10 +60,24 @@ export function CharacterDetailActions({
         深度分析
       </button>
       <button
+        onClick={onOpenMessage}
+        className="px-4 py-2 rounded-md border border-emerald-600 text-emerald-400 text-sm font-medium hover:bg-emerald-600/10"
+      >
+        发消息
+      </button>
+      <button
         onClick={onOpenMute}
         className="px-4 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
       >
         禁言聊天
+      </button>
+      <button
+        onClick={onOpenKick}
+        disabled={character.online !== 1}
+        title={character.online !== 1 ? '角色不在线' : undefined}
+        className="px-4 py-2 rounded-md border border-red-600 text-red-400 text-sm font-medium hover:bg-red-600/10 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        踢下线
       </button>
       {hasGmLevel(3) && (
         <button

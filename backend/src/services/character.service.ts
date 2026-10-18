@@ -2,6 +2,9 @@ import { cacheService } from './cache.service';
 import { soapService } from './soap.service';
 import { logger } from '@/middleware/request-logger';
 import { characterRepository } from '@/repositories/character.repository';
+import { auditLogService } from './audit-log.service';
+import { sanitizeCommandArg, extractResultText, isReceiptError } from '@/shared/soap-command';
+import { ITEM_DISPLAY_INFO } from '@/generated/itemDisplayInfo';
 
 export interface CharacterListItem {
   guid: number;
@@ -43,6 +46,19 @@ export interface CharacterListResult {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export interface CharacterInventoryItem {
+  itemGuid: number;
+  bag: number;
+  slot: number;
+  itemEntry: number;
+  count: number;
+  displayId: number;
+  containerSlots: number;
+  quality: number;
+  name: string;
+  icon: string | null;
 }
 
 export class CharacterService {
@@ -114,6 +130,32 @@ export class CharacterService {
       banReason: item.banReason,
       active: item.active,
     }));
+  }
+
+  // 角色物品（装备/背包/银行）：只读全量 inventory 行 + displayid→图标名映射，Redis 缓存 60s
+  async getCharacterInventory(guid: number): Promise<CharacterInventoryItem[]> {
+    const cacheKey = `character:inventory:${guid}`;
+    const cached = await cacheService.get<CharacterInventoryItem[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const rows = await characterRepository.getCharacterInventory(guid);
+    const result: CharacterInventoryItem[] = rows.map((row: any) => ({
+      itemGuid: row.itemGuid,
+      bag: row.bag,
+      slot: row.slot,
+      itemEntry: row.itemEntry,
+      count: row.count,
+      displayId: row.displayId,
+      containerSlots: row.containerSlots,
+      quality: row.quality,
+      name: row.name,
+      icon: ITEM_DISPLAY_INFO[row.displayId] ?? null,
+    }));
+
+    await cacheService.set(cacheKey, result, 60);
+    return result;
   }
 
   async getCharacterDetail(guid: number): Promise<CharacterDetail | null> {
@@ -236,6 +278,106 @@ export class CharacterService {
       logger.error({ error, guid, name: detail.name }, 'Failed to send character unmute command');
       throw new Error('Failed to unmute character', { cause: error });
     }
+  }
+
+  // 踢下线（AC 原生 .kick，经 SOAP）：仅在线玩家生效；回执解析 + 审计，与 GM 工具同一 ok/message 约定
+  async kickCharacter(
+    guid: number,
+    operatorId: number,
+    operatorName: string,
+    reason?: string,
+  ): Promise<{ ok: boolean; message: string }> {
+    const detail = await this.getCharacterDetail(guid);
+    if (!detail) {
+      logger.error({ guid }, 'Character not found for kick');
+      throw new Error('Character not found');
+    }
+    if (detail.online !== 1) {
+      throw new Error('角色不在线，无法踢下线');
+    }
+
+    const base: { ok: boolean; message: string } = { ok: false, message: '' };
+    let resultText = '';
+    try {
+      const reasonArg = reason?.trim() ? ` ${sanitizeCommandArg(reason.trim())}` : '';
+      const raw = await soapService.sendCommand(`.kick ${detail.name}${reasonArg}`);
+      resultText = extractResultText(raw);
+      base.ok = !isReceiptError(resultText);
+      base.message = resultText || '已受理';
+    } catch (err) {
+      base.message = (err as Error).message || 'SOAP 命令失败';
+    }
+
+    await auditLogService
+      .record({
+        operatorId,
+        operatorName,
+        operation: 'character.kick',
+        target: `guid:${guid}`,
+        details: JSON.stringify({
+          characterName: detail.name,
+          reason: reason?.trim() || '',
+          online: detail.online === 1,
+          result: resultText || base.message,
+          ok: base.ok,
+        }),
+      })
+      .catch((err: unknown) => logger.error(`[character] kick audit failed: ${(err as Error).message}`));
+
+    if (base.ok) {
+      // 踢下线后角色 online 状态变化，列表/详情缓存需失效
+      await cacheService.delPattern('characters:*').catch(() => {});
+    }
+    return base;
+  }
+
+  // 单向私信：在线走 `.send message`（聊天区红色管理员提示），离线降级 `.send mail` 入邮箱。
+  // 玩家回复闭环（邮件轮询）暂缓，见 2026-10 需求评估
+  async messageCharacter(
+    guid: number,
+    operatorId: number,
+    operatorName: string,
+    message: string,
+  ): Promise<{ ok: boolean; message: string; channel: 'chat' | 'mail' }> {
+    const detail = await this.getCharacterDetail(guid);
+    if (!detail) {
+      logger.error({ guid }, 'Character not found for message');
+      throw new Error('Character not found');
+    }
+
+    const text = sanitizeCommandArg(message.trim());
+    const online = detail.online === 1;
+    const base: { ok: boolean; message: string; channel: 'chat' | 'mail' } = { ok: false, message: '', channel: online ? 'chat' : 'mail' };
+    let resultText = '';
+    try {
+      const command = online
+        ? `.send message ${detail.name} ${text}`
+        : `.send mail ${detail.name} "管理员消息" "${text}"`;
+      const raw = await soapService.sendCommand(command);
+      resultText = extractResultText(raw);
+      base.ok = !isReceiptError(resultText);
+      base.message = resultText || '已受理';
+    } catch (err) {
+      base.message = (err as Error).message || 'SOAP 命令失败';
+    }
+
+    await auditLogService
+      .record({
+        operatorId,
+        operatorName,
+        operation: 'character.message',
+        target: `guid:${guid}`,
+        details: JSON.stringify({
+          characterName: detail.name,
+          channel: base.channel,
+          content: message.trim(),
+          result: resultText || base.message,
+          ok: base.ok,
+        }),
+      })
+      .catch((err: unknown) => logger.error(`[character] message audit failed: ${(err as Error).message}`));
+
+    return base;
   }
 }
 

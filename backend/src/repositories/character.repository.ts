@@ -106,6 +106,31 @@ class CharacterRepository {
       [guid],
     );
   }
+
+  // 角色物品查看（装备/背包/银行）：全量 character_inventory 行。bag=0 为主容器直放格，
+  // bag>0 时值为父包物品 GUID（包内物品）；slot 语义见 AC Player.h：
+  // 0-18 装备 / 19-22 已装备包位 / 23-38 背包格 / 39-66 银行格 / 67-70 银行包位
+  async getCharacterInventory(guid: number): Promise<any[]> {
+    return charactersDataSource.query(
+      `SELECT
+        ci.item AS itemGuid,
+        ci.bag,
+        ci.slot,
+        ii.itemEntry,
+        ii.count,
+        it.displayid AS displayId,
+        it.ContainerSlots AS containerSlots,
+        it.Quality AS quality,
+        COALESCE(loc.Name, it.name) AS name
+      FROM character_inventory ci
+      INNER JOIN item_instance ii ON ci.item = ii.guid
+      INNER JOIN acore_world.item_template it ON ii.itemEntry = it.entry
+      LEFT JOIN acore_world.item_template_locale loc ON it.entry = loc.ID AND loc.locale = 'zhCN'
+      WHERE ci.guid = ?
+      ORDER BY ci.bag ASC, ci.slot ASC`,
+      [guid],
+    );
+  }
 }
 
 export const characterRepository = new CharacterRepository();

@@ -37,6 +37,12 @@ export interface SystemConfig {
     /** 逗号分隔的带级检测排除 zone id 列表（追加到代码默认集）；空串 = 未配置 */
     carryExcludedZones: string;
   };
+  icon: {
+    /** 图标代理上游（逗号分隔，URL 支持 {name} 占位）；DB 未配置时回显 env 值 */
+    upstreams: string;
+    /** 当前生效来源：db = 数据库配置；env = 环境变量回落/内置默认 */
+    source: 'db' | 'env';
+  };
   updatedAt: string | null;
 }
 

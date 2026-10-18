@@ -5,6 +5,7 @@ import {
   useMuteCharacter,
   useUnmuteCharacter,
 } from '@/features/character/hooks/useCharacter';
+import { characterApi } from '@/features/character/api/character.api';
 import { useBanFlow } from '@/shared/hooks/useBanFlow';
 
 // 角色详情页操作编排：封禁流程状态机 + 禁言/解禁聊天/解封对话框开关与 mutation 回调
@@ -19,6 +20,20 @@ export function useCharacterDetailActions(characterGuid: number) {
   const [showUnbanConfirmDialog, setShowUnbanConfirmDialog] = useState(false);
   const [showUnmuteConfirmDialog, setShowUnmuteConfirmDialog] = useState(false);
   const [showHonorDialog, setShowHonorDialog] = useState(false);
+  const [showKickDialog, setShowKickDialog] = useState(false);
+  const [kickPending, setKickPending] = useState(false);
+  const [showMessageDialog, setShowMessageDialog] = useState(false);
+  const [messagePending, setMessagePending] = useState(false);
+
+  const handleExecuteKick = (reason?: string) => {
+    setKickPending(true);
+    return characterApi.kick(characterGuid, reason ? { reason } : undefined).finally(() => setKickPending(false));
+  };
+
+  const handleExecuteMessage = (message: string) => {
+    setMessagePending(true);
+    return characterApi.sendMessage(characterGuid, { message }).finally(() => setMessagePending(false));
+  };
 
   const handleExecuteBan = () => {
     banMutation.mutate(
@@ -60,6 +75,14 @@ export function useCharacterDetailActions(characterGuid: number) {
     setShowUnmuteConfirmDialog,
     showHonorDialog,
     setShowHonorDialog,
+    showKickDialog,
+    setShowKickDialog,
+    kickPending,
+    handleExecuteKick,
+    showMessageDialog,
+    setShowMessageDialog,
+    messagePending,
+    handleExecuteMessage,
     handleExecuteBan,
     handleExecuteMute,
     handleExecuteUnban,

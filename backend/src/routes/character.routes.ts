@@ -244,4 +244,72 @@ router.post(
   }),
 );
 
+// 管理员发件（物品/金币，AC 原生 .send items/money 经 SOAP）：高危操作仅 gmlevel=3 + 审计；
+// 密码二次确认在前端调 /api/auth/verify-password 完成，后端发送端点不重复验密
+router.post(
+  '/:guid/mail',
+  authMiddleware,
+  requireGmLevel(3),
+  [
+    param('guid').isInt().toInt(),
+    body('subject').isString().trim().isLength({ min: 1, max: 100 }),
+    body('body').optional().isString().trim().isLength({ max: 500 }),
+    body('items').optional().isArray({ min: 1, max: 12 }),
+    body('items.*.entry').isInt({ min: 1 }).toInt(),
+    body('items.*.count').isInt({ min: 1, max: 1000 }).toInt(),
+    body('money').optional().isObject(),
+    body('money.gold').optional().isInt({ min: 0, max: 99999 }).toInt(),
+    body('money.silver').optional().isInt({ min: 0, max: 99 }).toInt(),
+    body('money.copper').optional().isInt({ min: 0, max: 99 }).toInt(),
+  ],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid request parameters / 请求参数不合法', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    try {
+      const result = await characterService.sendAdminMail(
+        guid,
+        {
+          subject: req.body.subject,
+          body: req.body.body || '',
+          items: req.body.items || [],
+          money: {
+            gold: req.body.money?.gold || 0,
+            silver: req.body.money?.silver || 0,
+            copper: req.body.money?.copper || 0,
+          },
+        },
+        (req as any).user?.id || 0,
+        (req as any).user?.username || '',
+      );
+      res.jsonSuccess(result);
+    } catch (err) {
+      res.jsonError((err as Error).message || '发送失败', 400);
+    }
+  }),
+);
+
+// 管理员发件记录（已读/领取状态）：只读，与发件同级 gmlevel=3
+router.get(
+  '/:guid/admin-mails',
+  authMiddleware,
+  requireGmLevel(3),
+  [param('guid').isInt().toInt()],
+  asyncHandler(async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      res.jsonError('Invalid character GUID', 400);
+      return;
+    }
+
+    const guid = parseInt(req.params.guid);
+    const mails = await characterService.getAdminMails(guid);
+    res.jsonSuccess(mails, mails.length);
+  }),
+);
+
 export default router;

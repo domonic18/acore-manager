@@ -7,16 +7,22 @@ import { CharacterDetailActions } from '@/features/character/components/Characte
 import { MuteDialog } from '@/features/character/components/MuteDialog';
 import { KickDialog } from '@/features/character/components/KickDialog';
 import { MessageDialog } from '@/features/character/components/MessageDialog';
+import { AdminMailDialog } from '@/features/character/components/AdminMailDialog';
+import { AdminMailHistoryPanel } from '@/features/character/components/AdminMailHistoryPanel';
+import { useQueryClient } from '@tanstack/react-query';
 import { CharacterUnmuteConfirmDialog } from '@/features/character/components/CharacterUnmuteConfirmDialog';
 import { BanFlowDialogs } from '@/shared/components/BanFlowDialogs';
 import { BanHistoryTable } from '@/shared/components/BanHistoryTable';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { HonorAdjustDialog } from '@/shared/components/HonorAdjustDialog';
 import { DetailPageSkeleton } from '@/shared/components/Skeleton';
+import { usePermission } from '@/shared/hooks/usePermission';
 
 export default function CharacterDetailPage() {
   const { guid } = useParams<{ guid: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { hasGmLevel } = usePermission();
   const characterGuid = parseInt(guid || '0');
   const { data: character, isLoading } = useCharacterDetail(characterGuid);
   const actions = useCharacterDetailActions(characterGuid);
@@ -55,6 +61,7 @@ export default function CharacterDetailPage() {
           onOpenHonor={() => actions.setShowHonorDialog(true)}
           onOpenKick={() => actions.setShowKickDialog(true)}
           onOpenMessage={() => actions.setShowMessageDialog(true)}
+          onOpenMail={() => actions.setShowMailDialog(true)}
         />
       </div>
 
@@ -64,6 +71,13 @@ export default function CharacterDetailPage() {
         <h2 className="text-lg font-bold">物品</h2>
         <CharacterInventoryPanel guid={character.guid} />
       </section>
+
+      {hasGmLevel(3) && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold">管理员发件记录</h2>
+          <AdminMailHistoryPanel guid={character.guid} />
+        </section>
+      )}
 
       <BanHistoryTable bans={character.bans} />
 
@@ -123,6 +137,15 @@ export default function CharacterDetailPage() {
         online={character.online === 1}
         onSubmit={actions.handleExecuteMessage}
         pending={actions.messagePending}
+      />
+      <AdminMailDialog
+        open={actions.showMailDialog}
+        onClose={() => actions.setShowMailDialog(false)}
+        characterName={character.name}
+        characterGuid={character.guid}
+        onSubmit={actions.handleExecuteSendMail}
+        pending={actions.mailPending}
+        onSent={() => queryClient.invalidateQueries({ queryKey: ['characters', 'admin-mails', character.guid] })}
       />
     </div>
   );

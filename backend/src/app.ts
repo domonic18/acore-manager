@@ -27,6 +27,7 @@ import aiAnalysisRoutes from './routes/ai-analysis.routes';
 import aiPromptRoutes from './routes/ai-prompt.routes';
 import aiWatchlistRoutes from './routes/ai-watchlist.routes';
 import feishuBindingRoutes from './routes/feishu-binding.routes';
+import iconRoutes from './routes/icon.routes';
 import { dbReadinessGate } from './middleware/db-readiness-gate';
 
 
@@ -96,6 +97,8 @@ export function createApp(): Application {
   app.use('/api/ai/analysis', aiAnalysisRoutes);
   app.use('/api/ai/prompts', aiPromptRoutes);
   app.use('/api/health', healthRoutes);
+  // 图标代理不鉴权：<img> 标签无法携带 Authorization 头，仅作 CDN 回源
+  app.use('/api/icons', iconRoutes);
 
   const publicPath = path.join(__dirname, 'public');
   app.use(express.static(publicPath));

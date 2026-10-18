@@ -23,6 +23,15 @@ jest.mock('@/config/database', () => ({
 jest.mock('@/services/audit-log.service', () => ({
   auditLogService: { record: jest.fn().mockResolvedValue(undefined) },
 }));
+// applyIcon 改后清 Redis 缓存：mock 掉 cache.service，避免 import 链拉起 config/redis（env mock 下 REDIS_URL 为空）
+jest.mock('@/services/cache.service', () => ({
+  cacheService: {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
+    delPattern: jest.fn().mockResolvedValue(undefined),
+  },
+}));
 jest.mock('@/shared/utils/aes.util', () => ({
   encryptToken: jest.fn((v: string) => `enc:${v}`),
   decryptToken: jest.fn((v: string) => v.replace(/^enc:/, '')),

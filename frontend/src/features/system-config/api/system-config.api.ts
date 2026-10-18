@@ -38,6 +38,10 @@ export interface SystemConfigPayload {
     /** 逗号/换行分隔 zone id（非负整数）；空串/null = 清除追加排除集 */
     carryExcludedZones?: string | null;
   };
+  icon?: {
+    /** 逗号/换行分隔上游 URL；空串/null = 清除（回落环境变量/内置默认） */
+    upstreams?: string | null;
+  };
 }
 
 export interface SoapTestResult {

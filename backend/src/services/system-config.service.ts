@@ -3,6 +3,8 @@ import { env, soapConn } from '@/config/env';
 import { DEFAULT_REALM_FALLBACK, IPV4_RE, loadConfigValues, readDefaultRealm, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { AcmSystemConfig } from '@/entities/acm/system-config.entity';
 import { auditLogService } from '@/services/audit-log.service';
+import { cacheService } from '@/services/cache.service';
+import { ICON_UPSTREAMS_CACHE_KEY } from '@/services/icon-upstreams.service';
 import { ServiceError } from '@/shared/errors/service-error';
 import { encryptToken, maskToken } from '@/shared/utils/aes.util';
 import { logger } from '@/middleware/request-logger';
@@ -58,6 +60,12 @@ export interface SystemConfigView {
     /** 逗号分隔的带级检测排除 zone id 列表（追加到代码默认集）；空串 = 未配置 */
     carryExcludedZones: string;
   };
+  icon: {
+    /** 图标代理上游（逗号分隔，URL 支持 {name} 占位）；DB 未配置时回显 env 值，均为空则内置默认 */
+    upstreams: string;
+    /** 当前生效来源：db = 数据库配置；env = 环境变量回落/内置默认 */
+    source: 'db' | 'env';
+  };
   updatedAt: string | null;
 }
 
@@ -97,6 +105,10 @@ export interface SystemConfigInput {
     trustedIps?: string | null;
     /** 逗号/换行分隔 zone id（非负整数）；空串/null = 清除追加排除集 */
     carryExcludedZones?: string | null;
+  };
+  icon?: {
+    /** 逗号/换行分隔上游 URL；空串/null = 清除该键（回落环境变量/内置默认） */
+    upstreams?: string | null;
   };
 }
 
@@ -190,6 +202,10 @@ class SystemConfigService {
         trustedIps: dbString(SYSTEM_CONFIG_KEYS.inspectionTrustedIps) ?? '',
         carryExcludedZones: dbString(SYSTEM_CONFIG_KEYS.patrolCarryExcludedZones) ?? '',
       },
+      icon: {
+        upstreams: dbString(SYSTEM_CONFIG_KEYS.iconUpstreams) ?? env.ICON_UPSTREAMS,
+        source: dbString(SYSTEM_CONFIG_KEYS.iconUpstreams) !== undefined ? 'db' : 'env',
+      },
       updatedAt: latest?.updatedAt ? new Date(latest.updatedAt).toISOString() : null,
     };
   }
@@ -204,6 +220,7 @@ class SystemConfigService {
     if (input.ai) await this.applyAi(input.ai, changedKeys, operatorName);
     if (input.login) await this.applyLogin(input.login, changedKeys, operatorName);
     if (input.inspection) await this.applyInspection(input.inspection, changedKeys, operatorName);
+    if (input.icon) await this.applyIcon(input.icon, changedKeys, operatorName);
 
     if (changedKeys.length > 0) {
       await auditLogService.record({
@@ -329,6 +346,31 @@ class SystemConfigService {
       changedKeys,
       operatorName,
     );
+  }
+
+  /** 图标代理组：上游列表逗号/换行分隔；空值 = 删行（回落环境变量/内置默认），改后清 Redis 缓存即时生效 */
+  private async applyIcon(
+    icon: NonNullable<SystemConfigInput['icon']>,
+    changedKeys: string[],
+    operatorName: string,
+  ): Promise<void> {
+    if (icon.upstreams === undefined) return;
+    const upstreams = (icon.upstreams ?? '')
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const upstream of upstreams) {
+      if (!/^https?:\/\/\S+$/.test(upstream)) {
+        throw new ServiceError(`图标上游需为 http(s) URL：${upstream} / invalid icon upstream`, 400);
+      }
+    }
+    if (upstreams.length === 0) {
+      await this.repo.delete(SYSTEM_CONFIG_KEYS.iconUpstreams);
+    } else {
+      await this.upsert(SYSTEM_CONFIG_KEYS.iconUpstreams, upstreams.join(','), false, operatorName);
+    }
+    await cacheService.del(ICON_UPSTREAMS_CACHE_KEY);
+    changedKeys.push(SYSTEM_CONFIG_KEYS.iconUpstreams);
   }
 
   /** 巡检组：受信 IP 白名单 + 带级检测追加排除区域，逗号/换行分隔；空值 = 删行（回落默认/无白名单） */

@@ -1,11 +1,9 @@
 import { z } from 'zod';
 import { existsSync, readdirSync, statSync } from 'fs';
-import { createReadStream } from 'fs';
-import { createInterface } from 'readline';
 import { join } from 'path';
 import { registerTool } from '@/agent/tools/registry';
 import { readDefaultRealm, readInspectionTrustedIps } from '@/config/system-config.reader';
-import { workspaceDir } from './log-workspace';
+import { scanLogLines, workspaceDir } from './log-workspace';
 import {
   aggregateAuthFailures,
   aggregateMarkers,
@@ -31,15 +29,7 @@ async function scanLog(
   fileRe: RegExp,
   onLine: (line: string) => void,
 ): Promise<number> {
-  let lines = 0;
-  for (const file of findFiles(dir, fileRe)) {
-    const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
-    for await (const line of rl) {
-      lines++;
-      onLine(line);
-    }
-  }
-  return lines;
+  return scanLogLines(findFiles(dir, fileRe), onLine);
 }
 
 function findFiles(dir: string, fileRe: RegExp): string[] {

@@ -1,8 +1,9 @@
 import { execFile } from 'child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, openSync, readSync, readdirSync, closeSync, rmSync, statSync } from 'fs';
 import { writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join, relative } from 'path';
+import { createInterface } from 'readline';
 import { promisify } from 'util';
 
 // 日志检索工作区（需求 3.5）：/tmp/ai-workspace/{realm}/{date}/{type}/
@@ -70,19 +71,44 @@ export function listExtracted(dir: string): ExtractedFile[] {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export function readExtractedFile(dir: string, relPath: string): string {
-  const full = join(dir, relPath);
-  if (!full.startsWith(dir) || !existsSync(full) || statSync(full).isDirectory()) {
-    throw new Error(`file not found in workspace: ${relPath}`);
+export function countLines(file: string): number {
+  // 1MB chunk 流式数 0x0A：解压清单逐文件调用，整文件 Buffer 会在大日志上瞬间吃掉数百 MB 堆外内存
+  const CHUNK = 1024 * 1024;
+  const buf = Buffer.alloc(CHUNK);
+  let fd: number;
+  try {
+    fd = openSync(file, 'r');
+  } catch {
+    return 0;
   }
-  return readFileSync(full, 'utf8');
+  try {
+    let n = 0;
+    let pos = 0;
+    let lastByte = -1;
+    for (;;) {
+      const bytesRead = readSync(fd, buf, 0, CHUNK, pos);
+      if (bytesRead === 0) break;
+      for (let i = 0; i < bytesRead; i++) if (buf[i] === 10) n++;
+      lastByte = buf[bytesRead - 1];
+      pos += bytesRead;
+    }
+    return lastByte !== -1 && lastByte !== 10 ? n + 1 : n;
+  } finally {
+    closeSync(fd);
+  }
 }
 
-export function countLines(file: string): number {
-  const buf = readFileSync(file);
-  let n = 0;
-  for (let i = 0; i < buf.length; i++) if (buf[i] === 10) n++;
-  return buf.length > 0 && buf[buf.length - 1] !== 10 ? n + 1 : n;
+/** 逐行流式扫描（readline），返回扫描总行数。大日志解析的唯一入口——禁止 readFileSync 整读 */
+export async function scanLogLines(files: string[], onLine: (line: string) => void): Promise<number> {
+  let lines = 0;
+  for (const file of files) {
+    const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
+    for await (const line of rl) {
+      lines++;
+      onLine(line);
+    }
+  }
+  return lines;
 }
 
 /** 任务结束清理整个工作区（巡检 Job / 会话编排 finally 调用） */

@@ -12,13 +12,13 @@ jest.mock('@/shared/utils/cos.util', () => ({
 }));
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, mkdtempSync, promises as fsp, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, promises as fsp, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { cosGetObjectBuffer, cosGetObjectJson } from '@/shared/utils/cos.util';
 import { acmDataSource, charactersDataSource } from '@/config/database';
 import { clearTools, exportTools } from '@/agent/tools/registry';
-import { clearWorkspace, manifestKey, workspaceDir } from '@/agent/tools/log-tools/log-workspace';
+import { clearWorkspace, countLines, manifestKey, workspaceDir } from '@/agent/tools/log-tools/log-workspace';
 import { registerAllTools } from '@/agent/tools';
 
 const jsonMock = cosGetObjectJson as jest.Mock;
@@ -213,5 +213,20 @@ describe('log-tools', () => {
     const result = await toolFn('parse_server_anomalies').invoke({ from: DATE, to: DATE, realm: REALM });
     expect(result).toMatchObject({ totalMarkers: 0, players: [], authFailures: [] });
     expect(String(result.note)).toContain('fetch_log_archive');
+  });
+
+  it('countLines counts multi-chunk large files identically with and without trailing newline', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'acm-count-'));
+    try {
+      const total = 50_000;
+      const content = Array.from({ length: total }, (_, i) => `line ${i} ${'y'.repeat(100)}`).join('\n');
+      const file = join(dir, 'big.log');
+      writeFileSync(file, content + '\n');
+      expect(countLines(file)).toBe(total);
+      writeFileSync(file, content);
+      expect(countLines(file)).toBe(total);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

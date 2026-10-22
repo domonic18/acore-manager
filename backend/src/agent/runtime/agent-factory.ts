@@ -7,6 +7,7 @@ import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.re
 import { logger } from '@/middleware/request-logger';
 import { buildModelClient, modelFingerprint, ResolvedModelConfig } from './model-factory';
 import { getCheckpointer } from './checkpointer';
+import { LogWorkspaceBackend } from './log-backend';
 import { loadPrompt } from '@/agent/core/prompt-loader';
 import { registerAllTools } from '@/agent/tools';
 import { exportTools } from '@/agent/tools/registry';
@@ -66,7 +67,8 @@ async function buildAgent(cfg: ResolvedModelConfig, scene: AgentScene): Promise<
   const checkpointer = await getCheckpointer();
   syncSkills();
   const backend = new CompositeBackend(
-    new FilesystemBackend({ rootDir: WORKSPACE_ROOT, virtualMode: true }),
+    // 日志工作区用内存平坦化后端（大日志 read/grep 流式有上限，防 OOM）；skills 均为小文件走原生后端
+    new LogWorkspaceBackend({ rootDir: WORKSPACE_ROOT, virtualMode: true }),
     { '/skills/': new FilesystemBackend({ rootDir: SKILLS_SYNC_DIR, virtualMode: true }) },
   );
   return createDeepAgent({

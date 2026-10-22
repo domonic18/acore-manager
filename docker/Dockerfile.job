@@ -12,6 +12,10 @@ RUN npm run build
 # Stage 2: Job runtime
 FROM node:22-alpine AS job-runtime
 WORKDIR /app
+# ripgrep：agent grep 工具走原生 rg（JS 回退只作兜底）；NODE_OPTIONS：1GB 容器默认堆 ~512MB，
+# 2026-10-22 OOM 事故后显式抬高留堆外余量（日志访问已流式化，此为纵深防御）
+RUN apk add --no-cache ripgrep
+ENV NODE_OPTIONS=--max-old-space-size=768
 COPY backend/package*.json ./
 RUN npm ci --legacy-peer-deps --omit=dev && npm cache clean --force
 COPY --from=backend-builder /app/backend/dist ./dist

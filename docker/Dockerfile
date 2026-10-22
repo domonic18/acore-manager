@@ -24,8 +24,10 @@ RUN npm run build
 # Stage 3: Production
 FROM node:22-alpine AS production
 WORKDIR /app
-# Install fonts required by svg-captcha on Alpine Linux (Alpine 3.18+: ttf-dejavu → font-dejavu)
-RUN apk add --no-cache fontconfig font-dejavu
+# fontconfig/font-dejavu: svg-captcha on Alpine 3.18+; ripgrep: agent grep 工具走原生 rg（回退 JS 扫描仅兜底）
+RUN apk add --no-cache fontconfig font-dejavu ripgrep
+# 1GB 容器 Node 默认堆 ~512MB，显式抬高留堆外余量（2026-10-22 job OOM 事故同源风险）
+ENV NODE_OPTIONS=--max-old-space-size=768
 COPY backend/package*.json ./
 RUN npm ci --legacy-peer-deps --omit=dev && npm cache clean --force
 COPY --from=backend-builder /app/backend/dist ./dist

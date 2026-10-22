@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { In } from 'typeorm';
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { registerTool } from '@/agent/tools/registry';
 import { readDefaultRealm } from '@/config/system-config.reader';
@@ -12,6 +12,7 @@ import { explainSuspect, FpScenarioRule, FpSignal, suggestAction } from '@/agent
 import { parseAnticheatLine, ParsedViolation } from './anticheat-parser';
 import { mapName } from './map-names';
 import { rollupPlayers } from './player-rollup';
+import { scanLogLines, workspaceDir } from './log-workspace';
 import {
   classifyPattern,
   coordSpread,
@@ -25,7 +26,6 @@ import {
   LoopPoint,
   ViolationPattern,
 } from './violation-stats';
-import { workspaceDir } from './log-workspace';
 
 // parse_anticheat_violations（需求 3.5）：对工作区内已解压的 anticheat_*.log 做代码级结构化解析。
 // 日志行量大且格式固定——代码解析远省 token，且可跨天聚合；返回 聚合结果 + 玩家级地图轨迹 + 摘录证据行。
@@ -128,13 +128,11 @@ export function registerParseTool(): void {
       const violations: { date: string; parsed: ParsedViolation }[] = [];
       let totalLines = 0;
       for (const date of dateRange(from, to)) {
-        for (const file of findAnticheatLogs(workspaceDir(realm, date, 'anticheat'))) {
-          for (const line of readFileSync(file, 'utf8').split('\n')) {
-            totalLines++;
-            const parsed = parseAnticheatLine(line);
-            if (parsed) violations.push({ date, parsed });
-          }
-        }
+        const files = findAnticheatLogs(workspaceDir(realm, date, 'anticheat'));
+        totalLines += await scanLogLines(files, (line) => {
+          const parsed = parseAnticheatLine(line);
+          if (parsed) violations.push({ date, parsed });
+        });
       }
       if (totalLines === 0) {
         return {

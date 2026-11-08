@@ -148,6 +148,10 @@ jobs:
     needs: [frontend, backend]
     if: (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
     timeout-minutes: 60
+    outputs:
+      # 只传不含密钥的片段：TCR 命名空间是 secret，含它的完整镜像地址会被 GitHub 判为含密而丢弃输出
+      image_tag: ${{ steps.image_info.outputs.image_tag }}
+      image_digest: ${{ steps.image_info.outputs.image_digest }}
 
     steps:
       - name: Checkout / 检出代码
@@ -224,9 +228,19 @@ jobs:
           fi
 
       - name: Output image info / 输出镜像信息
+        id: image_info
         run: |
-          echo "Image pushed: ${{ steps.vars.outputs.image_tag }}"
-          echo "Latest tag: ${{ steps.vars.outputs.latest_tag }}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          DIGEST="${{ steps.push.outputs.digest }}"
+          if [ -z "$DIGEST" ]; then DIGEST="${{ steps.push-retry.outputs.digest }}"; fi
+          if [ -z "$DIGEST" ]; then
+            echo "[FAIL] 未取到镜像 digest" >&2
+            exit 1
+          fi
+          echo "image_tag=${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "App image tag: ${BRANCH}-${SHORT_SHA} (${DIGEST})"
 
   docker-job:
     name: Docker Job / Job 镜像构建推送
@@ -234,6 +248,10 @@ jobs:
     needs: [frontend, backend]
     if: (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
     timeout-minutes: 60
+    outputs:
+      # 同 docker-app：只传不含密钥的片段
+      image_tag: ${{ steps.image_info.outputs.image_tag }}
+      image_digest: ${{ steps.image_info.outputs.image_digest }}
 
     steps:
       - name: Checkout / 检出代码
@@ -302,15 +320,27 @@ jobs:
           fi
 
       - name: Output image info / 输出镜像信息
+        id: image_info
         run: |
-          echo "Job image pushed: ${{ steps.vars.outputs.job_image_tag }}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          DIGEST="${{ steps.push.outputs.digest }}"
+          if [ -z "$DIGEST" ]; then DIGEST="${{ steps.push-retry.outputs.digest }}"; fi
+          if [ -z "$DIGEST" ]; then
+            echo "[FAIL] 未取到 Job 镜像 digest" >&2
+            exit 1
+          fi
+          echo "image_tag=${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Job image tag: ${BRANCH}-${SHORT_SHA} (${DIGEST})"
 
   # ============================================================
   # Stage 4: Staging SCF 自动部署（仅 develop）
   # 双镜像推送成功后，调用 SCF UpdateFunctionCode 将 Staging
-  # Web/Job 函数切换到本次 {分支}-{short_sha} 镜像标签并轮询至 Active
-  # 所需 Secrets：TENCENT_SECRET_ID / TENCENT_SECRET_KEY（腾讯云 API 密钥）、
-  # SCF_STAGING_WEB_FUNCTION（必填）、SCF_STAGING_JOB_FUNCTION（可选，未配置则跳过 Job 函数更新）
+  # Web/Job 函数切换到本次 {分支}-{short_sha}@digest 钉版镜像，
+  # 并轮询至 Active 且镜像摘要一致（向 acore-ranking 的部署确证口径看齐）
+  # 所需 vars：SCF_STAGING_WEB_FUNCTION（必填）、SCF_STAGING_JOB_FUNCTION
+  # （可选，未配置则跳过 Job 函数更新）；凭据 secrets：TENCENT_SECRET_ID/KEY
   # ============================================================
   deploy-staging:
     name: Deploy Staging / Staging SCF 部署
@@ -320,12 +350,12 @@ jobs:
     if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     timeout-minutes: 30
     env:
-      # region / 命名空间用仓库变量（vars，非敏感）配置，未设置回落本账号实际值；生产扩展命名空间对称用 SCF_PROD_NAMESPACE
+      # region / 命名空间 / 函数名均为非敏感配置，走仓库变量（vars）
       SCF_REGION: ${{ vars.SCF_REGION || 'ap-beijing' }}
       SCF_NAMESPACE: ${{ vars.SCF_STAGING_NAMESPACE || 'staging' }}
       # 条件变量须挂 job 级：步骤 if 读取时步骤自身的 env 块尚未生效
-      SCF_WEB_FUNCTION: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}
-      SCF_JOB_FUNCTION: ${{ secrets.SCF_STAGING_JOB_FUNCTION }}
+      SCF_WEB_FUNCTION: ${{ vars.SCF_STAGING_WEB_FUNCTION }}
+      SCF_JOB_FUNCTION: ${{ vars.SCF_STAGING_JOB_FUNCTION }}
 
     steps:
       - name: Checkout / 检出代码
@@ -342,12 +372,23 @@ jobs:
           # tccli configure set 用位置参数 varname value，不支持 --region/--secretId 旗标
           tccli configure set region "$SCF_REGION" secretId "$TENCENT_SECRET_ID" secretKey "$TENCENT_SECRET_KEY"
 
-      - name: Compute image tags / 生成本次镜像标签
+      # 镜像地址在此组装：TCR 命名空间是 secret，无法作为 job 输出跨 job 传递；
+      # tag@digest 钉版——digest 由构建 job 产出，确保切到的是本次构建的镜像
+      - name: Compute image URIs / 组装钉版镜像地址
         id: vars
+        env:
+          APP_DIGEST: ${{ needs.docker-app.outputs.image_digest }}
+          JOB_DIGEST: ${{ needs.docker-job.outputs.image_digest }}
         run: |
+          set -euo pipefail
+          : "${SCF_WEB_FUNCTION:?vars.SCF_STAGING_WEB_FUNCTION 未配置}"
           SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "app_image=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:develop-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "job_image=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_JOB }}:develop-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "app_image=${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:develop-${SHORT_SHA}@${APP_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "job_image=${REGISTRY}/${NAMESPACE}/${IMAGE_NAME_JOB}:develop-${SHORT_SHA}@${JOB_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "app_digest=${APP_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "job_digest=${JOB_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "App: develop-${SHORT_SHA}@${APP_DIGEST}"
+          echo "Job: develop-${SHORT_SHA}@${JOB_DIGEST}"
 
       - name: Update Web function / 更新 Staging Web 函数镜像
         run: |
@@ -387,23 +428,28 @@ jobs:
           echo "UpdateFunctionCode failed after retries" >&2
           exit 1
 
-      - name: Wait for functions Active / 等待函数镜像更新完成
+      # Active 且镜像摘要 == 本次 digest 才算部署确证（只等 Active 可能读到旧镜像的就绪态）
+      - name: Wait for functions Active / 等待函数更新生效（校验摘要）
         timeout-minutes: 12
         run: |
           set -euo pipefail
           check() {
-            local fn="$1"
-            local status=""
+            local fn="$1" want="$2"
+            local status="" uri=""
             # 40 × 15s ≈ 10 分钟：镜像拉取与实例滚动可能较慢
             for i in $(seq 1 40); do
-              status=$(tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json | jq -r '.Status')
+              json=$(tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json)
+              status=$(jq -r '.Status' <<<"$json")
+              uri=$(jq -r '.ImageConfig.ImageUri // ""' <<<"$json")
               case "$status" in
                 Active)
-                  echo "[OK] $fn is Active"
-                  return 0
+                  if [[ "$uri" == *"@${want}" ]]; then
+                    echo "[OK] $fn is Active on ${want}"
+                    return 0
+                  fi
+                  # Active 但仍是旧镜像：更新尚未滚动完成，继续等
                   ;;
                 Updating|Creating)
-                  sleep 15
                   ;;
                 *)
                   echo "[FAIL] $fn status: $status" >&2
@@ -411,19 +457,20 @@ jobs:
                   return 1
                   ;;
               esac
+              sleep 15
             done
-            echo "[FAIL] timeout waiting for $fn (last status: $status)" >&2
+            echo "[FAIL] timeout waiting for $fn (last: ${status} ${uri})" >&2
             return 1
           }
           sleep 10
-          check "$SCF_WEB_FUNCTION"
+          check "$SCF_WEB_FUNCTION" "${{ steps.vars.outputs.app_digest }}"
           if [ -n "$SCF_JOB_FUNCTION" ]; then
-            check "$SCF_JOB_FUNCTION"
+            check "$SCF_JOB_FUNCTION" "${{ steps.vars.outputs.job_digest }}"
           fi
 
       - name: Output deploy info / 输出部署信息
         run: |
-          echo "Staging Web function: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}"
+          echo "Staging Web function: ${{ vars.SCF_STAGING_WEB_FUNCTION }}"
           echo "App image: ${{ steps.vars.outputs.app_image }}"
           echo "Job image: ${{ steps.vars.outputs.job_image }}"
 
@@ -432,7 +479,8 @@ jobs:
   # 双镜像推送成功后，SSH 到生产主机对 acm 库增量应用 docker/database/migrations/
   # 中尚未在 acm_migrations 记账的迁移（单事务：迁移文件 + 记账 INSERT，失败即中止）。
   # 迁移先于云函数切换执行：旧镜像 + 新表是安全的中间态。
-  # 需 Secret：PROD_MIGRATE_SSH_KEY（CI 专用私钥，公钥已装到生产 ubuntu@101.42.41.169）
+  # 需 vars：DEPLOY_HOST（生产主机 user@host）；Secrets：DEPLOY_MIGRATE_SSH_KEY
+  # （CI 专用私钥）、DEPLOY_KNOWN_HOSTS（主机指纹，仓库公开不入文件）
   # ============================================================
   deploy-prod-migration:
     name: Prod DB Migration / 生产库迁移
@@ -445,43 +493,177 @@ jobs:
       - name: Checkout / 检出代码
         uses: actions/checkout@v6
 
-      - name: Setup SSH key / 配置 CI 专用私钥
+      - name: Setup SSH key / 配置 CI 专用私钥与主机指纹
         env:
-          PROD_MIGRATE_SSH_KEY: ${{ secrets.PROD_MIGRATE_SSH_KEY }}
+          DEPLOY_MIGRATE_SSH_KEY: ${{ secrets.DEPLOY_MIGRATE_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "$PROD_MIGRATE_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_MIGRATE_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 101.42.41.169 >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >> ~/.ssh/known_hosts
 
       - name: Apply pending migrations / 增量应用未执行迁移
         env:
-          PROD_HOST: ubuntu@101.42.41.169
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
         run: |
           set -euo pipefail
+          : "${DEPLOY_HOST:?vars.DEPLOY_HOST 未配置}"
           MIGRATION_DIR=docker/database/migrations
           applied=0
           for file in "$MIGRATION_DIR"/*.sql; do
             name=$(basename "$file")
             # 已记账则跳过（幂等，可重复执行）
-            if ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+            if ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_HOST" \
               "sudo -n -u postgres psql -d acm -tAc \"SELECT 1 FROM acm_migrations WHERE name = '$name'\"" | grep -qx 1; then
               echo "[skip] $name already applied"
               continue
             fi
             echo "[apply] $name"
-            scp -o BatchMode=yes -o IdentitiesOnly=yes -q "$file" "$PROD_HOST:/tmp/$name"
-            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+            scp -o BatchMode=yes -o IdentitiesOnly=yes -q "$file" "$DEPLOY_HOST:/tmp/$name"
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_HOST" \
               "sudo -n -u postgres psql -d acm -v ON_ERROR_STOP=1 -1 -f '/tmp/$name' -c \"INSERT INTO acm_migrations (name) VALUES ('$name');\""
-            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" "rm -f '/tmp/$name'"
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_HOST" "rm -f '/tmp/$name'"
             applied=$((applied + 1))
           done
           echo "Applied $applied migration(s)"
 
       - name: Verify table owners / 验证表 owner
         env:
-          PROD_HOST: ubuntu@101.42.41.169
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
         # 2026-10-08 生产事故教训：postgres 建表后 acm 角色无权限 → 页面 500；迁移文件已内嵌 OWNER TO，此处留验证输出
         run: |
-          ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
+          : "${DEPLOY_HOST:?vars.DEPLOY_HOST 未配置}"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_HOST" \
             "sudo -n -u postgres psql -d acm -c \"SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\""
+
+  # ============================================================
+  # Stage 6: 生产 SCF 自动部署（仅 main，向 acore-ranking 口径看齐）
+  # 库迁移（Stage 5）成功后，将生产 Web/Job 函数切换到本次
+  # {分支}-{short_sha}@digest 钉版镜像，并轮询至 Active 且摘要一致。
+  # 迁移在前、切函数在后：旧镜像 + 新表是安全中间态，反向则新代码可能撞缺表。
+  # 所需 vars：SCF_PRODUCTION_NAMESPACE、SCF_PRODUCTION_WEB_FUNCTION（必填）、
+  # SCF_PRODUCTION_JOB_FUNCTION（可选，未配置则只更 Web 函数）
+  # ============================================================
+  deploy-prod-scf:
+    name: Deploy Prod SCF / 生产函数部署
+    runs-on: ubuntu-latest
+    needs: [docker-app, docker-job, deploy-prod-migration]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 30
+    env:
+      SCF_REGION: ${{ vars.SCF_REGION || 'ap-beijing' }}
+      # 默认值必须是 production：改错默认值等于把生产包发到测试
+      SCF_NAMESPACE: ${{ vars.SCF_PRODUCTION_NAMESPACE || 'production' }}
+      SCF_WEB_FUNCTION: ${{ vars.SCF_PRODUCTION_WEB_FUNCTION }}
+      SCF_JOB_FUNCTION: ${{ vars.SCF_PRODUCTION_JOB_FUNCTION }}
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      - name: Install tccli / 安装腾讯云 CLI
+        run: pip3 install --quiet tccli
+
+      - name: Configure tccli / 配置腾讯云凭据
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+        run: |
+          tccli configure set region "$SCF_REGION" secretId "$TENCENT_SECRET_ID" secretKey "$TENCENT_SECRET_KEY"
+
+      - name: Compute image URIs / 组装钉版镜像地址
+        id: vars
+        env:
+          APP_DIGEST: ${{ needs.docker-app.outputs.image_digest }}
+          JOB_DIGEST: ${{ needs.docker-job.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+          : "${SCF_WEB_FUNCTION:?vars.SCF_PRODUCTION_WEB_FUNCTION 未配置}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "app_image=${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:main-${SHORT_SHA}@${APP_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "job_image=${REGISTRY}/${NAMESPACE}/${IMAGE_NAME_JOB}:main-${SHORT_SHA}@${JOB_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "app_digest=${APP_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "job_digest=${JOB_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "App: main-${SHORT_SHA}@${APP_DIGEST}"
+          echo "Job: main-${SHORT_SHA}@${JOB_DIGEST}"
+
+      - name: Update Web function / 更新生产 Web 函数镜像
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(printf '{"ImageConfig":{"ImageType":"personal","ImageUri":"%s","ImagePort":9000}}' '${{ steps.vars.outputs.app_image }}')
+          for attempt in 1 2; do
+            if tccli scf UpdateFunctionCode \
+              --FunctionName "$SCF_WEB_FUNCTION" \
+              --Namespace "$SCF_NAMESPACE" \
+              --Code "$PAYLOAD" \
+              --output json; then
+              echo "UpdateFunctionCode accepted (attempt ${attempt})"
+              exit 0
+            fi
+            if [ "$attempt" -lt 2 ]; then sleep 45; fi
+          done
+          echo "UpdateFunctionCode failed after retries" >&2
+          exit 1
+
+      - name: Update Job function / 更新生产 Job 函数镜像（可选）
+        if: env.SCF_JOB_FUNCTION != ''
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(printf '{"ImageConfig":{"ImageType":"personal","ImageUri":"%s","ImagePort":-1}}' '${{ steps.vars.outputs.job_image }}')
+          for attempt in 1 2; do
+            if tccli scf UpdateFunctionCode \
+              --FunctionName "$SCF_JOB_FUNCTION" \
+              --Namespace "$SCF_NAMESPACE" \
+              --Code "$PAYLOAD" \
+              --output json; then
+              echo "UpdateFunctionCode accepted (attempt ${attempt})"
+              exit 0
+            fi
+            if [ "$attempt" -lt 2 ]; then sleep 45; fi
+          done
+          echo "UpdateFunctionCode failed after retries" >&2
+          exit 1
+
+      - name: Wait for functions Active / 等待函数更新生效（校验摘要）
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          check() {
+            local fn="$1" want="$2"
+            local status="" uri=""
+            for i in $(seq 1 40); do
+              json=$(tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json)
+              status=$(jq -r '.Status' <<<"$json")
+              uri=$(jq -r '.ImageConfig.ImageUri // ""' <<<"$json")
+              case "$status" in
+                Active)
+                  if [[ "$uri" == *"@${want}" ]]; then
+                    echo "[OK] $fn is Active on ${want}"
+                    return 0
+                  fi
+                  ;;
+                Updating|Creating)
+                  ;;
+                *)
+                  echo "[FAIL] $fn status: $status" >&2
+                  tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json >&2 || true
+                  return 1
+                  ;;
+              esac
+              sleep 15
+            done
+            echo "[FAIL] timeout waiting for $fn (last: ${status} ${uri})" >&2
+            return 1
+          }
+          sleep 10
+          check "$SCF_WEB_FUNCTION" "${{ steps.vars.outputs.app_digest }}"
+          if [ -n "$SCF_JOB_FUNCTION" ]; then
+            check "$SCF_JOB_FUNCTION" "${{ steps.vars.outputs.job_digest }}"
+          fi
+
+      - name: Output deploy info / 输出部署信息
+        run: |
+          echo "Production Web function: ${{ vars.SCF_PRODUCTION_WEB_FUNCTION }}"
+          echo "App image: ${{ steps.vars.outputs.app_image }}"
+          echo "Job image: ${{ steps.vars.outputs.job_image }}"

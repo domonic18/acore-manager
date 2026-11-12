@@ -31,14 +31,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   # 与 Dockerfile（node:22）、backend engines（>=22.0.0）统一；deepagents 传递依赖 openai@7 要求 node>=22
   NODE_VERSION: '22'
-  REGISTRY: ccr.ccs.tencentyun.com
-  NAMESPACE: ${{ secrets.TCR_NAMESPACE }}
-  IMAGE_NAME: acore-manager
-  IMAGE_NAME_JOB: acore-manager-job
 
 jobs:
   # ============================================================
-  # Stage 1: 前端代码检查与构建
+  # 质量闸门：前端代码检查与构建
   # ============================================================
   frontend:
     name: Frontend / 前端
@@ -59,12 +55,6 @@ jobs:
         working-directory: frontend
         run: npm ci --legacy-peer-deps
 
-      - name: Generate app version / 生成应用版本号
-        id: version
-        run: |
-          APP_VERSION=$(cat VERSION)
-          echo "app_version=${APP_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-
       - name: Lint / 代码检查
         if: github.event.inputs.skip_lint != 'true'
         working-directory: frontend
@@ -75,14 +65,13 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      # build 含 tsc：类型错误必须在合并前暴露（镜像构建在 release 阶段另跑一次）
       - name: Build / 构建
         working-directory: frontend
-        env:
-          VITE_APP_VERSION: ${{ steps.version.outputs.app_version }}
         run: npm run build
 
   # ============================================================
-  # Stage 2: 后端代码检查与测试
+  # 质量闸门：后端代码检查与测试
   # ============================================================
   backend:
     name: Backend / 后端
@@ -130,358 +119,20 @@ jobs:
         working-directory: backend
         run: npm test
 
-      - name: Build / 构建
-        working-directory: backend
-        run: npm run build
-
   # ============================================================
-  # Stage 3: Docker 镜像构建与推送（app/job 双镜像并行 job，互不拖累；
-  # 单镜像失败可 re-run failed jobs 单独重试）
-  # 构建机为自托管 runner（Mac，本机直推 TCR 国内链路）；保留首推失败重试兜底，
-  # 失败后构建走 buildx 本地缓存秒级重建、立即重推一次；首推 continue-on-error，
-  # 结论由 gate 步骤裁定（任一次成功即绿），避免首推失败把 job 判死、Stage 4 被 needs 跳过；
-  # provenance 关闭，免除 TCR 不认的 attestation manifest 并减小推送体积
+  # 发布阶段：构建镜像 + 部署（详见 .github/workflows/release.yaml）
+  # develop → staging 自动部署；main → production 需 GitHub Environment 人工批准
+  # PR 不触发（不推镜像）；workflow_dispatch 在其他分支上只构建镜像、不部署
   # ============================================================
-  docker-app:
-    name: Docker App / App 镜像构建推送
-    runs-on: [self-hosted]
+  release:
+    name: Release / 构建并部署
     needs: [frontend, backend]
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout / 检出代码
-        uses: actions/checkout@v6
-
-      # 本机持久 builder（buildkitd 配国内 docker.io 镜像源 + 本地缓存跨 job 持久，见 ~/Workspace/actions-runner/buildkitd.toml）
-      - name: Select builder / 选择构建器
-        run: docker buildx use ci-builder
-
-      - name: Login to TCR / 登录腾讯云容器镜像服务
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.TCR_USERNAME }}
-          password: ${{ secrets.TCR_PASSWORD }}
-
-      - name: Generate image tags / 生成镜像标签
-        id: vars
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
-          APP_VERSION=$(cat VERSION)
-          echo "sha_short=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "latest_tag=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:latest" >> "$GITHUB_OUTPUT"
-          echo "app_version=${APP_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and Push / 构建并推送（第 1 次尝试）
-        id: push
-        uses: docker/build-push-action@v7
-        # 步骤级超时：stall 时 25 分钟强制失败，把剩余预算留给重试
-        # continue-on-error：首推失败不直接判死 job，最终结论由 gate 步骤裁定
-        continue-on-error: true
-        timeout-minutes: 25
-        with:
-          context: .
-          file: docker/Dockerfile
-          push: true
-          provenance: false
-          platforms: linux/amd64
-          tags: |
-            ${{ steps.vars.outputs.image_tag }}
-            ${{ steps.vars.outputs.latest_tag }}
-          build-args: |
-            VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
-
-      - name: Build and Push / 构建并推送（重试）
-        if: steps.push.outcome == 'failure'
-        id: push-retry
-        uses: docker/build-push-action@v7
-        timeout-minutes: 30
-        with:
-          context: .
-          file: docker/Dockerfile
-          push: true
-          provenance: false
-          platforms: linux/amd64
-          tags: |
-            ${{ steps.vars.outputs.image_tag }}
-            ${{ steps.vars.outputs.latest_tag }}
-          build-args: |
-            VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
-
-      - name: Conclude push outcome / 推送结论裁定
-        if: always()
-        # 任一次尝试成功即 job 成功；两次皆败才判红（否则首推超时失败会把 job 判死、Stage 4 被 needs 跳过）
-        run: |
-          if [ "${{ steps.push.outcome }}" = "success" ] || [ "${{ steps.push-retry.outcome }}" = "success" ]; then
-            echo "[OK] image push succeeded"
-          else
-            echo "[FAIL] image push failed in both attempts" >&2
-            exit 1
-          fi
-
-      - name: Output image info / 输出镜像信息
-        run: |
-          echo "Image pushed: ${{ steps.vars.outputs.image_tag }}"
-          echo "Latest tag: ${{ steps.vars.outputs.latest_tag }}"
-
-  docker-job:
-    name: Docker Job / Job 镜像构建推送
-    runs-on: [self-hosted]
-    needs: [frontend, backend]
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout / 检出代码
-        uses: actions/checkout@v6
-
-      # 本机持久 builder（buildkitd 配国内 docker.io 镜像源 + 本地缓存跨 job 持久，见 ~/Workspace/actions-runner/buildkitd.toml）
-      - name: Select builder / 选择构建器
-        run: docker buildx use ci-builder
-
-      - name: Login to TCR / 登录腾讯云容器镜像服务
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.TCR_USERNAME }}
-          password: ${{ secrets.TCR_PASSWORD }}
-
-      - name: Generate image tags / 生成镜像标签
-        id: vars
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
-          echo "job_image_tag=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_JOB }}:${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "job_latest_tag=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_JOB }}:latest" >> "$GITHUB_OUTPUT"
-
-      - name: Build and Push Job Image / 构建并推送 Job 镜像（第 1 次尝试）
-        id: push
-        uses: docker/build-push-action@v7
-        # 步骤级超时：stall 时 25 分钟强制失败，把剩余预算留给重试
-        # continue-on-error：首推失败不直接判死 job，最终结论由 gate 步骤裁定
-        continue-on-error: true
-        timeout-minutes: 25
-        with:
-          context: .
-          file: docker/Dockerfile.job
-          push: true
-          provenance: false
-          platforms: linux/amd64
-          tags: |
-            ${{ steps.vars.outputs.job_image_tag }}
-            ${{ steps.vars.outputs.job_latest_tag }}
-
-      - name: Build and Push Job Image / 构建并推送 Job 镜像（重试）
-        if: steps.push.outcome == 'failure'
-        id: push-retry
-        uses: docker/build-push-action@v7
-        timeout-minutes: 30
-        with:
-          context: .
-          file: docker/Dockerfile.job
-          push: true
-          provenance: false
-          platforms: linux/amd64
-          tags: |
-            ${{ steps.vars.outputs.job_image_tag }}
-            ${{ steps.vars.outputs.job_latest_tag }}
-
-      - name: Conclude push outcome / 推送结论裁定
-        if: always()
-        # 任一次尝试成功即 job 成功；两次皆败才判红（否则首推超时失败会把 job 判死、Stage 4 被 needs 跳过）
-        run: |
-          if [ "${{ steps.push.outcome }}" = "success" ] || [ "${{ steps.push-retry.outcome }}" = "success" ]; then
-            echo "[OK] job image push succeeded"
-          else
-            echo "[FAIL] job image push failed in both attempts" >&2
-            exit 1
-          fi
-
-      - name: Output image info / 输出镜像信息
-        run: |
-          echo "Job image pushed: ${{ steps.vars.outputs.job_image_tag }}"
-
-  # ============================================================
-  # Stage 4: Staging SCF 自动部署（仅 develop）
-  # 双镜像推送成功后，调用 SCF UpdateFunctionCode 将 Staging
-  # Web/Job 函数切换到本次 {分支}-{short_sha} 镜像标签并轮询至 Active
-  # 所需 Secrets：TENCENT_SECRET_ID / TENCENT_SECRET_KEY（腾讯云 API 密钥）、
-  # SCF_STAGING_WEB_FUNCTION（必填）、SCF_STAGING_JOB_FUNCTION（可选，未配置则跳过 Job 函数更新）
-  # ============================================================
-  deploy-staging:
-    name: Deploy Staging / Staging SCF 部署
-    runs-on: ubuntu-latest
-    needs: [docker-app, docker-job]
-    # Staging 跟随 develop 分支：push 自动部署；手动 dispatch 也须在 develop 上执行
-    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    timeout-minutes: 30
-    env:
-      # region / 命名空间用仓库变量（vars，非敏感）配置，未设置回落本账号实际值；生产扩展命名空间对称用 SCF_PROD_NAMESPACE
-      SCF_REGION: ${{ vars.SCF_REGION || 'ap-beijing' }}
-      SCF_NAMESPACE: ${{ vars.SCF_STAGING_NAMESPACE || 'staging' }}
-      # 条件变量须挂 job 级：步骤 if 读取时步骤自身的 env 块尚未生效
-      SCF_WEB_FUNCTION: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}
-      SCF_JOB_FUNCTION: ${{ secrets.SCF_STAGING_JOB_FUNCTION }}
-
-    steps:
-      - name: Checkout / 检出代码
-        uses: actions/checkout@v6
-
-      - name: Install tccli / 安装腾讯云 CLI
-        run: pip3 install --quiet tccli
-
-      - name: Configure tccli / 配置腾讯云凭据
-        env:
-          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
-          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
-        run: |
-          # tccli configure set 用位置参数 varname value，不支持 --region/--secretId 旗标
-          tccli configure set region "$SCF_REGION" secretId "$TENCENT_SECRET_ID" secretKey "$TENCENT_SECRET_KEY"
-
-      - name: Compute image tags / 生成本次镜像标签
-        id: vars
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "app_image=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:develop-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "job_image=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME_JOB }}:develop-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-
-      - name: Update Web function / 更新 Staging Web 函数镜像
-        run: |
-          set -euo pipefail
-          PAYLOAD=$(printf '{"ImageConfig":{"ImageType":"personal","ImageUri":"%s","ImagePort":9000}}' '${{ steps.vars.outputs.app_image }}')
-          for attempt in 1 2; do
-            if tccli scf UpdateFunctionCode \
-              --FunctionName "$SCF_WEB_FUNCTION" \
-              --Namespace "$SCF_NAMESPACE" \
-              --Code "$PAYLOAD" \
-              --output json; then
-              echo "UpdateFunctionCode accepted (attempt ${attempt})"
-              exit 0
-            fi
-            # 函数可能正处于 Updating 状态（操作冲突），等待后重试一次
-            if [ "$attempt" -lt 2 ]; then sleep 45; fi
-          done
-          echo "UpdateFunctionCode failed after retries" >&2
-          exit 1
-
-      - name: Update Job function / 更新 Staging Job 函数镜像（可选）
-        if: env.SCF_JOB_FUNCTION != ''
-        run: |
-          set -euo pipefail
-          PAYLOAD=$(printf '{"ImageConfig":{"ImageType":"personal","ImageUri":"%s","ImagePort":-1}}' '${{ steps.vars.outputs.job_image }}')
-          for attempt in 1 2; do
-            if tccli scf UpdateFunctionCode \
-              --FunctionName "$SCF_JOB_FUNCTION" \
-              --Namespace "$SCF_NAMESPACE" \
-              --Code "$PAYLOAD" \
-              --output json; then
-              echo "UpdateFunctionCode accepted (attempt ${attempt})"
-              exit 0
-            fi
-            if [ "$attempt" -lt 2 ]; then sleep 45; fi
-          done
-          echo "UpdateFunctionCode failed after retries" >&2
-          exit 1
-
-      - name: Wait for functions Active / 等待函数镜像更新完成
-        timeout-minutes: 12
-        run: |
-          set -euo pipefail
-          check() {
-            local fn="$1"
-            local status=""
-            # 40 × 15s ≈ 10 分钟：镜像拉取与实例滚动可能较慢
-            for i in $(seq 1 40); do
-              status=$(tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json | jq -r '.Status')
-              case "$status" in
-                Active)
-                  echo "[OK] $fn is Active"
-                  return 0
-                  ;;
-                Updating|Creating)
-                  sleep 15
-                  ;;
-                *)
-                  echo "[FAIL] $fn status: $status" >&2
-                  tccli scf GetFunction --FunctionName "$fn" --Namespace "$SCF_NAMESPACE" --output json >&2 || true
-                  return 1
-                  ;;
-              esac
-            done
-            echo "[FAIL] timeout waiting for $fn (last status: $status)" >&2
-            return 1
-          }
-          sleep 10
-          check "$SCF_WEB_FUNCTION"
-          if [ -n "$SCF_JOB_FUNCTION" ]; then
-            check "$SCF_JOB_FUNCTION"
-          fi
-
-      - name: Output deploy info / 输出部署信息
-        run: |
-          echo "Staging Web function: ${{ secrets.SCF_STAGING_WEB_FUNCTION }}"
-          echo "App image: ${{ steps.vars.outputs.app_image }}"
-          echo "Job image: ${{ steps.vars.outputs.job_image }}"
-
-  # ============================================================
-  # Stage 5: 生产 acm 库迁移（仅 main）
-  # 双镜像推送成功后，SSH 到生产主机对 acm 库增量应用 docker/database/migrations/
-  # 中尚未在 acm_migrations 记账的迁移（单事务：迁移文件 + 记账 INSERT，失败即中止）。
-  # 迁移先于云函数切换执行：旧镜像 + 新表是安全的中间态。
-  # 需 Secret：PROD_MIGRATE_SSH_KEY（CI 专用私钥，公钥已装到生产 ubuntu@101.42.41.169）
-  # ============================================================
-  deploy-prod-migration:
-    name: Prod DB Migration / 生产库迁移
-    runs-on: ubuntu-latest
-    needs: [docker-app, docker-job]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout / 检出代码
-        uses: actions/checkout@v6
-
-      - name: Setup SSH key / 配置 CI 专用私钥
-        env:
-          PROD_MIGRATE_SSH_KEY: ${{ secrets.PROD_MIGRATE_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$PROD_MIGRATE_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 101.42.41.169 >> ~/.ssh/known_hosts 2>/dev/null
-
-      - name: Apply pending migrations / 增量应用未执行迁移
-        env:
-          PROD_HOST: ubuntu@101.42.41.169
-        run: |
-          set -euo pipefail
-          MIGRATION_DIR=docker/database/migrations
-          applied=0
-          for file in "$MIGRATION_DIR"/*.sql; do
-            name=$(basename "$file")
-            # 已记账则跳过（幂等，可重复执行）
-            if ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
-              "sudo -n -u postgres psql -d acm -tAc \"SELECT 1 FROM acm_migrations WHERE name = '$name'\"" | grep -qx 1; then
-              echo "[skip] $name already applied"
-              continue
-            fi
-            echo "[apply] $name"
-            scp -o BatchMode=yes -o IdentitiesOnly=yes -q "$file" "$PROD_HOST:/tmp/$name"
-            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
-              "sudo -n -u postgres psql -d acm -v ON_ERROR_STOP=1 -1 -f '/tmp/$name' -c \"INSERT INTO acm_migrations (name) VALUES ('$name');\""
-            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" "rm -f '/tmp/$name'"
-            applied=$((applied + 1))
-          done
-          echo "Applied $applied migration(s)"
-
-      - name: Verify table owners / 验证表 owner
-        env:
-          PROD_HOST: ubuntu@101.42.41.169
-        # 2026-10-08 生产事故教训：postgres 建表后 acm 角色无权限 → 页面 500；迁移文件已内嵌 OWNER TO，此处留验证输出
-        run: |
-          ssh -o BatchMode=yes -o IdentitiesOnly=yes "$PROD_HOST" \
-            "sudo -n -u postgres psql -d acm -c \"SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\""
+    if: >-
+      (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
+      || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/release.yaml
+    with:
+      deploy: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
+      deploy_env: ${{ github.ref == 'refs/heads/develop' && 'staging' || 'production' }}
+      run_migration: ${{ github.ref == 'refs/heads/main' }}
+    secrets: inherit

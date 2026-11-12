@@ -1,34 +1,52 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { AppLayout } from '@/shared/components/AppLayout';
 import { DetailPageSkeleton } from '@/shared/components/Skeleton';
+import { ChunkErrorBoundary } from '@/shared/components/ChunkErrorBoundary';
+import { LoadFailureNotice } from '@/shared/components/LoadFailureNotice';
+import { lazyWithRetry } from '@/shared/lib/chunk-load';
+import { RouteErrorFallback } from './RouteErrorFallback';
 
-const LoginPage = lazy(() => import('@/pages/LoginPage'));
-const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
-const AccountListPage = lazy(() => import('@/pages/AccountListPage'));
-const AccountDetailPage = lazy(() => import('@/pages/AccountDetailPage'));
-const CharacterListPage = lazy(() => import('@/pages/CharacterListPage'));
-const CharacterDetailPage = lazy(() => import('@/pages/CharacterDetailPage'));
-const TransactionPage = lazy(() => import('@/pages/TransactionPage'));
-const GmToolPage = lazy(() => import('@/pages/GmToolPage'));
-const AuditLogPage = lazy(() => import('@/pages/AuditLogPage'));
-const IpBanPage = lazy(() => import('@/pages/IpBanPage'));
-const BanlistPage = lazy(() => import('@/pages/BanlistPage'));
-const GmAccountPage = lazy(() => import('@/pages/GmAccountPage'));
-const MuteListPage = lazy(() => import('@/pages/MuteListPage'));
-const RbacConfigPage = lazy(() => import('@/pages/RbacConfigPage'));
-const SystemConfigPage = lazy(() => import('@/pages/SystemConfigPage'));
-const AiDiagnosisPage = lazy(() => import('@/pages/AiDiagnosisPage'));
-const AiDiagnosisReportDetailPage = lazy(() => import('@/pages/AiDiagnosisReportDetailPage'));
-const AiDiagnosisFindingsPage = lazy(() => import('@/pages/AiDiagnosisFindingsPage'));
-const TargetedAnalysisPage = lazy(() => import('@/pages/TargetedAnalysisPage'));
-const TargetedAnalysisDetailPage = lazy(() => import('@/pages/TargetedAnalysisDetailPage'));
-const SampleRegistryPage = lazy(() => import('@/pages/SampleRegistryPage'));
-const PromptLibraryPage = lazy(() => import('@/pages/PromptLibraryPage'));
-const AiAssistantDock = lazy(() =>
-  import('@/features/ai-assistant/components/AiAssistantDock').then((m) => ({ default: m.AiAssistantDock })),
+const LoginPage = lazyWithRetry(() => import('@/pages/LoginPage'), 'LoginPage');
+const DashboardPage = lazyWithRetry(() => import('@/pages/DashboardPage'), 'DashboardPage');
+const AccountListPage = lazyWithRetry(() => import('@/pages/AccountListPage'), 'AccountListPage');
+const AccountDetailPage = lazyWithRetry(() => import('@/pages/AccountDetailPage'), 'AccountDetailPage');
+const CharacterListPage = lazyWithRetry(() => import('@/pages/CharacterListPage'), 'CharacterListPage');
+const CharacterDetailPage = lazyWithRetry(() => import('@/pages/CharacterDetailPage'), 'CharacterDetailPage');
+const TransactionPage = lazyWithRetry(() => import('@/pages/TransactionPage'), 'TransactionPage');
+const GmToolPage = lazyWithRetry(() => import('@/pages/GmToolPage'), 'GmToolPage');
+const AuditLogPage = lazyWithRetry(() => import('@/pages/AuditLogPage'), 'AuditLogPage');
+const IpBanPage = lazyWithRetry(() => import('@/pages/IpBanPage'), 'IpBanPage');
+const BanlistPage = lazyWithRetry(() => import('@/pages/BanlistPage'), 'BanlistPage');
+const MuteListPage = lazyWithRetry(() => import('@/pages/MuteListPage'), 'MuteListPage');
+const RbacConfigPage = lazyWithRetry(() => import('@/pages/RbacConfigPage'), 'RbacConfigPage');
+const GmAccountPage = lazyWithRetry(() => import('@/pages/GmAccountPage'), 'GmAccountPage');
+const SystemConfigPage = lazyWithRetry(() => import('@/pages/SystemConfigPage'), 'SystemConfigPage');
+const AiDiagnosisPage = lazyWithRetry(() => import('@/pages/AiDiagnosisPage'), 'AiDiagnosisPage');
+const AiDiagnosisReportDetailPage = lazyWithRetry(
+  () => import('@/pages/AiDiagnosisReportDetailPage'),
+  'AiDiagnosisReportDetailPage',
+);
+const AiDiagnosisFindingsPage = lazyWithRetry(
+  () => import('@/pages/AiDiagnosisFindingsPage'),
+  'AiDiagnosisFindingsPage',
+);
+const TargetedAnalysisPage = lazyWithRetry(
+  () => import('@/pages/TargetedAnalysisPage'),
+  'TargetedAnalysisPage',
+);
+const TargetedAnalysisDetailPage = lazyWithRetry(
+  () => import('@/pages/TargetedAnalysisDetailPage'),
+  'TargetedAnalysisDetailPage',
+);
+const SampleRegistryPage = lazyWithRetry(() => import('@/pages/SampleRegistryPage'), 'SampleRegistryPage');
+const PromptLibraryPage = lazyWithRetry(() => import('@/pages/PromptLibraryPage'), 'PromptLibraryPage');
+const AiAssistantDock = lazyWithRetry(
+  () =>
+    import('@/features/ai-assistant/components/AiAssistantDock').then((m) => ({ default: m.AiAssistantDock })),
+  'AiAssistantDock',
 );
 
 function withSuspense(Component: React.ComponentType) {
@@ -40,14 +58,28 @@ function withSuspense(Component: React.ComponentType) {
   );
 }
 
+// 页面路由统一挂 errorElement：页面 chunk 加载失败时只替换内容区，布局与导航保留
+function page(path: string, Component: React.ComponentType) {
+  return {
+    path,
+    element: withSuspense(Component),
+    errorElement: <RouteErrorFallback />,
+  };
+}
+
 // 全局 AI 助手入口：悬浮按钮 + 右侧抽屉，随 AppLayout 出现在所有已登录页
 function AiAssistantDockGate() {
   const { hasGmLevel } = usePermission();
   if (!hasGmLevel(2)) return null;
   return (
-    <Suspense fallback={null}>
-      <AiAssistantDock />
-    </Suspense>
+    // 助手 chunk 加载失败只降级为角标提示，不牵连整页
+    <ChunkErrorBoundary
+      fallback={<LoadFailureNotice floating title="AI 助手加载失败" description="网络波动导致助手脚本未加载完成。" />}
+    >
+      <Suspense fallback={null}>
+        <AiAssistantDock />
+      </Suspense>
+    </ChunkErrorBoundary>
   );
 }
 
@@ -70,7 +102,7 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <GuestGuard />,
-    children: [{ path: '', element: withSuspense(LoginPage) }],
+    children: [page('', LoginPage)],
   },
   {
     path: '/',
@@ -84,42 +116,38 @@ export const router = createBrowserRouter([
           </>
         ),
         children: [
-          { path: '', element: withSuspense(DashboardPage) },
-          { path: 'accounts', element: withSuspense(AccountListPage) },
-          { path: 'accounts/:id', element: withSuspense(AccountDetailPage) },
-          { path: 'characters', element: withSuspense(CharacterListPage) },
-          { path: 'characters/:guid', element: withSuspense(CharacterDetailPage) },
-          { path: 'transactions', element: withSuspense(TransactionPage) },
-          { path: 'gm-tools', element: withSuspense(GmToolPage) },
-          { path: 'banlist', element: withSuspense(BanlistPage) },
-          { path: 'mutes', element: withSuspense(MuteListPage) },
+          page('', DashboardPage),
+          page('accounts', AccountListPage),
+          page('accounts/:id', AccountDetailPage),
+          page('characters', CharacterListPage),
+          page('characters/:guid', CharacterDetailPage),
+          page('transactions', TransactionPage),
+          page('gm-tools', GmToolPage),
+          page('banlist', BanlistPage),
+          page('mutes', MuteListPage),
           {
             element: <GmGuard minLevel={2} />,
             children: [
-              { path: 'ip-bans', element: withSuspense(IpBanPage) },
-              { path: 'ai-diagnosis', element: withSuspense(AiDiagnosisPage) },
-              { path: 'ai-diagnosis/findings', element: withSuspense(AiDiagnosisFindingsPage) },
-              { path: 'ai-diagnosis/targeted', element: withSuspense(TargetedAnalysisPage) },
-              { path: 'ai-diagnosis/samples', element: withSuspense(SampleRegistryPage) },
-              { path: 'ai-diagnosis/prompts', element: withSuspense(PromptLibraryPage) },
-              { path: 'ai-diagnosis/targeted/:id', element: withSuspense(TargetedAnalysisDetailPage) },
-              { path: 'ai-diagnosis/:realm/:date', element: withSuspense(AiDiagnosisReportDetailPage) },
+              page('ip-bans', IpBanPage),
+              page('ai-diagnosis', AiDiagnosisPage),
+              page('ai-diagnosis/findings', AiDiagnosisFindingsPage),
+              page('ai-diagnosis/targeted', TargetedAnalysisPage),
+              page('ai-diagnosis/samples', SampleRegistryPage),
+              page('ai-diagnosis/prompts', PromptLibraryPage),
+              page('ai-diagnosis/targeted/:id', TargetedAnalysisDetailPage),
+              page('ai-diagnosis/:realm/:date', AiDiagnosisReportDetailPage),
             ],
           },
           {
             element: <GmGuard minLevel={3} />,
-            children: [
-              { path: 'gm-accounts', element: withSuspense(GmAccountPage) },
-              { path: 'audit-logs', element: withSuspense(AuditLogPage) },
-              { path: 'rbac-config', element: withSuspense(RbacConfigPage) },
-            ],
+            children: [page('gm-accounts', GmAccountPage), page('audit-logs', AuditLogPage), page('rbac-config', RbacConfigPage)],
           },
           {
             element: <GmGuard minLevel={3} />,
             children: [
               { path: 'model-config', element: <Navigate to="/system-config?tab=model" replace /> },
               { path: 'feishu-bindings', element: <Navigate to="/system-config?tab=bindings" replace /> },
-              { path: 'system-config', element: withSuspense(SystemConfigPage) },
+              page('system-config', SystemConfigPage),
             ],
           },
         ],

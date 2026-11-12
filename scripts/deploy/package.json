@@ -1,0 +1,13 @@
+{
+  "name": "acore-manager-deploy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CI 部署工具：把已推送到 TCR 的镜像更新到腾讯云 SCF 容器镜像函数",
+  "scripts": {
+    "deploy:scf": "node scf-update-image.mjs"
+  },
+  "dependencies": {
+    "tencentcloud-sdk-nodejs-scf": "4.1.168"
+  }
+}

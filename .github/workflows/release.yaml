@@ -1,0 +1,412 @@
+name: Release
+
+# 可复用工作流：构建双镜像 → （环境闸门）→ 迁移（可选）→ 切换云函数镜像
+# 由 ci.yml 调用；deploy_env 决定目标环境与 GitHub Environment 闸门
+on:
+  workflow_call:
+    inputs:
+      deploy_env:
+        description: '目标环境（对应 GitHub Environment 名）：staging | production（deploy=false 时忽略）'
+        type: string
+        default: 'staging'
+      deploy:
+        description: '是否执行部署（false = 只构建镜像，不切函数）'
+        type: boolean
+        default: true
+      run_migration:
+        description: '是否执行生产 acm 库迁移（仅 production 用）'
+        type: boolean
+        default: false
+    secrets:
+      TCR_USERNAME:
+        required: true
+      TCR_PASSWORD:
+        required: true
+      TCR_NAMESPACE:
+        required: true
+      TENCENT_SECRET_ID:
+        required: true
+      TENCENT_SECRET_KEY:
+        required: true
+      DEPLOY_PRODUCTION_MIGRATE_SSH_KEY:
+        required: false
+      DEPLOY_PRODUCTION_KNOWN_HOSTS:
+        required: false
+
+env:
+  # 强制 GitHub Actions 使用 Node.js 24 runtime（消除 Node 20 actions 弃用警告）
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # 与 Dockerfile（node:22）、engines（>=22.0.0）统一
+  NODE_VERSION: '22'
+  # 镜像仓库地址（非敏感，走 vars；未配置回落默认 TCR 域名）
+  REGISTRY: ${{ vars.TCR_REGISTRY || 'ccr.ccs.tencentyun.com' }}
+  IMAGE_NAME: acore-manager
+  IMAGE_NAME_JOB: acore-manager-job
+
+# 同一环境串行部署，避免两次发布互相覆盖函数镜像
+concurrency:
+  group: release-${{ inputs.deploy_env }}
+  cancel-in-progress: false
+
+jobs:
+  # ============================================================
+  # 双镜像构建推送（App / Job 并行，互不拖累）
+  # 构建机为自托管 runner（Mac，本机直推 TCR 国内链路）；保留首推失败重试兜底，
+  # 失败后构建走 buildx 本地缓存秒级重建、立即重推一次；首推 continue-on-error，
+  # 结论由 gate 步骤裁定（任一次成功即绿），避免首推失败把 job 判死、后续被 needs 跳过；
+  # provenance 关闭，免除 TCR 不认的 attestation manifest 并减小推送体积
+  # ============================================================
+  docker-app:
+    name: Docker App / App 镜像构建推送
+    runs-on: [self-hosted]
+    timeout-minutes: 60
+    outputs:
+      # 只传不含密钥的片段：TCR 命名空间是 secret，含它的完整镜像地址会被 GitHub 判为含密而丢弃输出
+      image_tag: ${{ steps.image_info.outputs.image_tag }}
+      image_digest: ${{ steps.image_info.outputs.image_digest }}
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      # 本机持久 builder（buildkitd 配国内 docker.io 镜像源 + 本地缓存跨 job 持久，见 ~/Workspace/actions-runner/buildkitd.toml）
+      - name: Select builder / 选择构建器
+        run: docker buildx use ci-builder
+
+      - name: Login to TCR / 登录腾讯云容器镜像服务
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: Generate image tags / 生成镜像标签
+        id: vars
+        env:
+          TCR_NAMESPACE: ${{ secrets.TCR_NAMESPACE }}
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          APP_VERSION=$(cat VERSION)
+          echo "sha_short=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME}:${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME}:latest" >> "$GITHUB_OUTPUT"
+          echo "app_version=${APP_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push / 构建并推送（第 1 次尝试）
+        id: push
+        uses: docker/build-push-action@v7
+        # 步骤级超时：stall 时 25 分钟强制失败，把剩余预算留给重试
+        # continue-on-error：首推失败不直接判死 job，最终结论由 gate 步骤裁定
+        continue-on-error: true
+        timeout-minutes: 25
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          provenance: false
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.vars.outputs.image_tag }}
+            ${{ steps.vars.outputs.latest_tag }}
+          build-args: |
+            VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
+
+      - name: Build and Push / 构建并推送（重试）
+        if: steps.push.outcome == 'failure'
+        id: push-retry
+        uses: docker/build-push-action@v7
+        timeout-minutes: 30
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          provenance: false
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.vars.outputs.image_tag }}
+            ${{ steps.vars.outputs.latest_tag }}
+          build-args: |
+            VITE_APP_VERSION=${{ steps.vars.outputs.app_version }}
+
+      - name: Conclude push outcome / 推送结论裁定
+        if: always()
+        # 任一次尝试成功即 job 成功；两次皆败才判红（否则首推超时失败会把 job 判死、部署阶段被 needs 跳过）
+        run: |
+          if [ "${{ steps.push.outcome }}" = "success" ] || [ "${{ steps.push-retry.outcome }}" = "success" ]; then
+            echo "[OK] image push succeeded"
+          else
+            echo "[FAIL] image push failed in both attempts" >&2
+            exit 1
+          fi
+
+      - name: Output image info / 输出镜像信息
+        id: image_info
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          DIGEST="${{ steps.push.outputs.digest }}"
+          if [ -z "$DIGEST" ]; then DIGEST="${{ steps.push-retry.outputs.digest }}"; fi
+          if [ -z "$DIGEST" ]; then
+            echo "[FAIL] 未取到镜像 digest" >&2
+            exit 1
+          fi
+          echo "image_tag=${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "App image tag: ${BRANCH}-${SHORT_SHA} (${DIGEST})"
+
+  docker-job:
+    name: Docker Job / Job 镜像构建推送
+    runs-on: [self-hosted]
+    timeout-minutes: 60
+    outputs:
+      # 同 docker-app：只传不含密钥的片段
+      image_tag: ${{ steps.image_info.outputs.image_tag }}
+      image_digest: ${{ steps.image_info.outputs.image_digest }}
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      - name: Select builder / 选择构建器
+        run: docker buildx use ci-builder
+
+      - name: Login to TCR / 登录腾讯云容器镜像服务
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
+
+      - name: Generate image tags / 生成镜像标签
+        id: vars
+        env:
+          TCR_NAMESPACE: ${{ secrets.TCR_NAMESPACE }}
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          echo "job_image_tag=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME_JOB}:${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "job_latest_tag=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME_JOB}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push Job Image / 构建并推送 Job 镜像（第 1 次尝试）
+        id: push
+        uses: docker/build-push-action@v7
+        # 步骤级超时：stall 时 25 分钟强制失败，把剩余预算留给重试
+        # continue-on-error：首推失败不直接判死 job，最终结论由 gate 步骤裁定
+        continue-on-error: true
+        timeout-minutes: 25
+        with:
+          context: .
+          file: docker/Dockerfile.job
+          push: true
+          provenance: false
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.vars.outputs.job_image_tag }}
+            ${{ steps.vars.outputs.job_latest_tag }}
+
+      - name: Build and Push Job Image / 构建并推送 Job 镜像（重试）
+        if: steps.push.outcome == 'failure'
+        id: push-retry
+        uses: docker/build-push-action@v7
+        timeout-minutes: 30
+        with:
+          context: .
+          file: docker/Dockerfile.job
+          push: true
+          provenance: false
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.vars.outputs.job_image_tag }}
+            ${{ steps.vars.outputs.job_latest_tag }}
+
+      - name: Conclude push outcome / 推送结论裁定
+        if: always()
+        run: |
+          if [ "${{ steps.push.outcome }}" = "success" ] || [ "${{ steps.push-retry.outcome }}" = "success" ]; then
+            echo "[OK] job image push succeeded"
+          else
+            echo "[FAIL] job image push failed in both attempts" >&2
+            exit 1
+          fi
+
+      - name: Output image info / 输出镜像信息
+        id: image_info
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          DIGEST="${{ steps.push.outputs.digest }}"
+          if [ -z "$DIGEST" ]; then DIGEST="${{ steps.push-retry.outputs.digest }}"; fi
+          if [ -z "$DIGEST" ]; then
+            echo "[FAIL] 未取到 Job 镜像 digest" >&2
+            exit 1
+          fi
+          echo "image_tag=${BRANCH}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Job image tag: ${BRANCH}-${SHORT_SHA} (${DIGEST})"
+
+  # ============================================================
+  # 部署闸门 + 实际部署
+  # environment 挂在本 job 上：GitHub Environment 配了 Required reviewers 时，
+  # 本 job（含库迁移与函数切换）会挂起等待人工批准；
+  # staging 环境不配 reviewers 即自动放行。
+  # ============================================================
+  deploy:
+    name: Deploy / 部署（${{ inputs.deploy_env }}）
+    needs: [docker-app, docker-job]
+    # deploy=false 时只构建镜像，不切函数
+    if: inputs.deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: ${{ inputs.deploy_env }}
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js / 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # ==============================================================
+      # 生产 acm 库迁移（仅 production；先迁移后切函数：旧镜像 + 新表是安全中间态）
+      # ==============================================================
+      - name: Setup SSH key / 配置 CI 专用私钥与主机指纹
+        if: inputs.run_migration
+        env:
+          DEPLOY_PRODUCTION_MIGRATE_SSH_KEY: ${{ secrets.DEPLOY_PRODUCTION_MIGRATE_SSH_KEY }}
+          DEPLOY_PRODUCTION_KNOWN_HOSTS: ${{ secrets.DEPLOY_PRODUCTION_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_PRODUCTION_MIGRATE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_PRODUCTION_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+
+      - name: Apply pending migrations / 增量应用未执行迁移
+        if: inputs.run_migration
+        env:
+          DEPLOY_PRODUCTION_HOST: ${{ vars.DEPLOY_PRODUCTION_HOST }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_PRODUCTION_HOST:?vars.DEPLOY_PRODUCTION_HOST 未配置}"
+          MIGRATION_DIR=docker/database/migrations
+          applied=0
+          for file in "$MIGRATION_DIR"/*.sql; do
+            name=$(basename "$file")
+            # 已记账则跳过（幂等，可重复执行）
+            if ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_PRODUCTION_HOST" \
+              "sudo -n -u postgres psql -d acm -tAc \"SELECT 1 FROM acm_migrations WHERE name = '$name'\"" | grep -qx 1; then
+              echo "[skip] $name already applied"
+              continue
+            fi
+            echo "[apply] $name"
+            scp -o BatchMode=yes -o IdentitiesOnly=yes -q "$file" "$DEPLOY_PRODUCTION_HOST:/tmp/$name"
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_PRODUCTION_HOST" \
+              "sudo -n -u postgres psql -d acm -v ON_ERROR_STOP=1 -1 -f '/tmp/$name' -c \"INSERT INTO acm_migrations (name) VALUES ('$name');\""
+            ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_PRODUCTION_HOST" "rm -f '/tmp/$name'"
+            applied=$((applied + 1))
+          done
+          echo "Applied $applied migration(s)"
+
+      - name: Verify table owners / 验证表 owner
+        if: inputs.run_migration
+        env:
+          DEPLOY_PRODUCTION_HOST: ${{ vars.DEPLOY_PRODUCTION_HOST }}
+        # 2026-10-08 生产事故教训：postgres 建表后 acm 角色无权限 → 页面 500；迁移文件已内嵌 OWNER TO，此处留验证输出
+        run: |
+          : "${DEPLOY_PRODUCTION_HOST:?vars.DEPLOY_PRODUCTION_HOST 未配置}"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes "$DEPLOY_PRODUCTION_HOST" \
+            "sudo -n -u postgres psql -d acm -c \"SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;\""
+
+      # ==============================================================
+      # 云函数镜像切换（Web + Job）
+      # ==============================================================
+      - name: Install deploy tool / 安装部署工具
+        working-directory: scripts/deploy
+        run: npm ci --no-audit --no-fund
+
+      - name: Resolve deploy target / 解析部署目标
+        id: target
+        env:
+          DEPLOY_ENV: ${{ inputs.deploy_env }}
+          # TCR 命名空间是 secret，不能作为 job 输出跨 job 传递，只能在用到的步骤内注入
+          TCR_NAMESPACE: ${{ secrets.TCR_NAMESPACE }}
+          APP_DIGEST: ${{ needs.docker-app.outputs.image_digest }}
+          JOB_DIGEST: ${{ needs.docker-job.outputs.image_digest }}
+          SCF_STAGING_NAMESPACE: ${{ vars.SCF_STAGING_NAMESPACE }}
+          SCF_STAGING_WEB_FUNCTION: ${{ vars.SCF_STAGING_WEB_FUNCTION }}
+          SCF_STAGING_JOB_FUNCTION: ${{ vars.SCF_STAGING_JOB_FUNCTION }}
+          SCF_PRODUCTION_NAMESPACE: ${{ vars.SCF_PRODUCTION_NAMESPACE }}
+          SCF_PRODUCTION_WEB_FUNCTION: ${{ vars.SCF_PRODUCTION_WEB_FUNCTION }}
+          SCF_PRODUCTION_JOB_FUNCTION: ${{ vars.SCF_PRODUCTION_JOB_FUNCTION }}
+        run: |
+          set -euo pipefail
+          case "$DEPLOY_ENV" in
+            staging)
+              namespace="${SCF_STAGING_NAMESPACE:-staging}"
+              web_fn="$SCF_STAGING_WEB_FUNCTION"
+              job_fn="$SCF_STAGING_JOB_FUNCTION"
+              ;;
+            production)
+              # 默认值必须是 production：改错默认值等于把生产包发到测试
+              namespace="${SCF_PRODUCTION_NAMESPACE:-production}"
+              web_fn="$SCF_PRODUCTION_WEB_FUNCTION"
+              job_fn="$SCF_PRODUCTION_JOB_FUNCTION"
+              ;;
+            *)
+              echo "[FAIL] 未知 deploy_env: $DEPLOY_ENV" >&2
+              exit 1
+              ;;
+          esac
+          : "${web_fn:?Web 函数名未配置（vars.SCF_${DEPLOY_ENV^^}_WEB_FUNCTION）}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | tr '/' '-')
+          TAG="${BRANCH}-${SHORT_SHA}"
+          echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
+          echo "web_function=${web_fn}" >> "$GITHUB_OUTPUT"
+          echo "job_function=${job_fn}" >> "$GITHUB_OUTPUT"
+          echo "app_image=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME}:${TAG}@${APP_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "job_image=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME_JOB}:${TAG}@${JOB_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "App: ${TAG}@${APP_DIGEST}"
+          echo "Job: ${TAG}@${JOB_DIGEST}"
+
+      - name: Update Web function / 更新 Web 函数镜像
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+          SCF_REGION: ${{ vars.SCF_REGION || 'ap-beijing' }}
+          SCF_NAMESPACE: ${{ steps.target.outputs.namespace }}
+          SCF_FUNCTION_NAME: ${{ steps.target.outputs.web_function }}
+          # 形态决定镜像端口：web → 9000（Web Server 函数）
+          SCF_FUNCTION_KIND: 'web'
+          SCF_IMAGE_URI: ${{ steps.target.outputs.app_image }}
+        working-directory: scripts/deploy
+        run: node scf-update-image.mjs
+
+      - name: Update Job function / 更新 Job 函数镜像（可选）
+        if: steps.target.outputs.job_function != ''
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+          SCF_REGION: ${{ vars.SCF_REGION || 'ap-beijing' }}
+          SCF_NAMESPACE: ${{ steps.target.outputs.namespace }}
+          SCF_FUNCTION_NAME: ${{ steps.target.outputs.job_function }}
+          # 形态决定镜像端口：job → -1（Job 函数，绝不可用 9000，否则会被改成 Web Server 函数）
+          SCF_FUNCTION_KIND: 'job'
+          SCF_IMAGE_URI: ${{ steps.target.outputs.job_image }}
+        working-directory: scripts/deploy
+        run: node scf-update-image.mjs
+
+      - name: Output deploy info / 输出部署信息
+        env:
+          WEB_FUNCTION: ${{ steps.target.outputs.web_function }}
+          APP_IMAGE: ${{ steps.target.outputs.app_image }}
+          JOB_IMAGE: ${{ steps.target.outputs.job_image }}
+        run: |
+          echo "Environment: ${{ inputs.deploy_env }}"
+          echo "Web function: ${WEB_FUNCTION}"
+          echo "App image: ${APP_IMAGE}"
+          echo "Job image: ${JOB_IMAGE}"

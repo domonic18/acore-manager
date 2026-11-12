@@ -31,6 +31,10 @@ import feishuBindingRoutes from './routes/feishu-binding.routes';
 import iconRoutes from './routes/icon.routes';
 import { dbReadinessGate } from './middleware/db-readiness-gate';
 
+// Vite 构建产物文件名形如 index-CejDb8xH.js / index-BteZ8KxJ.css，8 位哈希后缀
+const HASHED_ASSET_RE = /-[A-Za-z0-9_-]{8}\.(js|mjs|css|woff2?|ttf|eot|png|jpe?g|gif|svg|webp|avif|ico)$/i;
+// 带静态扩展名的请求路径：未命中时按 404 处理，不走 SPA fallback
+const STATIC_PATH_RE = /\.(js|mjs|css|map|json|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|mp4|webm)$/i;
 
 export function createApp(): Application {
   const app = express();
@@ -103,9 +107,33 @@ export function createApp(): Application {
   app.use('/api/icons', iconRoutes);
 
   const publicPath = path.join(__dirname, 'public');
-  app.use(express.static(publicPath));
+  // 带内容哈希的构建产物可长期强缓存：文件名随内容变化，命中缓存必然是对应版本
+  // index.html 必须每次回源校验，否则发新版后用户仍拿着旧壳引用已下线的 chunk（chunk 404 → 动态导入失败）
+  // 非哈希的 public 资源（logo.svg、assets/icons/**）只给短缓存，避免同名文件更新后用户拿不到新内容
+  app.use(
+    express.static(publicPath, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        const name = path.basename(filePath);
+        if (name === 'index.html') {
+          res.setHeader('Cache-Control', 'no-cache');
+        } else if (HASHED_ASSET_RE.test(name)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+        }
+      },
+    }),
+  );
 
-  app.get('*', (_req, res) => {
+  // SPA fallback：静态资源未命中必须回 404，不能回 index.html
+  // 否则浏览器把 text/html 当 JS 解析，真实 404 被伪装成 "Failed to fetch dynamically imported module"，无从定位
+  app.get('*', (req, res) => {
+    if (STATIC_PATH_RE.test(req.path)) {
+      res.status(404).type('text/plain').send('Not Found');
+      return;
+    }
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(publicPath, 'index.html'));
   });
 

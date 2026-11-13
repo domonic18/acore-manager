@@ -171,7 +171,16 @@ export const env = {
   // Agent runtime (arch 3.2.2 / 3.3.1)
   AI_AGENT_CACHE_SIZE: getEnvInt('AI_AGENT_CACHE_SIZE', 4),
   AI_TOOL_CALL_BUDGET: getEnvInt('AI_TOOL_CALL_BUDGET', 20),
-  AI_TOOL_TIMEOUT_MS: getEnvInt('AI_TOOL_TIMEOUT_MS', 5000),
+  // 默认工具超时：解析类工具（parse_server_anomalies / parse_anticheat_violations）在注册时单独放宽到 60s，
+  // 其余工具保持轻量快速失败；生产若通过系统配置 DB 覆盖，需同步调整 ai_tool_timeout_ms。
+  AI_TOOL_TIMEOUT_MS: getEnvInt('AI_TOOL_TIMEOUT_MS', 15_000),
+  // 同一工具连续失败阈值；达到后该工具在本任务内熔断，防止模型错误形状上无限重试。
+  AI_TOOL_FAILURE_THRESHOLD: getEnvInt('AI_TOOL_FAILURE_THRESHOLD', 3),
+  // agent 单轮最大步数（LangGraph recursionLimit）：deepagents 默认 1e4，弱模型在错误形状上
+  // 会无限重试（2026-11 mimo 事故：单轮 57 分钟不收敛），必须显式封顶。
+  AI_AGENT_MAX_STEPS: getEnvInt('AI_AGENT_MAX_STEPS', 60),
+  // 模型单请求超时（ms）：Anthropic/OpenAI SDK 默认 10 分钟，超时表现为 terminated 且无重试保护。
+  AI_LLM_REQUEST_TIMEOUT_MS: getEnvInt('AI_LLM_REQUEST_TIMEOUT_MS', 600_000),
   // 游戏词条外链基址（nfuwow 中文数据库，aowow 架构；与前端 VITE_AOWOW_BASE_URL 同值对应）
   AOWOW_BASE_URL: getEnv('AOWOW_BASE_URL', 'https://db.nfuwow.com/80/'),
   // 巡检重试总时间预算（ms）：默认 1h（Job 函数已开异步执行，平台上限 24h）——

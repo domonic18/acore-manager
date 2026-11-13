@@ -9,6 +9,12 @@
 // （勿处罚），弱信号或无信号 → investigate（人工核查）；ban 与否由模型结合
 // count/pattern 等完整证据裁决，误报引擎只表达误报可能性，不做处罚建议。
 
+import {
+  LATENCY_P75_MS,
+  MAGNITUDE_TIER_JUMP,
+  ROUTINE_TELEPORT_MAX_BURST60S,
+  ROUTINE_TELEPORT_MAX_COUNT,
+} from '@/config/ai-constants';
 import { rulesForType } from './aura-rules';
 
 export interface FpSuspect {
@@ -51,14 +57,9 @@ export interface FpSignal {
   detail: string;
 }
 
-// 延迟误报阈值：平均延迟超过该值时高速类违规可能是网络抖动
-export const LATENCY_P75_MS = 100;
-// speed 幅度档位跳变区间：中位恰超一个速度档位（服务器认为步行 7 实际坐骑 14 → +100%）
-const MAGNITUDE_TIER_JUMP = { min: 80, max: 130 };
 // 例行传送稀疏化阈值（2026-10-02 DK 任务传送误报后引入）：单发/稀疏且无爆发 → 任务/炉石/飞行点/副本进出
 // 口径经线上 case 校准（元吉案 41 条 continuous burst 不命中），阈值调整走 ai_fp_scenario UI 评估
-export const ROUTINE_TELEPORT_MAX_COUNT = 5;
-export const ROUTINE_TELEPORT_MAX_BURST60S = 3;
+// （阈值常量已收归 config/ai-constants.ts：ROUTINE_TELEPORT_MAX_COUNT / ROUTINE_TELEPORT_MAX_BURST60S）
 
 function inScenarioSpots(suspect: FpSuspect, spots: FpScenarioRule['spots']): boolean {
   if (!spots || spots.length === 0) return true;

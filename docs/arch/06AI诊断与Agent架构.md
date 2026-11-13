@@ -94,13 +94,14 @@ backend/src/
 │   │   ├── agent-factory.ts        # createDeepAgent 组装 + 指纹 LRU 缓存 + skills 同步（syncSkills）
 │   │   ├── checkpointer.ts         # PostgresSaver 单例（acm PG 库）
 │   │   ├── budget-guard.ts         # 工具调用预算器（单任务实例）
+│   │   ├── failure-guard.ts        # 工具连续失败熔断器（单任务实例）
 │   │   └── wire.ts                 # streamEvents → SSE 事件映射
 │   ├── tools/
 │   │   ├── index.ts                # exportTools() 汇总出口
 │   │   ├── registry.ts             # 工具注册表（name/schema/handler/审计包装）
 │   │   ├── db-tools/               # 数据库白名单工具（SQL 写死）：account/character/anticheat/metrics 四组 + query-guard 护栏
 │   │   ├── log-tools/              # manifest / fetch / parse + anticheat-parser + log-workspace
-│   │   ├── report-tools/           # 报告产出工具（sections / draft-store / final-json / markdown / register）
+│   │   ├── report-tools/           # 报告产出工具（sections / section-args / draft-store / final-json / markdown / register）
 │   │   ├── false-positive/         # 误报研判知识（工具富化用，非运行时机制）
 │   │   │   ├── aura-rules.ts       # 移动类光环对照表（代码内置初稿）
 │   │   │   └── explain.ts          # 误报解释引擎（aura/地图/延迟/白名单）
@@ -212,13 +213,33 @@ POST /api/ai/assistant/chat   (Accept: text/event-stream)
 
 ```
 wrapped(args):
-  budget.consume()                    // 超预算抛 ToolBudgetExceededError
-  t0 = now; rows = await handler(validate(args))
+  budget.consume()                    // 超预算抛 ToolBudgetExceededError（并 abort 本轮）
+  if failureGuard.isOpen(tool): return { error: 已熔断 }   // 连续失败达阈值后不再执行
+  verdict = schema.safeParse(args)    // 校验在包装层内做：失败计入熔断与预算
+  if !verdict.ok: return { error: 字段定位 + 实际收到类型 }  // 不抛给框架层
+  t0 = now; rows = await handler(verdict.data)             // 超时护栏（按工具差异化）
+  failureGuard.succeed(tool) / .fail(tool)                  // 成功清零 / 失败累加
   audit.writeAsync({ sessionId, tool, args, rows, costMs })   // 不阻塞主链路
   return rows
 ```
 
-预算器（BudgetGuard）为**单任务实例**（一次巡检 / 一次对话链各自独立，默认 20 次）。
+预算器（BudgetGuard）与失败熔断器（ToolFailureGuard）均为**单任务实例**（一次巡检 / 一次对话链各自独立，经 invoke configurable 注入）。熔断阈值默认 3 次连续失败（`AI_TOOL_FAILURE_THRESHOLD` / 配置页 `ai_tool_failure_threshold`）：达阈值后同一工具在本任务内不再执行并返回可操作提示，阻断弱模型在错误参数形状上无限重试（2026-11 mimo 事故：同一落盘工具连续失败 214 次、单轮 6M token）。
+
+工具超时默认 `AI_TOOL_TIMEOUT_MS`（15s），重计算工具在注册时单独放宽（`parse_server_anomalies` / `parse_anticheat_violations` 60s，日志下载 30s）。
+
+**运行时校验必须在包装层内**（2026-11 mimo 事故修复）：LangChain 的 `tool()` 会在框架层先做一次 zod 校验，失败即抛 `ToolInputParsingException`，被 `ToolNode` 转成**可恢复**的 error ToolMessage——这会绕过包装层，预算不消耗、熔断不计数，弱模型可在错误参数形状上无限重试（同一落盘工具连续失败 214 次、单轮 6M token）。因此注册时给 schema 套一层 `zod.catch(ctx => ctx.input)`：**运行时永不抛错**，解析失败回落到包装层自行校验；对外广告的 JSON Schema 仍是强 schema（zod-to-json-schema 会展开到内层形状），模型看到的入参契约不变。
+
+**预算超限必须终止本轮**：包装层捕获 `ToolBudgetExceededError` 后主动 `abortController.abort(err)`，让在途模型请求立即失败、轮次当场收口。仅抛错会被 ToolNode 转成可恢复错误，模型继续重试直到步数上限（2026-11 mimo 事故：预算早已耗尽，轮次仍跑了 57 分钟）。
+
+**单轮步数硬上限**：deepagents 把 LangGraph 默认的 `recursionLimit`（25）顶到 1e4，弱模型在错误参数上可无限重试。三条链路（巡检 / 对话 / 定向分析）统一经 `buildAgentRuntimeConfig` 下发 `recursionLimit`（配置页 `ai_agent_max_steps`，默认 60），并把 `AbortSignal` 一并挂到 invoke config。
+
+**模型单请求超时**：`buildModelClient` 显式设 `timeout`（配置页 `ai_llm_request_timeout_ms`，默认 600s）与 `maxRetries: 1`——SDK 默认 10 分钟超时 + 2 次重试会把单次挂起放大 3 倍。
+
+#### 3.3.1.1 常量收口
+
+AI 域的**结构性护栏常量**（硬上限、护栏超时、阈值）统一登记在 `backend/src/config/ai-constants.ts`：日志工作区容量与 grep 护栏、解析/聚合上限、报告分节上限、DB 行数上限、误报研判阈值、巡检重试退避等。新增护栏先在该文件登记再引用，禁止在业务文件内就近定义上限。
+
+**运行期可调参数**（预算 / 熔断 / 步数 / 超时）走 Web「系统配置」页（`acm_system_config` 表，DB 值优先，env 回落），不在常量文件里。两者的分工见 `config/ai-constants.ts` 文件头注释。
 
 #### 3.3.2 数据库白名单工具（10 个）
 
@@ -503,8 +524,12 @@ FEISHU_WEBHOOK_URL / FEISHU_WEBHOOK_SECRET / ACM_WEB_BASE_URL  # 告警出口（
 ACM_WEB_BASE_URL              # 飞书日报卡片报告链接
 AI_DAILY_TOKEN_BUDGET=5000000 # Token 日预算（告警阈值）
 AI_AGENT_CACHE_SIZE=4         # agent 指纹 LRU 容量
-AI_TOOL_CALL_BUDGET=20        # 单任务工具调用预算
-AI_TOOL_TIMEOUT_MS=5000       # 单工具调用超时
+AI_TOOL_CALL_BUDGET=20        # 单任务工具调用预算（配置页 ai_tool_call_budget）
+AI_TOOL_TIMEOUT_MS=15000      # 单工具调用超时（配置页 ai_tool_timeout_ms 可覆盖；解析类工具 60s 见 ai-constants.ts）
+AI_TOOL_FAILURE_THRESHOLD=3   # 同一工具连续失败熔断阈值（配置页 ai_tool_failure_threshold）
+AI_INSPECTION_TIME_BUDGET_MS=3600000 # 单次巡检总时长预算（配置页 ai_inspection_time_budget_ms）
+AI_AGENT_MAX_STEPS=60         # Agent 单轮最大步数 / LangGraph recursionLimit（配置页 ai_agent_max_steps）
+AI_LLM_REQUEST_TIMEOUT_MS=600000    # 模型单请求超时（配置页 ai_llm_request_timeout_ms）
 ```
 
 运行参数（飞书通知 / AI 参数 / 登录安全 / SOAP 连接 / 默认 Realm）可迁至 Web「系统配置」页维护（`acm_system_config` 表，DB 值优先，env 回落）。
@@ -569,6 +594,7 @@ GM 发起(表单/详情页按钮) → POST /api/ai/analysis/targeted (SSE)
 | daily_players_reports 为空 | get_anticheat_record 降级当前聚合 | 日志解析为唯一权威来源 |
 | logs / logs_ip_actions 为空 | 相关工具返回空并注明 | 不阻塞其余证据链 |
 | 工具预算耗尽 | 后续调用返回 budget_exceeded | agent 基于已有信息收尾报告 |
+| 工具连续失败达阈值 | 该工具本轮熔断，后续调用返回已熔断提示 | agent 停止重试、改用其它工具取证并注明该维度无数据 |
 | agent 输出 JSON 非法 | 追问修复一轮 → 失败告警 | 当日报告标记 failed，可重跑 |
 | 定向分析执行中断 | status=failed 落库，历史保留 | 重新发起即追加新记录 |
 

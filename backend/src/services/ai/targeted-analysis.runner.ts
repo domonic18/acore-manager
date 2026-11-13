@@ -3,17 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acmDataSource } from '@/config/database';
-import { env } from '@/config/env';
-import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { getAgent } from '@/agent/runtime/agent-factory';
-import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { AiTargetedAnalysis } from '@/entities/acm/ai-targeted-analysis.entity';
 import { clearConclusionCaptureRoot, readConclusionCapture, setConclusionCaptureRoot } from '@/agent/tools/analysis-tools';
 import { llmConfigService } from './llm-config.service';
 import { watchlistService } from './watchlist.service';
 import { tokenUsageService } from './token-usage.service';
 import { emptyTokens, sumTokens, watchAgentEvents, type RoundAccumulator } from './agent-round.util';
+import { buildAgentRuntimeConfig } from './agent-runtime-config';
 import { buildAnalysisJsonFixPrompt, buildTargetedAnalysisTaskPrompt } from './targeted-analysis-prompt';
 import { describeIssues, enforceFalsePositiveRule, parseConclusion, type AnalysisConclusion } from './targeted-analysis.conclusion';
 import type { ConclusionSubject } from '@/agent/tools/analysis-tools';
@@ -64,13 +62,10 @@ export async function runTargetedAnalysis(analysisId: number, subject: TargetedA
     const cfg = await llmConfigService.resolveDefault();
     const agent = await getAgent(cfg, 'analysis');
     // 每次运行必须使用全新线程：复用旧线程会经 checkpointer 重放上一次的结论（巡检同款教训）
-    const config = {
-      configurable: {
-        thread_id: `targeted:${analysisId}:${randomUUID()}`,
-        budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
-        refId: `analysis:${analysisId}`,
-      },
-    };
+    const config = await buildAgentRuntimeConfig({
+      threadId: `targeted:${analysisId}:${randomUUID()}`,
+      refId: `analysis:${analysisId}`,
+    });
     const makeError = (message: string, code: string): Error => new TargetedAnalysisError(message, code);
     const acc: RoundAccumulator = { text: '', tokens: emptyTokens() };
 

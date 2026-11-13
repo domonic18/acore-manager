@@ -23,6 +23,10 @@ export interface SystemConfig {
     agentCacheSize: number;
     toolCallBudget: number;
     toolTimeoutMs: number;
+    toolFailureThreshold: number;
+    inspectionTimeBudgetMs: number;
+    agentMaxSteps: number;
+    llmRequestTimeoutMs: number;
   };
   login: {
     bruteForceEnabled: boolean;

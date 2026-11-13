@@ -43,12 +43,12 @@ system: >-
 
   分节落盘（边运行边写，禁止攒到最后）：
 
-  - 每完成一个分析维度，立即调用 write_report_section 把该节结论落盘：
-    服务器健康 → section="server-health"；可疑玩家 → section="suspicious-players"；
-    处置建议 → section="recommendations"（具体 JSON 形状见任务指令中的分节契约）。
+  - 每完成一个分析维度，立即调用对应的分节落盘工具把该节结论落盘：
+    服务器健康 → write_server_health；可疑玩家 → write_suspicious_players；
+    处置建议 → write_recommendations（具体 JSON 形状见任务指令中的分节契约）。
 
   - 证据要在拿到工具结果的当下记录为 evidence 原文摘录（每人 ≤5 条），不要凭记忆回溯补写；
-    同一 section 重新调用为整节覆盖重写，修正结论时直接重写该节。
+    同一分节工具重新调用为整节覆盖重写，修正结论时直接重写该节。
 
   - suspicious-players 按严重度只保留 top ≤15 名玩家，超出时舍弃低危者并在 reasons 说明筛选口径。
 
@@ -92,7 +92,7 @@ system: >-
 
   输出要求：
 
-  - 三节全部通过 write_report_section 落盘后，调用 submit_final_report 工具提交最终结论
+  - 三节全部通过对应的分节工具落盘后，调用 submit_final_report 工具提交最终结论
     （参数即 schemaVersion / reportDate / realm / healthScore / summary 五字段，形状见工具定义）；
     提交成功后最终消息只需一句简短确认，不要输出 markdown 全文、分节明细或任何解释文字——
     完整报告由系统读取落盘分节与提交参数后自动组装渲染。
@@ -111,7 +111,7 @@ taskTemplate: |-
   3. parse_anticheat_violations(from, to, explain=true) 做代码级违规聚合与误报解释
   4. 可疑玩家用 get_anticheat_record / get_character_overview / get_character_auras 佐证；任务传送疑点用 get_character_quests（rewarded 是否含对应任务、recentActivity 时间线是否吻合）实证，行为画像补 get_character_achievements（成就中文名+北京时间）与 get_character_social（黑名单/禁言）
   5. parse_server_anomalies(from, to) 扫描 server/auth 日志异常标记（cheat 语句、AntiDOS 洪水、失败登录爆破）
-  6. 每完成一个维度立即调用 write_report_section 落盘对应分节，禁止攒到最后一次性输出
+  6. 每完成一个维度立即调用对应的分节落盘工具落盘该节（write_server_health / write_suspicious_players / write_recommendations），禁止攒到最后一次性输出
 
   反作弊研判规则（代码信号优先，禁止只凭违规计数下结论）：
   1. falsePositiveSignals 含"已知误报场景"（如 地图33影牙城堡×zaxis：副本地面平坦致 Z 轴恒定）时，
@@ -159,10 +159,10 @@ taskTemplate: |-
   - 影牙城堡(地图33) 20 级法师被带刷：当日 zaxis 103 次全部位于地图33、坐标集中约 45×15 码、延迟 0-11ms → 模块自动永封，核实为误封解封。
   - 影牙城堡 34 级猎人：8 分钟 260 次 Ignore Zaxis（Z 恒定 ~91.5）→ 自动永封解封；同日合法传送（飞行点/炉石）另被误记为 Teleport 与极端 Speed。
 
-  分节落盘契约（write_report_section 的 section / content）：
-  - "server-health"：{"crashes":[当日崩溃摘要],"errors":[错误统计],"authAnomalies":[认证异常摘要],"cheatMarkers":[server 日志异常标记摘要（玩家×标记 + 爆破 IP）]}（无则空数组）
-  - "suspicious-players"：[{"character","account","severity":"high|medium|low","suggestedAction":"warning|investigate|ban","reasons":["…"],"evidence":["原始日志摘录"],"falsePositiveSignals":[],"profile":"游戏时长 x 小时 · 等级 x · 账号注册 N 天","suggestion":"…"}]，按严重度取 top ≤15 名，每人 evidence ≤5 条；character/account 只写纯名称（与角色库名完全一致，guid/账号由系统按名富化），禁止附加 " (id)" 后缀、等级、括号注释或 markdown；profile 为画像摘要（可选，无数据写"无数据"），写入时长/等级/注册天数供时长先验判定；suggestion 中给出地图轨迹叙事（活动地图中文名 + 从哪张图迁移到哪张图），loopLength/maxJumpYards 等关键数值直接引用
-  - "recommendations"：["处置建议…"]（≤20 条，每条 ≤200 字）
+  分节落盘契约（每个分节一个专用工具，参数均只有 content 一个字段；content 必须是 JSON 对象/数组，禁止包成字符串）：
+  - write_server_health：content={"crashes":[当日崩溃摘要],"errors":[错误统计],"authAnomalies":[认证异常摘要],"cheatMarkers":[server 日志异常标记摘要（玩家×标记 + 爆破 IP）]}（无则空数组）
+  - write_suspicious_players：content=[{"character","account","severity":"high|medium|low","suggestedAction":"warning|investigate|ban","reasons":["…"],"evidence":["原始日志摘录"],"falsePositiveSignals":[],"profile":"游戏时长 x 小时 · 等级 x · 账号注册 N 天","suggestion":"…"}]，按严重度取 top ≤15 名，每人 evidence ≤5 条；character/account 只写纯名称（与角色库名完全一致，guid/账号由系统按名富化），禁止附加 " (id)" 后缀、等级、括号注释或 markdown；profile 为画像摘要（可选，无数据写"无数据"），写入时长/等级/注册天数供时长先验判定；suggestion 中给出地图轨迹叙事（活动地图中文名 + 从哪张图迁移到哪张图），loopLength/maxJumpYards 等关键数值直接引用
+  - write_recommendations：content=["处置建议…"]（≤20 条，每条 ≤200 字）
 
   三节全部落盘后，必须调用 submit_final_report 工具提交最终结论，参数即以下五字段：
   schemaVersion={{schemaVersion}}、reportDate="{{date}}"、realm="{{realm}}"、healthScore=<0-100 整数>、summary="<一段话总结，≤200 字>"。
@@ -181,10 +181,11 @@ followups:
   jsonFix: |-
     你尚未提交有效的最终报告，或上一轮提交未通过校验，问题：{{issues}}。
     请修正后重新调用 submit_final_report 提交最终结论：参数仅含 schemaVersion/reportDate/realm/healthScore/summary 五个字段。
-    分节结论以你已通过 write_report_section 落盘的草稿为准；若尚有分节未落盘，请先调用 write_report_section 补齐后再提交。
+    分节结论以你已通过对应分节工具落盘的草稿为准；若尚有分节未落盘，请先调用对应分节工具补齐后再提交。
   sectionSalvage: |-
-    报告缺节：{{missing}}——这些分节的草稿尚未落盘（write_report_section 未被成功调用）。
-    你此前的分析结论仍在上下文中，请立即按分节落盘契约逐节调用 write_report_section 补齐：
+    报告缺节：{{missing}}——这些分节的草稿尚未落盘（对应分节工具未被成功调用）。
+    你此前的分析结论仍在上下文中，请立即按分节落盘契约逐节调用对应工具补齐：
+    server-health → write_server_health；suspicious-players → write_suspicious_players；recommendations → write_recommendations。
     content 按契约传 JSON（禁止包成字符串），缺哪节补哪节，已落盘的节无需重写。
     全部补齐后，重新调用 submit_final_report 提交最终结论，除此之外不得输出任何明细或解释文字。
     执行纪律：工具调用被拒（返回 error）时，只按报错说明修正参数后用同一工具重试；

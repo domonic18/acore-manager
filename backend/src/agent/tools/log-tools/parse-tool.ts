@@ -3,6 +3,7 @@ import { In } from 'typeorm';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { registerTool } from '@/agent/tools/registry';
+import { MAX_AGGREGATES, PARSE_MAX_RANGE_DAYS, PARSE_TOOL_TIMEOUT_MS } from '@/config/ai-constants';
 import { readDefaultRealm } from '@/config/system-config.reader';
 import { acmDataSource } from '@/config/database';
 import { AiAnticheatExemption } from '@/entities/acm/ai-anticheat-exemption.entity';
@@ -38,8 +39,6 @@ import {
 // 前置：先 fetch_log_archive(type='anticheat')。
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_RANGE_DAYS = 31;
-const MAX_AGGREGATES = 50;
 
 export interface ViolationAggregate {
   guid: number;
@@ -113,6 +112,8 @@ export function registerParseTool(): void {
           '附加误报解释：查角色当前光环、GM 豁免白名单与误报场景库（任务传送点/已知场景/例行传送稀疏化），标注 falsePositiveSignals 与 suggestedAction',
         ),
     }),
+    // 全量日志解析属重计算工具（生产实测 5s 默认超时被打断 27 次），单独放宽到 60s。
+    timeoutMs: PARSE_TOOL_TIMEOUT_MS,
     handler: async (args) => {
       const { from, to, player, guid, type, limit, explain } = args as {
         from: string;
@@ -313,7 +314,7 @@ function dateRange(from: string, to: string): string[] {
   const end = Date.parse(`${to}T00:00:00Z`);
   for (let t = Date.parse(`${from}T00:00:00Z`); t <= end; t += 86_400_000) {
     dates.push(new Date(t).toISOString().slice(0, 10));
-    if (dates.length > MAX_RANGE_DAYS) throw new Error(`date range exceeds ${MAX_RANGE_DAYS} days`);
+    if (dates.length > PARSE_MAX_RANGE_DAYS) throw new Error(`date range exceeds ${PARSE_MAX_RANGE_DAYS} days`);
   }
   return dates;
 }

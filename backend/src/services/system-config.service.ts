@@ -46,6 +46,14 @@ export interface SystemConfigView {
     agentCacheSize: number;
     toolCallBudget: number;
     toolTimeoutMs: number;
+    /** 同一工具连续失败熔断阈值 */
+    toolFailureThreshold: number;
+    /** 单次巡检总时长预算（ms） */
+    inspectionTimeBudgetMs: number;
+    /** agent 单轮最大步数（LangGraph recursionLimit） */
+    agentMaxSteps: number;
+    /** 模型单请求超时（ms） */
+    llmRequestTimeoutMs: number;
   };
   login: {
     bruteForceEnabled: boolean;
@@ -92,6 +100,10 @@ export interface SystemConfigInput {
     agentCacheSize?: number | null;
     toolCallBudget?: number | null;
     toolTimeoutMs?: number | null;
+    toolFailureThreshold?: number | null;
+    inspectionTimeBudgetMs?: number | null;
+    agentMaxSteps?: number | null;
+    llmRequestTimeoutMs?: number | null;
   };
   login?: {
     bruteForceEnabled?: string;
@@ -188,6 +200,10 @@ class SystemConfigService {
         agentCacheSize: dbInt(SYSTEM_CONFIG_KEYS.aiAgentCacheSize) ?? env.AI_AGENT_CACHE_SIZE,
         toolCallBudget: dbInt(SYSTEM_CONFIG_KEYS.aiToolCallBudget) ?? env.AI_TOOL_CALL_BUDGET,
         toolTimeoutMs: dbInt(SYSTEM_CONFIG_KEYS.aiToolTimeoutMs) ?? env.AI_TOOL_TIMEOUT_MS,
+        toolFailureThreshold: dbInt(SYSTEM_CONFIG_KEYS.aiToolFailureThreshold) ?? env.AI_TOOL_FAILURE_THRESHOLD,
+        inspectionTimeBudgetMs: dbInt(SYSTEM_CONFIG_KEYS.aiInspectionTimeBudgetMs) ?? env.AI_INSPECTION_TIME_BUDGET_MS,
+        agentMaxSteps: dbInt(SYSTEM_CONFIG_KEYS.aiAgentMaxSteps) ?? env.AI_AGENT_MAX_STEPS,
+        llmRequestTimeoutMs: dbInt(SYSTEM_CONFIG_KEYS.aiLlmRequestTimeoutMs) ?? env.AI_LLM_REQUEST_TIMEOUT_MS,
       },
       login: {
         bruteForceEnabled:
@@ -314,6 +330,10 @@ class SystemConfigService {
         [SYSTEM_CONFIG_KEYS.aiAgentCacheSize, ai.agentCacheSize, 1, 50],
         [SYSTEM_CONFIG_KEYS.aiToolCallBudget, ai.toolCallBudget, 1, 200],
         [SYSTEM_CONFIG_KEYS.aiToolTimeoutMs, ai.toolTimeoutMs, 1_000, 600_000],
+        [SYSTEM_CONFIG_KEYS.aiToolFailureThreshold, ai.toolFailureThreshold, 1, 20],
+        [SYSTEM_CONFIG_KEYS.aiInspectionTimeBudgetMs, ai.inspectionTimeBudgetMs, 60_000, 86_400_000],
+        [SYSTEM_CONFIG_KEYS.aiAgentMaxSteps, ai.agentMaxSteps, 5, 500],
+        [SYSTEM_CONFIG_KEYS.aiLlmRequestTimeoutMs, ai.llmRequestTimeoutMs, 30_000, 3_600_000],
       ],
       changedKeys,
       operatorName,

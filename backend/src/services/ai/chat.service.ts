@@ -1,12 +1,10 @@
 import { HumanMessage } from '@langchain/core/messages';
-import { env } from '@/config/env';
-import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { llmConfigService } from '@/services/ai/llm-config.service';
 import { chatSessionService } from '@/services/ai/chat-session.service';
 import { tokenUsageService } from '@/services/ai/token-usage.service';
 import { getAgent } from '@/agent/runtime/agent-factory';
-import { BudgetGuard } from '@/agent/runtime/budget-guard';
+import { buildAgentRuntimeConfig } from '@/services/ai/agent-runtime-config';
 import { streamAgentEvents } from '@/agent/runtime/wire';
 
 // GM 助手单轮对话编排（自 ai-assistant.routes 下沉，routes 只留校验与 SSE/JSON 序列化）：
@@ -55,13 +53,7 @@ class ChatService {
     const agent = await getAgent(cfg, 'assistant');
     const startedAt = Date.now();
     const input = { messages: [new HumanMessage(message)] };
-    const config = {
-      configurable: {
-        thread_id: session.threadId,
-        budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
-        refId: session.threadId,
-      },
-    };
+    const config = await buildAgentRuntimeConfig({ threadId: session.threadId, refId: session.threadId });
     const recordUsage = this.recordUsage.bind(this);
 
     async function* events(): AsyncGenerator<AgentEventLike> {

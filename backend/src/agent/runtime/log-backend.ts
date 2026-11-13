@@ -11,6 +11,16 @@ import {
   type GrepResult,
   type ReadResult,
 } from 'deepagents';
+import {
+  BINARY_SNIFF_BYTES,
+  GREP_DEFAULT_MAX_MATCHES,
+  GREP_MAX_OUTPUT_BYTES,
+  GREP_TIMEOUT_MS,
+  MAX_BINARY_READ_BYTES,
+  MAX_LINE_CHARS,
+  MAX_LINE_SUFFIX,
+  READ_FAST_PATH_BYTES,
+} from '@/config/ai-constants';
 
 // 日志工作区专用后端（OOM 治本，2026-10-22 SCF job 439 事故）：
 // 上游 FilesystemBackend.read 是"整文件读入再 split 全量行数组"（内存 O(文件大小)），
@@ -19,17 +29,7 @@ import {
 // 内存 O(读取窗口)；超限返回 truncated 标记而非抛错，模型可据此收窄检索。其余方法
 // （ls/glob/write/edit）不覆写：readdir 级操作本就内存安全，写权限由 permissions 全局 deny。
 // deepagents 工具层经 adaptBackendProtocol 动态委托到本实例，子类覆写必然生效。
-
-// 小文件直接走父类原生路径（mime/binary/空文件/symlink 语义与上游完全一致）
-const READ_FAST_PATH_BYTES = 8 * 1024 * 1024;
-// 单行截断上限：防 crash dump / 无换行 JSON 单行数 MB
-const MAX_LINE_CHARS = 16_000;
-const MAX_LINE_SUFFIX = '…[line truncated]';
-const GREP_DEFAULT_MAX_MATCHES = 200;
-const GREP_MAX_OUTPUT_BYTES = 1024 * 1024;
-const GREP_TIMEOUT_MS = 30_000;
-const MAX_BINARY_READ_BYTES = 10 * 1024 * 1024;
-const BINARY_SNIFF_BYTES = 8192;
+// 护栏常量统一在 config/ai-constants.ts（见该文件分层说明）。
 
 // 测试缝隙：指向不存在的二进制可强制走 JS 流式扫描回退路径
 const RG_BIN = () => process.env.ACM_RG_BIN || 'rg';

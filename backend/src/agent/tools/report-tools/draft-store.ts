@@ -19,6 +19,13 @@ const SECTION_FILE: Record<ReportSection, string> = {
   recommendations: 'recommendations.json',
 };
 
+// 分节工具名随 P1-4 拆分而独立；错误信息必须指向具体工具，否则模型会继续调用旧的 write_report_section。
+const SECTION_TOOL: Record<ReportSection, string> = {
+  'server-health': 'write_server_health',
+  'suspicious-players': 'write_suspicious_players',
+  recommendations: 'write_recommendations',
+};
+
 const FINAL_FILE = 'final.json';
 
 let draftRoot: string | null = null;
@@ -41,11 +48,11 @@ export function resetDraftDir(dir: string): void {
 }
 
 function requireDraftRoot(): string {
-  if (!draftRoot) throw new Error('报告草稿目录未就绪（write_report_section 仅限巡检任务内调用）');
+  if (!draftRoot) throw new Error('报告草稿目录未就绪（分节落盘工具仅限巡检任务内调用）');
   return draftRoot;
 }
 
-/** write_report_section 工具执行体：校验该节 → 落盘 {section}.json（已存在则整节覆盖）。校验失败抛错（经注册表转 {error} 交模型重写）。 */
+/** 分节落盘工具执行体：校验该节 → 落盘 {section}.json（已存在则整节覆盖）。校验失败抛错（经注册表转 {error} 交模型重写）。 */
 export function writeReportSection(section: ReportSection, content: unknown): { ok: true; section: ReportSection; bytes: number } {
   const dir = requireDraftRoot();
   const verdict = validateSection(section, content);
@@ -53,7 +60,7 @@ export function writeReportSection(section: ReportSection, content: unknown): { 
   // 「同工具重试」指引——笼统拒绝会诱发模型放弃落盘转文本输出（策略摇摆）
   if (!verdict.ok) {
     throw new Error(
-      `write_report_section(${section}) 校验失败：${verdict.error}。请修正后以相同 section 重新调用本工具重试；禁止放弃落盘改为文本输出。`,
+      `${SECTION_TOOL[section]}(${section}) 校验失败：${verdict.error}。请修正后重新调用本工具重试；禁止放弃落盘改为文本输出。`,
     );
   }
   mkdirSync(dir, { recursive: true });
@@ -72,7 +79,7 @@ export function writeFinalReport(raw: unknown): { ok: true; bytes: number } {
   const dir = requireDraftRoot();
   const verdict = FinalReportJsonShapeSchema.safeParse(raw);
   if (!verdict.success) {
-    // 错误信息必须可操作（同 write_report_section 模式）：逐字段定位 + 「同工具重试」指引
+    // 错误信息必须可操作（同分节落盘模式）：逐字段定位 + 「同工具重试」指引
     const issues = [...new Set(verdict.error.issues.map((i) => i.message))].join('；');
     throw new Error(`submit_final_report 校验失败：${issues}。请修正参数后重新调用本工具重试；禁止放弃提交改为文本输出。`);
   }

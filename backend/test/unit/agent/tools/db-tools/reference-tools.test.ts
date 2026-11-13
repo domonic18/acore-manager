@@ -61,9 +61,12 @@ describe('reference-tools', () => {
     expect(sql).toContain('FROM creature_template WHERE entry IN (?)');
   });
 
-  it('rejects more than 30 ids at schema level', async () => {
+  it('rejects more than 30 ids with a structured error before querying', async () => {
     const ids = Array.from({ length: 31 }, (_, i) => i + 1);
-    await expect(toolFn('get_game_references').invoke({ type: 'item', ids })).rejects.toThrow();
+    // 运行时校验在包装层内：失败即返回结构化 error（计入熔断与预算），不再由框架层抛错
+    const result = await toolFn('get_game_references').invoke({ type: 'item', ids });
+    expect(result.error).toMatch(/入参校验失败/);
+    expect(result.error).toMatch(/at most 30/);
     expect(queryMock).not.toHaveBeenCalled();
   });
 });

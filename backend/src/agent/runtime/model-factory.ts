@@ -18,11 +18,20 @@ export interface ResolvedModelConfig {
 
 // 返回类型为 ChatOpenAI | ChatAnthropic 推断联合——刻意不标注跨包的 BaseLanguageModel，
 // 规避 @langchain/* 双声明身份在类型检查下的结构性冲突
-export function buildModelClient(cfg: ResolvedModelConfig) {
+export interface ModelClientOptions {
+  /** 单请求超时（ms）：SDK 默认 10 分钟，超时表现为 terminated 且无提示 */
+  timeoutMs: number;
+  /** SDK 重试次数：默认 2 次重试会把单次挂起放大 3 倍 */
+  maxRetries: number;
+}
+
+export function buildModelClient(cfg: ResolvedModelConfig, options: ModelClientOptions) {
   const common = {
     temperature: cfg.temperature ?? undefined,
     // 完成 token 兜底：提供方默认 ~4k 会截断巡检 JSON 报告（T3.6 实测 8.7k 字符输出被腰斩）
     maxTokens: cfg.maxTokens ?? 8192,
+    timeout: options.timeoutMs,
+    maxRetries: options.maxRetries,
   };
   if (cfg.protocol === 'anthropic') {
     return new ChatAnthropic({

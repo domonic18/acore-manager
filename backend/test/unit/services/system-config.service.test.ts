@@ -9,6 +9,10 @@ jest.mock('@/config/env', () => ({
     AI_AGENT_CACHE_SIZE: 4,
     AI_TOOL_CALL_BUDGET: 20,
     AI_TOOL_TIMEOUT_MS: 5000,
+    AI_TOOL_FAILURE_THRESHOLD: 3,
+    AI_INSPECTION_TIME_BUDGET_MS: 3_600_000,
+    AI_AGENT_MAX_STEPS: 60,
+    AI_LLM_REQUEST_TIMEOUT_MS: 600_000,
     LOGIN_BRUTE_FORCE_ENABLED: true,
     LOGIN_MAX_ATTEMPTS: 5,
     LOGIN_LOCKOUT_MINUTES: 15,
@@ -334,7 +338,16 @@ describe('getView: 新增 section', () => {
       appId: '',
       appSecretMasked: null,
     });
-    expect(view.ai).toEqual({ dailyTokenBudget: 5000000, agentCacheSize: 4, toolCallBudget: 20, toolTimeoutMs: 5000 });
+    expect(view.ai).toEqual({
+      dailyTokenBudget: 5000000,
+      agentCacheSize: 4,
+      toolCallBudget: 20,
+      toolTimeoutMs: 5000,
+      toolFailureThreshold: 3,
+      inspectionTimeBudgetMs: 3600000,
+      agentMaxSteps: 60,
+      llmRequestTimeoutMs: 600000,
+    });
     expect(view.login).toEqual({
       bruteForceEnabled: true,
       maxAttempts: 5,

@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import { dirname, join, relative } from 'path';
 import { createInterface } from 'readline';
 import { promisify } from 'util';
+import { MAX_ARCHIVE_BYTES, READ_CHUNK_BYTES, TAR_EXTRACT_TIMEOUT_MS } from '@/config/ai-constants';
 
 // 日志检索工作区（需求 3.5）：/tmp/ai-workspace/{realm}/{date}/{type}/
 // 同一任务的多次工具调用共享（fetch 解压一次，parse/grep 直接读）；任务结束由编排层 finally 调 clearWorkspace()。
@@ -14,7 +15,6 @@ export const LOG_TYPES = ['worldserver', 'authserver', 'anticheat', 'crash'] as 
 export type LogType = (typeof LOG_TYPES)[number];
 
 const execFileAsync = promisify(execFile);
-const MAX_ARCHIVE_BYTES = 200 * 1024 * 1024; // T0.2 SCF /tmp 上限未回填前先按 200MB 卡口
 
 export function logArchiveKey(realm: string, date: string, type: LogType): string {
   return `acore-logs/${realm}/${date}/${type}.tar.gz`;
@@ -47,7 +47,7 @@ export async function extractArchive(realm: string, date: string, type: LogType,
   const tmp = join(mkdtempSync(join(tmpdir(), 'ai-fetch-')), `${type}.tar.gz`);
   try {
     await writeFile(tmp, archive);
-    await execFileAsync('tar', ['-xzf', tmp, '-C', dir], { timeout: 60_000 });
+    await execFileAsync('tar', ['-xzf', tmp, '-C', dir], { timeout: TAR_EXTRACT_TIMEOUT_MS });
   } finally {
     rmSync(dirname(tmp), { recursive: true, force: true });
   }
@@ -73,7 +73,7 @@ export function listExtracted(dir: string): ExtractedFile[] {
 
 export function countLines(file: string): number {
   // 1MB chunk 流式数 0x0A：解压清单逐文件调用，整文件 Buffer 会在大日志上瞬间吃掉数百 MB 堆外内存
-  const CHUNK = 1024 * 1024;
+  const CHUNK = READ_CHUNK_BYTES;
   const buf = Buffer.alloc(CHUNK);
   let fd: number;
   try {

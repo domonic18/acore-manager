@@ -33,7 +33,9 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 export async function getAgent(cfg: ResolvedModelConfig, scene: AgentScene): Promise<DeepAgentInstance> {
-  const key = `${scene}:${modelFingerprint(cfg)}`;
+  const timeoutMs = await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiLlmRequestTimeoutMs, env.AI_LLM_REQUEST_TIMEOUT_MS);
+  // 超时参与缓存键：超时是模型客户端的构造参数，改配置须重建实例（否则沿用旧值直到淘汰）
+  const key = `${scene}:${modelFingerprint(cfg)}:${timeoutMs}`;
   evictIdle();
   const maxSize = await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiAgentCacheSize, env.AI_AGENT_CACHE_SIZE);
 
@@ -45,7 +47,7 @@ export async function getAgent(cfg: ResolvedModelConfig, scene: AgentScene): Pro
     return hit.agent;
   }
 
-  const agent = await buildAgent(cfg, scene);
+  const agent = await buildAgent(cfg, scene, timeoutMs);
   cache.set(key, { agent, lastUsed: Date.now() });
   evictOverflow(maxSize);
   logger.info(`[agent-factory] built agent scene=${scene} config=${cfg.name} cacheSize=${cache.size}`);
@@ -61,9 +63,9 @@ export function syncSkills(): void {
   cpSync(DIST_SKILLS_DIR, SKILLS_SYNC_DIR, { recursive: true, force: true });
 }
 
-async function buildAgent(cfg: ResolvedModelConfig, scene: AgentScene): Promise<DeepAgentInstance> {
+async function buildAgent(cfg: ResolvedModelConfig, scene: AgentScene, timeoutMs: number): Promise<DeepAgentInstance> {
   registerAllTools();
-  const model = buildModelClient(cfg);
+  const model = buildModelClient(cfg, { timeoutMs, maxRetries: 1 });
   const checkpointer = await getCheckpointer();
   syncSkills();
   const backend = new CompositeBackend(

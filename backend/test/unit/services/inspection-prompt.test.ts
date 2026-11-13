@@ -46,7 +46,9 @@ describe('buildInspectionTaskPrompt', () => {
   it('keeps the submit tool contract and execution discipline anchors', () => {
     const content = buildInspectionTaskPrompt('realm3', '2026-10-08', complete).messages[0].content;
     expect(content).toContain('submit_final_report');
-    expect(content).toContain('write_report_section');
+    expect(content).toContain('write_server_health');
+    expect(content).toContain('write_suspicious_players');
+    expect(content).toContain('write_recommendations');
     expect(content).toContain('执行纪律');
   });
 
@@ -102,11 +104,12 @@ describe('buildJsonFixPrompt', () => {
 });
 
 describe('buildSectionSalvagePrompt', () => {
-  it('lists the missing sections and demands write_report_section re-persist', () => {
+  it('lists the missing sections and demands the per-section re-persist tools', () => {
     const { messages } = buildSectionSalvagePrompt(['server-health', 'recommendations']);
     const content = messages[0].content;
     expect(content).toContain('报告缺节：server-health / recommendations');
-    expect(content).toContain('write_report_section');
+    expect(content).toContain('write_server_health');
+    expect(content).toContain('write_recommendations');
     expect(content).toContain('submit_final_report');
     expect(content).not.toMatch(/\{\{\w+\}\}/);
   });

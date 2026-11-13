@@ -1,5 +1,5 @@
 jest.mock('@/config/env', () => ({
-  env: { AI_AGENT_CACHE_SIZE: 4, AI_TOOL_CALL_BUDGET: 20, AI_TOOL_TIMEOUT_MS: 5000, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
+  env: { AI_AGENT_CACHE_SIZE: 4, AI_TOOL_CALL_BUDGET: 20, AI_TOOL_TIMEOUT_MS: 5000, AI_LLM_REQUEST_TIMEOUT_MS: 600000, LOG_LEVEL: 'silent', NODE_ENV: 'test' },
 }));
 jest.mock('@/config/database', () => ({
   authDataSource: { isInitialized: true, query: jest.fn().mockResolvedValue([]) },
@@ -54,7 +54,7 @@ describe('agent-factory: deep agent assembly', () => {
   it('caches agents by scene + model fingerprint', async () => {
     await getAgent(cfg, 'inspection');
     await getAgent(cfg, 'inspection');
-    expect(agentCacheStats().keys).toEqual(['inspection:test-fingerprint']);
+    expect(agentCacheStats().keys).toEqual(['inspection:test-fingerprint:600000']);
   });
 
   it('syncs bundled skills into the runtime skills dir', () => {

@@ -1,26 +1,50 @@
-import { z } from 'zod';
 import { registerTool } from '@/agent/tools/registry';
-import { REPORT_SECTIONS, REPORT_SCHEMA_VERSION, type ReportSection } from './sections';
+import { REPORT_SCHEMA_VERSION } from './sections';
 import { writeFinalReport, writeReportSection } from './draft-store';
 import { FinalReportJsonShapeSchema } from './final-json';
+import {
+  RecommendationsArgSchema,
+  ServerHealthArgSchema,
+  singleObjectToArray,
+  SuspiciousPlayersArgSchema,
+} from './section-args';
 
 export function registerReportTools(): void {
   registerTool({
-    name: 'write_report_section',
+    name: 'write_server_health',
     description:
-      '将巡检报告的一个分节结论落盘（server-health / suspicious-players / recommendations）。' +
-      '每完成一个维度的分析必须立即调用本工具记录结论（禁止攒到最后一次性输出）；同一 section 再次调用为整节覆盖重写。' +
-      'content 为该节 JSON 数据（禁止包成文本字符串）：' +
-      'server-health={"crashes":[],"errors":[],"authAnomalies":[],"cheatMarkers":[]}；' +
-      'suspicious-players=[{character,account,severity:"high|medium|low",suggestedAction:"warning|investigate|ban",reasons:[],evidence:[原文摘录],falsePositiveSignals:[],suggestion}]（按严重度 top ≤15，每人 evidence ≤5 条）；' +
-      'recommendations=["…"]（≤20 条，每条 ≤200 字）。',
-    schema: z.object({
-      section: z.enum(REPORT_SECTIONS).describe('分节名'),
-      content: z.unknown().describe('该节结论 JSON（对象或数组）'),
-    }),
+      '将巡检报告的「服务器健康」分节落盘。完成服务器健康维度分析后必须立即调用本工具（禁止攒到最后一次性输出）；' +
+      '同一节再次调用为整节覆盖重写。content 为该节 JSON 对象：{"crashes":[],"errors":[],"authAnomalies":[],"cheatMarkers":[]}（无则空数组）。',
+    schema: ServerHealthArgSchema,
     handler: async (args) => {
-      const { section, content } = args as { section: ReportSection; content: unknown };
-      return writeReportSection(section, content);
+      const { content } = args as { content: unknown };
+      return writeReportSection('server-health', content);
+    },
+  });
+  registerTool({
+    name: 'write_suspicious_players',
+    description:
+      '将巡检报告的「可疑玩家」分节落盘。完成反作弊研判后必须立即调用本工具（禁止攒到最后一次性输出）；' +
+      '同一节再次调用为整节覆盖重写。content 为玩家对象数组：[{"character","account","severity":"high|medium|low",' +
+      '"suggestedAction":"warning|investigate|ban","reasons":[],"evidence":[原文摘录],"falsePositiveSignals":[],' +
+      '"suggestion":"...","profile":"游戏时长 x 小时 · 等级 x · 账号注册 N 天"}]（按严重度 top ≤15，每人 evidence ≤5 条；' +
+      '只发现一人时可传单个对象，本工具会自动包成数组）。',
+    schema: SuspiciousPlayersArgSchema,
+    handler: async (args) => {
+      const { content } = args as { content: unknown };
+      // 单对象已在 schema 层通过 preprocess 包成数组，防御性再包一次保证代码层清洗器输入一致。
+      return writeReportSection('suspicious-players', singleObjectToArray(content));
+    },
+  });
+  registerTool({
+    name: 'write_recommendations',
+    description:
+      '将巡检报告的「处置建议」分节落盘。完成处置建议维度后必须立即调用本工具（禁止攒到最后一次性输出）；' +
+      '同一节再次调用为整节覆盖重写。content 为字符串数组：["处置建议…"]（≤20 条，每条 ≤200 字；也可传多行字符串，会自动按行拆分）。',
+    schema: RecommendationsArgSchema,
+    handler: async (args) => {
+      const { content } = args as { content: unknown };
+      return writeReportSection('recommendations', content);
     },
   });
   registerTool({

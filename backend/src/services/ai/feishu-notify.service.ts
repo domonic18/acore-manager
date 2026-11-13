@@ -1,5 +1,11 @@
 import { createHmac } from 'crypto';
 import { env } from '@/config/env';
+import {
+  CARD_REASON_MAX_LENGTH,
+  CARD_SUMMARY_MAX_LENGTH,
+  FEISHU_RETRY_BACKOFF_MS,
+  TOP_PLAYERS_IN_CARD,
+} from '@/config/ai-constants';
 import { readRuntimeValues, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import type { InspectionReportJson } from '@/agent/tools/report-tools';
@@ -13,8 +19,6 @@ import type { InspectionInput } from './inspection.service';
 
 type FeishuCard = Record<string, unknown>;
 type FeishuPayload = Record<string, unknown>;
-
-const RETRY_BACKOFF_MS = 1000;
 
 // ok=true 发送成功；ok=false 时 transient 标记是否值得重试（网络错/超时/5xx）
 type PostOutcome = { ok: boolean; transient: boolean; reason: string };
@@ -32,7 +36,6 @@ const SEVERITY_LABEL = { high: '高危', medium: '中危', low: '低危' } as co
 const SEVERITY_COLOR = { high: 'red', medium: 'orange', low: 'grey' } as const;
 const ACTION_LABEL = { ban: '封禁', investigate: '人工核查', warning: '提醒' } as const;
 const ACTION_ORDER = { ban: 0, investigate: 1, warning: 2 } as const;
-const TOP_PLAYERS_IN_CARD = 5;
 
 // 卡片 JSON 2.0 的 markdown 组件：支持标准 Markdown 与 <font color> 着色
 const mdEl = (content: string): FeishuCard => ({ tag: 'markdown', content });
@@ -52,8 +55,8 @@ class FeishuNotifyService {
   private async post(payload: FeishuPayload, label: string): Promise<boolean> {
     const first = await this.postOnce(payload, label);
     if (first.ok || !first.transient) return first.ok;
-    logger.warn(`[feishu] ${label} transient failure (${first.reason}), retrying in ${RETRY_BACKOFF_MS}ms`);
-    await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS));
+    logger.warn(`[feishu] ${label} transient failure (${first.reason}), retrying in ${FEISHU_RETRY_BACKOFF_MS}ms`);
+    await new Promise((resolve) => setTimeout(resolve, FEISHU_RETRY_BACKOFF_MS));
     return (await this.postOnce(payload, label)).ok;
   }
 
@@ -132,7 +135,7 @@ class FeishuNotifyService {
             : '服务器运行平稳，未发现风险';
 
     const summaryText = (input.summary ?? '').trim();
-    const summaryLine = summaryText.length > 200 ? `${summaryText.slice(0, 200)}…` : summaryText;
+    const summaryLine = summaryText.length > CARD_SUMMARY_MAX_LENGTH ? `${summaryText.slice(0, CARD_SUMMARY_MAX_LENGTH)}…` : summaryText;
     const verdictColor = template === 'red' ? 'red' : template === 'yellow' ? 'orange' : 'green';
     const scoreColor = healthScore < 60 ? 'red' : healthScore < 80 ? 'orange' : 'green';
 
@@ -167,7 +170,7 @@ class FeishuNotifyService {
           }**`,
         ];
         if (p.account) lines.push(`账号：${p.account}`);
-        const reason = (p.reasons?.[0] ?? '').slice(0, 100);
+        const reason = (p.reasons?.[0] ?? '').slice(0, CARD_REASON_MAX_LENGTH);
         const evidenceCount = p.evidence?.length ?? 0;
         lines.push(`依据：${reason}${evidenceCount > 1 ? `（另有证据 ${evidenceCount - 1} 条）` : ''}`);
         if (fp > 0) lines.push(`注意：误报信号 ${fp} 项，处置前请人工复核`);

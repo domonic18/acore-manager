@@ -120,11 +120,10 @@ describe('conclusion capture store + submit_conclusion tool', () => {
     expect(conclusion?.suggestionReason).toBe('改判理由');
   });
 
-  it('rejects schema-invalid submissions at the framework layer with field location', async () => {
-    // tool() 的 zod 校验在框架层拒绝（错误含字段定位），不会到达 handler 的 {error} 包装
-    await expect(toolFn('submit_conclusion').invoke({ ...validConclusion(), suggestion: 'ban' })).rejects.toThrow(
-      /suggestion 必须为 maintain\/lift\/downgrade\/manual_review/,
-    );
+  it('rejects schema-invalid submissions with a field-located error', async () => {
+    // 运行时校验在包装层内：返回结构化 error（计入熔断与预算），不落盘
+    const out = await toolFn('submit_conclusion').invoke({ ...validConclusion(), suggestion: 'ban' });
+    expect(out.error).toMatch(/suggestion 必须为 maintain\/lift\/downgrade\/manual_review/);
     expect(existsSync(join(captureDir, 'conclusion.json'))).toBe(false);
   });
 

@@ -1,3 +1,5 @@
+import { LOOP_EPS_YD, LOOP_MAX_CYCLE, LOOP_MIN_DIAMETER_YD } from '@/config/ai-constants';
+
 // 违规时间/幅度统计纯函数（parse_anticheat_violations 聚合增强）：
 // 从逐条违规流计算间隔分布（min/median gap、60s 滑动窗口峰值）、模式分类、
 // speed 幅度分位、坐标离散度，供误报引擎与巡查 agent 做连续/脉冲判定。
@@ -94,10 +96,6 @@ export interface LoopPoint {
 export function toEpochMs(time: string): number {
   return Date.parse(`${time.replace(' ', 'T')}Z`);
 }
-
-const LOOP_MAX_CYCLE = 30;
-const LOOP_EPS_YD = 1.0;
-const LOOP_MIN_DIAMETER_YD = 5.0;
 
 /**
  * 脚本化坐标循环检测（问题2）：找最小周期 L∈[2, 30] 使事件序列末尾 2L 个点

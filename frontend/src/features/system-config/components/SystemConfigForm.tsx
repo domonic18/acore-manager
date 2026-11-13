@@ -35,6 +35,10 @@ export function SystemConfigForm() {
   const [agentCacheSize, setAgentCacheSize] = useState('');
   const [toolCallBudget, setToolCallBudget] = useState('');
   const [toolTimeoutMs, setToolTimeoutMs] = useState('');
+  const [toolFailureThreshold, setToolFailureThreshold] = useState('');
+  const [inspectionTimeBudgetMs, setInspectionTimeBudgetMs] = useState('');
+  const [agentMaxSteps, setAgentMaxSteps] = useState('');
+  const [llmRequestTimeoutMs, setLlmRequestTimeoutMs] = useState('');
 
   const [bruteForceEnabled, setBruteForceEnabled] = useState('true');
   const [maxAttempts, setMaxAttempts] = useState('');
@@ -62,6 +66,10 @@ export function SystemConfigForm() {
     setAgentCacheSize(String(config.ai.agentCacheSize));
     setToolCallBudget(String(config.ai.toolCallBudget));
     setToolTimeoutMs(String(config.ai.toolTimeoutMs));
+    setToolFailureThreshold(String(config.ai.toolFailureThreshold));
+    setInspectionTimeBudgetMs(String(config.ai.inspectionTimeBudgetMs));
+    setAgentMaxSteps(String(config.ai.agentMaxSteps));
+    setLlmRequestTimeoutMs(String(config.ai.llmRequestTimeoutMs));
 
     setBruteForceEnabled(config.login.bruteForceEnabled ? 'true' : 'false');
     setMaxAttempts(String(config.login.maxAttempts));
@@ -89,6 +97,11 @@ export function SystemConfigForm() {
       agentCacheSize: agentCacheSize.trim() === '' ? null : Number(agentCacheSize.trim()),
       toolCallBudget: toolCallBudget.trim() === '' ? null : Number(toolCallBudget.trim()),
       toolTimeoutMs: toolTimeoutMs.trim() === '' ? null : Number(toolTimeoutMs.trim()),
+      toolFailureThreshold: toolFailureThreshold.trim() === '' ? null : Number(toolFailureThreshold.trim()),
+      inspectionTimeBudgetMs:
+        inspectionTimeBudgetMs.trim() === '' ? null : Number(inspectionTimeBudgetMs.trim()),
+      agentMaxSteps: agentMaxSteps.trim() === '' ? null : Number(agentMaxSteps.trim()),
+      llmRequestTimeoutMs: llmRequestTimeoutMs.trim() === '' ? null : Number(llmRequestTimeoutMs.trim()),
     };
     const login = {
       bruteForceEnabled,
@@ -399,7 +412,59 @@ export function SystemConfigForm() {
               max={600000}
               value={toolTimeoutMs}
               onChange={(e) => setToolTimeoutMs(e.target.value)}
-              placeholder='5000'
+              placeholder='15000（解析类工具另有 60s 硬编码上限）'
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor='ai-tool-failure-threshold'>工具连续失败熔断阈值</label>
+            <input
+              id='ai-tool-failure-threshold'
+              type='number'
+              min={1}
+              max={20}
+              value={toolFailureThreshold}
+              onChange={(e) => setToolFailureThreshold(e.target.value)}
+              placeholder='3（同一工具连续失败 N 次后本轮熔断）'
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor='ai-inspection-time-budget'>巡检总时长预算（ms）</label>
+            <input
+              id='ai-inspection-time-budget'
+              type='number'
+              min={60000}
+              max={86400000}
+              value={inspectionTimeBudgetMs}
+              onChange={(e) => setInspectionTimeBudgetMs(e.target.value)}
+              placeholder='3600000（单次巡检，含重试）'
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor='ai-agent-max-steps'>Agent 单轮最大步数</label>
+            <input
+              id='ai-agent-max-steps'
+              type='number'
+              min={5}
+              max={500}
+              value={agentMaxSteps}
+              onChange={(e) => setAgentMaxSteps(e.target.value)}
+              placeholder='60（超出即中止本轮，防无限重试）'
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor='ai-llm-request-timeout'>模型单请求超时（ms）</label>
+            <input
+              id='ai-llm-request-timeout'
+              type='number'
+              min={30000}
+              max={3600000}
+              value={llmRequestTimeoutMs}
+              onChange={(e) => setLlmRequestTimeoutMs(e.target.value)}
+              placeholder='600000'
               className={inputClass}
             />
           </div>

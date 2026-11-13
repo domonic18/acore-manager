@@ -1,8 +1,8 @@
 import { env } from '@/config/env';
+import { INSPECTION_RETRY_DELAYS_MS, MIN_RETRY_HEADROOM_MS } from '@/config/ai-constants';
 import { readRuntimeNumber, SYSTEM_CONFIG_KEYS } from '@/config/system-config.reader';
 import { logger } from '@/middleware/request-logger';
 import { getAgent } from '@/agent/runtime/agent-factory';
-import { BudgetGuard } from '@/agent/runtime/budget-guard';
 import { LOG_TYPES, clearWorkspace, manifestKey } from '@/agent/tools/log-tools/log-workspace';
 import { setInspectionRunner } from '@/agent/tools/inspection-tools';
 import {
@@ -21,6 +21,7 @@ import {
 import { cosGetObjectJson } from '@/shared/utils/cos.util';
 import { extractJson } from '@/shared/utils/extract-json.util';
 import { runAgentRound, sumTokens } from './agent-round.util';
+import { buildAgentRuntimeConfig } from './agent-runtime-config';
 import { buildInspectionTaskPrompt, buildJsonFixPrompt, buildSectionSalvagePrompt } from './inspection-prompt';
 import { persistInspection, recordInspectionFailure } from './inspection-persist';
 import { llmConfigService } from './llm-config.service';
@@ -37,10 +38,7 @@ import { watchlistService } from './watchlist.service';
 // 报告节契约与渲染在 agent/tools/report-tools；任务提示词在 inspection-prompt；
 // 持久化（upsert/归档/摘要/简报/失败行）在 inspection-persist；事件流消费复用 agent-round.util。
 
-const RETRY_DELAYS_MS = [1000, 2000, 4000];
-// 重试前置余量：剩余预算不足 max(上一轮耗时, 60s) + 退避时不再重试——上一轮耗时是下一轮
-// 工作量的最好估计；60s 下限保证快速轮（测试/小日志）始终可重试
-const MIN_RETRY_HEADROOM_MS = 60_000;
+
 
 export type InspectionTrigger = 'cron' | 'manual' | 'chat';
 
@@ -107,11 +105,11 @@ class InspectionService {
   }
 
   private async attemptWithRetry(input: InspectionInput): Promise<number> {
-    const budgetMs = env.AI_INSPECTION_TIME_BUDGET_MS;
+    const budgetMs = await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiInspectionTimeBudgetMs, env.AI_INSPECTION_TIME_BUDGET_MS);
     const startedAt = Date.now();
     let lastError: unknown;
     let lastAttemptMs: number;
-    for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+    for (let attempt = 0; attempt < INSPECTION_RETRY_DELAYS_MS.length; attempt++) {
       const attemptStart = Date.now();
       try {
         return await this.attempt(input, attempt);
@@ -120,8 +118,8 @@ class InspectionService {
         lastAttemptMs = Date.now() - attemptStart;
         const code = (err as InspectionError).code;
         if (code === 'budget_exceeded' || code === 'time_budget_exceeded') throw err; // 预算超限重试必然复现，直接失败
-        if (attempt < RETRY_DELAYS_MS.length - 1) {
-          const delay = RETRY_DELAYS_MS[attempt];
+        if (attempt < INSPECTION_RETRY_DELAYS_MS.length - 1) {
+          const delay = INSPECTION_RETRY_DELAYS_MS[attempt];
           // 时间预算守卫：下一轮耗时以刚失败这轮为最好估计；剩余不足即快速失败，
           // 走既有 failed 行 + 飞书告警路径，而不是被平台超时静默击杀（零告警零日志）
           const remaining = budgetMs - (Date.now() - startedAt);
@@ -163,13 +161,7 @@ class InspectionService {
       // thread_id 必须每次运行唯一：复用同线程会让模型在 checkpointer 旧上下文里重放上轮结论
       // （T3.6 实测重跑零工具调用），且同线程上下文随重跑次数膨胀推高 token 成本
       const threadId = `inspection-${input.realm}-${input.date}-${Date.now()}-${attempt}`;
-      const config = {
-        configurable: {
-          thread_id: threadId,
-          budget: new BudgetGuard(await readRuntimeNumber(SYSTEM_CONFIG_KEYS.aiToolCallBudget, env.AI_TOOL_CALL_BUDGET)),
-          refId: `inspection:${input.realm}:${input.date}`,
-        },
-      };
+      const config = await buildAgentRuntimeConfig({ threadId, refId: `inspection:${input.realm}:${input.date}` });
 
       const first = await runAgentRound(
         agent,
@@ -205,7 +197,7 @@ class InspectionService {
         const stillMissing = listMissingSections(draftDir);
         if (stillMissing.length > 0) {
           throw new InspectionError(
-            `报告缺节：${stillMissing.join(' / ')}（抢救轮后仍未落盘，agent 未调用 write_report_section）`,
+            `报告缺节：${stillMissing.join(' / ')}（抢救轮后仍未落盘，agent 未调用对应的分节落盘工具）`,
             'report_incomplete',
           );
         }

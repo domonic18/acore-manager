@@ -1,3 +1,4 @@
+import { ROLLUP_MAX_MAP_MOVES, ROLLUP_MAX_PLAYERS } from '@/config/ai-constants';
 import { ParsedViolation } from './anticheat-parser';
 import { mapName } from './map-names';
 import { detectPositionLoop, LoopPoint, toEpochMs } from './violation-stats';
@@ -6,9 +7,6 @@ import { detectPositionLoop, LoopPoint, toEpochMs } from './violation-stats';
 // 人工审核还需要"这个玩家在哪些地图活动、从哪张图跳到哪张图"的连续叙事——
 // 本模块把过滤后的违规流按玩家重排为 地图驻留序列 + 跨图迁移清单（附瞬移幅度），
 // 并对每个 类型×地图 子序列跑坐标循环检测，供巡查报告直接引用。
-
-const MAX_PLAYERS = 20;
-const MAX_MAP_MOVES = 20;
 
 export interface PlayerMapVisit {
   mapId: number;
@@ -54,7 +52,7 @@ interface Acc {
 const jumpYardsOf = (parsed: ParsedViolation): number | null =>
   parsed.gpsDiff ? Math.round(Math.hypot(parsed.gpsDiff.dx, parsed.gpsDiff.dy) * 10) / 10 : null;
 
-export function rollupPlayers(violations: { parsed: ParsedViolation }[], limit = MAX_PLAYERS): PlayerRollup[] {
+export function rollupPlayers(violations: { parsed: ParsedViolation }[], limit = ROLLUP_MAX_PLAYERS): PlayerRollup[] {
   const acc = new Map<number, Acc>();
   for (const { parsed } of violations) {
     const entry: Acc =
@@ -125,8 +123,8 @@ export function rollupPlayers(violations: { parsed: ParsedViolation }[], limit =
         totalViolations: entry.total,
         types: [...entry.types].sort(),
         maps,
-        mapMoves: moves.slice(0, MAX_MAP_MOVES),
-        mapMovesTruncated: moves.length > MAX_MAP_MOVES,
+        mapMoves: moves.slice(0, ROLLUP_MAX_MAP_MOVES),
+        mapMovesTruncated: moves.length > ROLLUP_MAX_MAP_MOVES,
         loopLength: loopLengths.length > 0 ? Math.max(...loopLengths) : null,
       };
     });

@@ -17,17 +17,19 @@ function cfg(overrides: Partial<ResolvedModelConfig> = {}): ResolvedModelConfig 
   };
 }
 
+const OPTS = { timeoutMs: 600_000, maxRetries: 1 };
+
 describe('model-factory', () => {
   it('dispatches ChatOpenAI for openai protocol', () => {
-    expect(buildModelClient(cfg())).toBeInstanceOf(ChatOpenAI);
+    expect(buildModelClient(cfg(), OPTS)).toBeInstanceOf(ChatOpenAI);
   });
 
   it('dispatches ChatAnthropic for anthropic protocol', () => {
-    expect(buildModelClient(cfg({ protocol: 'anthropic' }))).toBeInstanceOf(ChatAnthropic);
+    expect(buildModelClient(cfg({ protocol: 'anthropic' }), OPTS)).toBeInstanceOf(ChatAnthropic);
   });
 
   it('strips trailing slashes from anthropic baseUrl', () => {
-    const client = buildModelClient(cfg({ protocol: 'anthropic', baseUrl: 'https://api.example.com/' })) as unknown as { apiUrl?: string };
+    const client = buildModelClient(cfg({ protocol: 'anthropic', baseUrl: 'https://api.example.com/' }), OPTS) as unknown as { apiUrl?: string };
     expect(client.apiUrl).toBe('https://api.example.com');
   });
 

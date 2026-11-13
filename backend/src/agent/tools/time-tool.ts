@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { registerTool } from '@/agent/tools/registry';
+import { CST_OFFSET_MS } from '@/config/ai-constants';
 
 // 服务器当前时间工具（上海时区）：agent 无内建时钟，涉及"今天/当天/最近 N 天"等
 // 相对时间必须先调用本工具换算绝对日期，否则按训练截止时间臆测会查错日期。
 
-const CST_OFFSET_MS = 8 * 3600 * 1000;
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
 export function registerTimeTools(): void {

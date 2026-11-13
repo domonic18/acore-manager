@@ -49,12 +49,13 @@ describe('ask-user-tool: ask_user', () => {
     });
   });
 
-  it('rejects fewer than 2 options (schema-level, langchain rejects before handler)', async () => {
+  it('rejects fewer than 2 options with a structured error (counted by the failure breaker)', async () => {
     registerAskUserTools();
 
-    await expect(
-      toolFn('ask_user').invoke({ question: 'q?', options: [{ value: 'a', label: 'A' }] }),
-    ).rejects.toThrow('did not match expected schema');
+    const out = await toolFn('ask_user').invoke({ question: 'q?', options: [{ value: 'a', label: 'A' }] });
+
+    expect((out as { error?: string }).error).toMatch(/入参校验失败/);
+    expect((out as { error?: string }).error).toMatch(/at least 2/);
   });
 
   it('rejects duplicate option values', async () => {

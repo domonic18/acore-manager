@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { registerTool } from '@/agent/tools/registry';
+import { ANOMALY_MAX_RANGE_DAYS, ANOMALY_TOOL_TIMEOUT_MS } from '@/config/ai-constants';
 import { readDefaultRealm, readInspectionTrustedIps } from '@/config/system-config.reader';
 import { scanLogLines, workspaceDir } from './log-workspace';
 import {
@@ -22,7 +23,6 @@ import {
 // / authserver)。Errors_*.log 不扫（ERROR 级标记在 Server log 中已全量存在，避免重复计数）。
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_RANGE_DAYS = 31;
 
 async function scanLog(
   dir: string,
@@ -61,6 +61,8 @@ export function registerAnomalyTool(): void {
       to: z.string().regex(DATE_RE, 'to 需为 YYYY-MM-DD').describe('结束日期（含，跨度 ≤31 天）'),
       realm: z.string().min(2).optional().describe('realm 目录名，未传时用系统默认 realm'),
     }),
+    // server/auth 日志全量扫描属重计算工具（生产实测 5s 默认超时被打断 27 次），单独放宽到 60s。
+    timeoutMs: ANOMALY_TOOL_TIMEOUT_MS,
     handler: async (args) => {
       const { from, to } = args as { from: string; to: string };
       const realm = (args as { realm?: string }).realm ?? (await readDefaultRealm());
@@ -74,7 +76,7 @@ export function registerAnomalyTool(): void {
       const end = Date.parse(`${to}T00:00:00Z`);
       for (let t = Date.parse(`${from}T00:00:00Z`); t <= end; t += 86_400_000) {
         dates.push(new Date(t).toISOString().slice(0, 10));
-        if (dates.length > MAX_RANGE_DAYS) throw new Error(`date range exceeds ${MAX_RANGE_DAYS} days`);
+        if (dates.length > ANOMALY_MAX_RANGE_DAYS) throw new Error(`date range exceeds ${ANOMALY_MAX_RANGE_DAYS} days`);
       }
       for (const date of dates) {
         const wsDir = workspaceDir(realm, date, 'worldserver');

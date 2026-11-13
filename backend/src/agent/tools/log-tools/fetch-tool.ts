@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { cosGetObjectBuffer } from '@/shared/utils/cos.util';
 import { registerTool } from '@/agent/tools/registry';
+import { FETCH_TOOL_TIMEOUT_MS } from '@/config/ai-constants';
 import { readDefaultRealm } from '@/config/system-config.reader';
 import { extractArchive, isLogType, listExtracted, logArchiveKey, workspaceDir } from './log-workspace';
 
@@ -12,7 +13,7 @@ export function registerFetchTool(): void {
     name: 'fetch_log_archive',
     description:
       '下载并解压指定日期与类型的日志包（worldserver/authserver/anticheat/crash）到临时工作区，返回文件路径与行数清单。之后可用 grep/read 在工作区自主检索，或用 parse_anticheat_violations 做代码级解析。',
-    timeoutMs: 30_000,
+    timeoutMs: FETCH_TOOL_TIMEOUT_MS,
     schema: z.object({
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date 需为 YYYY-MM-DD').describe('日志日期'),
       type: z.enum(['worldserver', 'authserver', 'anticheat', 'crash']).describe('日志类型'),

@@ -65,7 +65,7 @@ export function validateFinalJson(obj: unknown, realm: string, date: string): st
 
 export function assembleReport(finalJson: ReportFinalJson, sections: DraftedSections): InspectionReportJson {
   if (sections.missing.length > 0) {
-    throw new Error(`报告缺节：${sections.missing.join(' / ')}（agent 未调用 write_report_section 落盘这些节）`);
+    throw new Error(`报告缺节：${sections.missing.join(' / ')}（agent 未调用对应的分节落盘工具）`);
   }
   return {
     schemaVersion: finalJson.schemaVersion,

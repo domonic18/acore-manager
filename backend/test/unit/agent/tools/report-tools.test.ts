@@ -161,7 +161,7 @@ describe('report-tools: draft write/read/assemble', () => {
   });
 
   it('writes a section through the tool and reads it back sanitized', async () => {
-    const out = await toolFn('write_report_section').invoke({ section: 'suspicious-players', content: [player()] });
+    const out = await toolFn('write_suspicious_players').invoke({ content: [player()] });
     expect(out).toMatchObject({ ok: true, section: 'suspicious-players' });
     expect(existsSync(join(draftDir, 'suspicious-players.json'))).toBe(true);
 
@@ -171,30 +171,42 @@ describe('report-tools: draft write/read/assemble', () => {
   });
 
   it('overwrites an existing section on rewrite', async () => {
-    await toolFn('write_report_section').invoke({ section: 'recommendations', content: ['v1'] });
-    await toolFn('write_report_section').invoke({ section: 'recommendations', content: ['v2', '  '] });
+    await toolFn('write_recommendations').invoke({ content: ['v1'] });
+    await toolFn('write_recommendations').invoke({ content: ['v2', '  '] });
     const sections = readDraftedSections(draftDir);
     expect(sections.recommendations).toEqual(['v2']);
   });
 
+  it('recovers content passed as a JSON string (mimo incident: content wrapped in a string)', async () => {
+    const out = await toolFn('write_server_health').invoke({ content: '{"errors":["oom 3 次"]}' });
+    expect(out).toMatchObject({ ok: true, section: 'server-health' });
+    expect(readDraftedSections(draftDir).serverHealth).toEqual({ errors: ['oom 3 次'] });
+  });
+
+  it('reports the actually received type when the content shape is wrong', async () => {
+    const out = await toolFn('write_server_health').invoke({ content: 123 });
+    expect(out.error).toMatch(/实际收到 number/);
+  });
+
   it('surfaces validation failures as {error} for the model to rewrite the section', async () => {
-    const out = await toolFn('write_report_section').invoke({ section: 'suspicious-players', content: [{ character: '', severity: 'high', suggestedAction: 'ban', reasons: [], evidence: [], falsePositiveSignals: [] }] });
+    const out = await toolFn('write_suspicious_players').invoke({ content: [{ character: '', severity: 'high', suggestedAction: 'ban', reasons: [], evidence: [], falsePositiveSignals: [] }] });
     // 错误可操作化：含节名 + 字段定位 + 同工具重试指引（SquadSight _format_validation_error 模式）
     expect(out).toMatchObject({ error: expect.stringContaining('character 不能为空') });
-    expect(out.error).toContain('write_report_section(suspicious-players)');
+    expect(out.error).toContain('实际收到 string');
+    expect(out.error).toContain('write_suspicious_players(suspicious-players)');
     expect(out.error).toContain('重新调用本工具重试');
   });
 
   it('rejects invocation when no draft root is injected', async () => {
     clearReportDraftRoot();
-    const out = await toolFn('write_report_section').invoke({ section: 'recommendations', content: ['a'] });
+    const out = await toolFn('write_recommendations').invoke({ content: ['a'] });
     expect(out).toMatchObject({ error: expect.stringContaining('草稿目录未就绪') });
   });
 
   it('assembles the full report from final JSON + drafted sections', async () => {
-    await toolFn('write_report_section').invoke({ section: 'server-health', content: { errors: ['oom 3 次'] } });
-    await toolFn('write_report_section').invoke({ section: 'suspicious-players', content: [player()] });
-    await toolFn('write_report_section').invoke({ section: 'recommendations', content: ['关注'] });
+    await toolFn('write_server_health').invoke({ content: { errors: ['oom 3 次'] } });
+    await toolFn('write_suspicious_players').invoke({ content: [player()] });
+    await toolFn('write_recommendations').invoke({ content: ['关注'] });
 
     const finalJson = { schemaVersion: REPORT_SCHEMA_VERSION, reportDate: '2026-08-22', realm: 'realm3', healthScore: '82', summary: ' 平稳 ' };
     const report = assembleReport(finalJson as never, readDraftedSections(draftDir));
@@ -255,9 +267,10 @@ describe('report-tools: submit_final_report capture', () => {
     expect(readFinalJson(draftDir)).toMatchObject({ healthScore: 82, summary: '平稳' });
   });
 
-  it('rejects schema-invalid submissions at the framework layer with field location', async () => {
-    // tool() 的 zod 校验在框架层拒绝（错误含字段定位），不会到达 handler 的 {error} 包装
-    await expect(toolFn('submit_final_report').invoke({ ...finalJson(), healthScore: 101 })).rejects.toThrow(/healthScore 必须为 0-100 的数字/);
+  it('rejects schema-invalid submissions with a field-located error', async () => {
+    // 运行时校验在包装层内：返回结构化 error（计入熔断与预算），不落盘
+    const out = await toolFn('submit_final_report').invoke({ ...finalJson(), healthScore: 101 });
+    expect(out.error).toMatch(/healthScore 必须为 0-100 的数字/);
     expect(readFinalJson(draftDir)).toBeNull();
   });
 

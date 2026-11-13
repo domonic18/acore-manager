@@ -24,6 +24,10 @@ export interface SystemConfigPayload {
     agentCacheSize?: number | null;
     toolCallBudget?: number | null;
     toolTimeoutMs?: number | null;
+    toolFailureThreshold?: number | null;
+    inspectionTimeBudgetMs?: number | null;
+    agentMaxSteps?: number | null;
+    llmRequestTimeoutMs?: number | null;
   };
   login?: {
     bruteForceEnabled?: string | null;

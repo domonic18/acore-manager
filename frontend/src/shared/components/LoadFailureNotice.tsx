@@ -5,16 +5,20 @@ interface LoadFailureNoticeProps {
   description?: string;
   /** 悬浮定位（AI 助手入口这类挂在页面角落的控件） */
   floating?: boolean;
+  /** 就地重试（重建懒加载子树，不刷新页面）；缺省时仅提供整页重新加载 */
+  onRetry?: () => void;
 }
 
 /**
- * chunk 加载失败时的降级提示：给出可点击的重新加载入口，
+ * chunk 加载失败时的降级提示：给出可点击的重试入口，
  * 取代 React Router 默认的整页 "Unexpected Application Error!"。
+ * 重载均为用户主动触发，不做自动 reload（避免失败时的刷新循环）。
  */
 export function LoadFailureNotice({
   title = '资源加载失败',
   description = '页面脚本未能加载完成，可点击下方按钮重新加载。',
   floating = false,
+  onRetry,
 }: LoadFailureNoticeProps) {
   return (
     <div
@@ -29,13 +33,28 @@ export function LoadFailureNotice({
         {title}
       </div>
       <p className="text-muted-foreground">{description}</p>
-      <button
-        type="button"
-        onClick={() => window.location.reload()}
-        className="w-fit rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-      >
-        重新加载
-      </button>
+      <div className="flex gap-2">
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="w-fit rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            重试加载
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className={
+            onRetry
+              ? 'w-fit rounded-md border border-border px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-80'
+              : 'w-fit rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90'
+          }
+        >
+          重新加载
+        </button>
+      </div>
     </div>
   );
 }

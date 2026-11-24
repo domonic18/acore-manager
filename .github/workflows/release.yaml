@@ -342,6 +342,8 @@ jobs:
           SCF_PRODUCTION_NAMESPACE: ${{ vars.SCF_PRODUCTION_NAMESPACE }}
           SCF_PRODUCTION_WEB_FUNCTION: ${{ vars.SCF_PRODUCTION_WEB_FUNCTION }}
           SCF_PRODUCTION_JOB_FUNCTION: ${{ vars.SCF_PRODUCTION_JOB_FUNCTION }}
+          SCF_STAGING_HEALTH_URL: ${{ vars.SCF_STAGING_HEALTH_URL }}
+          SCF_PRODUCTION_HEALTH_URL: ${{ vars.SCF_PRODUCTION_HEALTH_URL }}
         run: |
           set -euo pipefail
           case "$DEPLOY_ENV" in
@@ -349,12 +351,14 @@ jobs:
               namespace="${SCF_STAGING_NAMESPACE:-staging}"
               web_fn="$SCF_STAGING_WEB_FUNCTION"
               job_fn="$SCF_STAGING_JOB_FUNCTION"
+              health_url="$SCF_STAGING_HEALTH_URL"
               ;;
             production)
               # 默认值必须是 production：改错默认值等于把生产包发到测试
               namespace="${SCF_PRODUCTION_NAMESPACE:-production}"
               web_fn="$SCF_PRODUCTION_WEB_FUNCTION"
               job_fn="$SCF_PRODUCTION_JOB_FUNCTION"
+              health_url="$SCF_PRODUCTION_HEALTH_URL"
               ;;
             *)
               echo "[FAIL] 未知 deploy_env: $DEPLOY_ENV" >&2
@@ -368,6 +372,7 @@ jobs:
           echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
           echo "web_function=${web_fn}" >> "$GITHUB_OUTPUT"
           echo "job_function=${job_fn}" >> "$GITHUB_OUTPUT"
+          echo "health_url=${health_url}" >> "$GITHUB_OUTPUT"
           echo "app_image=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME}:${TAG}@${APP_DIGEST}" >> "$GITHUB_OUTPUT"
           echo "job_image=${REGISTRY}/${TCR_NAMESPACE}/${IMAGE_NAME_JOB}:${TAG}@${JOB_DIGEST}" >> "$GITHUB_OUTPUT"
           echo "App: ${TAG}@${APP_DIGEST}"
@@ -383,6 +388,8 @@ jobs:
           # 形态决定镜像端口：web → 9000（Web Server 函数）
           SCF_FUNCTION_KIND: 'web'
           SCF_IMAGE_URI: ${{ steps.target.outputs.app_image }}
+          # 发布后 readiness 校验基址（vars 未配置时脚本自动跳过）
+          SCF_HEALTH_CHECK_URL: ${{ steps.target.outputs.health_url }}
         working-directory: scripts/deploy
         run: node scf-update-image.mjs
 

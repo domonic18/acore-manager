@@ -20,6 +20,13 @@
  *   SCF_IMAGE_URI       新镜像 {registry}/{namespace}/{image}:{tag}@sha256:{digest}
  *   SCF_WAIT_TIMEOUT_MS 等待函数生效的上限（默认 600000 = 10 分钟）
  *   SCF_UPDATE_ATTEMPTS UpdateFunctionCode 的尝试次数（默认 2）
+ *   SCF_HEALTH_CHECK_URL web 形态发布后 readiness 校验的站点基址（如 https://mgr.lokta.cn）；
+ *                        未配置则跳过校验（job 形态无 HTTP 端点，天然跳过）
+ *   SCF_HEALTH_TIMEOUT_MS readiness 校验上限（默认 180000 = 3 分钟）
+ *
+ * 发布后校验：平台 Status=Active 只代表端口可连/镜像已换，不代表依赖就绪。
+ * DB 配置错误的发布如果只看平台状态会被标记成功，这里轮询 /api/health/ready 直到 200，
+ * 超时或持续非 200 让发布显式失败（回滚决策仍由人做，与人工审批闸门一致）。
  */
 
 import tencentcloud from 'tencentcloud-sdk-nodejs-scf';
@@ -160,6 +167,35 @@ async function waitForActive() {
   }
 }
 
+async function verifyReadiness() {
+  const base = process.env.SCF_HEALTH_CHECK_URL;
+  if (!base) {
+    console.warn('[scf-deploy] 未配置 SCF_HEALTH_CHECK_URL，跳过发布后 readiness 校验（仅平台状态校验）');
+    return;
+  }
+  const url = `${base.replace(/\/+$/, '')}/api/health/ready`;
+  const timeoutMs = Number(process.env.SCF_HEALTH_TIMEOUT_MS ?? 180000);
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = '';
+  console.log(`[scf-deploy] 开始 readiness 校验：${url}（上限 ${Math.round(timeoutMs / 1000)} 秒）`);
+  for (;;) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      lastStatus = `HTTP ${res.status}`;
+      if (res.ok) {
+        console.log(`[scf-deploy] readiness 校验通过：${lastStatus}`);
+        return;
+      }
+    } catch (err) {
+      lastStatus = err?.name === 'TimeoutError' ? '请求超时' : `请求失败：${err?.message ?? err}`;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`readiness 校验超时（${Math.round(timeoutMs / 1000)} 秒），最后一次：${lastStatus} —— 服务未就绪，发布按失败处理`);
+    }
+    await sleep(10000);
+  }
+}
+
 async function main() {
   console.log(`[scf-deploy] 目标函数 ${namespace}/${functionName}（${region}），形态 ${kind}，端口 ${imagePort}`);
   console.log(`[scf-deploy] 新镜像 ${imageUri}`);
@@ -169,6 +205,9 @@ async function main() {
 
   await updateFunctionCode();
   await waitForActive();
+  if (kind === 'web') {
+    await verifyReadiness();
+  }
 }
 
 main().catch((err) => {

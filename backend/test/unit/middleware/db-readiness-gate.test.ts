@@ -2,6 +2,7 @@ import request from 'supertest';
 import express, { Application } from 'express';
 import { responseFormatter } from '@/middleware/response-formatter';
 import { dbReadinessGate } from '@/middleware/db-readiness-gate';
+import { env } from '@/config/env';
 
 const mockGetServiceState = jest.fn();
 const mockGetInitPromise = jest.fn();
@@ -88,7 +89,7 @@ describe('dbReadinessGate', () => {
     const next = jest.fn();
     const handled = dbReadinessGate({ path: '/ping' } as never, res as never, next);
 
-    await jest.advanceTimersByTimeAsync(8_000); // gate wait timeout fires
+    await jest.advanceTimersByTimeAsync(env.STARTUP_DB_BUDGET_MS); // gate 等待上限 = 启动预算（同源配置）
     await handled;
 
     expect(next).not.toHaveBeenCalled();

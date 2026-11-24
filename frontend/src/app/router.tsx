@@ -1,12 +1,12 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
-import { Suspense } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { usePermission } from '@/shared/hooks/usePermission';
 import { AppLayout } from '@/shared/components/AppLayout';
 import { DetailPageSkeleton } from '@/shared/components/Skeleton';
 import { ChunkErrorBoundary } from '@/shared/components/ChunkErrorBoundary';
 import { LoadFailureNotice } from '@/shared/components/LoadFailureNotice';
-import { lazyWithRetry } from '@/shared/lib/chunk-load';
+import { isChunkLoadError, lazyWithRetry } from '@/shared/lib/chunk-load';
 import { RouteErrorFallback } from './RouteErrorFallback';
 
 const LoginPage = lazyWithRetry(() => import('@/pages/LoginPage'), 'LoginPage');
@@ -43,11 +43,6 @@ const TargetedAnalysisDetailPage = lazyWithRetry(
 );
 const SampleRegistryPage = lazyWithRetry(() => import('@/pages/SampleRegistryPage'), 'SampleRegistryPage');
 const PromptLibraryPage = lazyWithRetry(() => import('@/pages/PromptLibraryPage'), 'PromptLibraryPage');
-const AiAssistantDock = lazyWithRetry(
-  () =>
-    import('@/features/ai-assistant/components/AiAssistantDock').then((m) => ({ default: m.AiAssistantDock })),
-  'AiAssistantDock',
-);
 
 function withSuspense(Component: React.ComponentType) {
   return (
@@ -70,14 +65,43 @@ function page(path: string, Component: React.ComponentType) {
 // 全局 AI 助手入口：悬浮按钮 + 右侧抽屉，随 AppLayout 出现在所有已登录页
 function AiAssistantDockGate() {
   const { hasGmLevel } = usePermission();
+  // 每次重试递增：key 变化整树重建（边界 + 全新 lazy 实例）——React.lazy 会缓存
+  // rejected promise（react#14254），只重置边界状态无法重新发起 import()
+  const [attempt, setAttempt] = useState(0);
   if (!hasGmLevel(2)) return null;
+  return <DockAttempt key={attempt} onRetry={() => setAttempt((a) => a + 1)} />;
+}
+
+function DockAttempt({ onRetry }: { onRetry: () => void }) {
+  const DockLazy = useMemo(
+    () =>
+      lazyWithRetry(
+        async () => {
+          const m = await import('@/features/ai-assistant/components/AiAssistantDock');
+          return { default: m.AiAssistantDock };
+        },
+        'AiAssistantDock',
+      ),
+    [],
+  );
+  // 助手 chunk 加载失败只降级为角标提示，不牵连整页；文案按加载失败/运行异常区分
   return (
-    // 助手 chunk 加载失败只降级为角标提示，不牵连整页
     <ChunkErrorBoundary
-      fallback={<LoadFailureNotice floating title="AI 助手加载失败" description="网络波动导致助手脚本未加载完成。" />}
+      fallback={(error) => (
+        <LoadFailureNotice
+          floating
+          title="AI 助手加载失败"
+          description={
+            isChunkLoadError(error)
+              ? '网络波动导致助手脚本未加载完成，可重试加载。'
+              : '助手组件运行异常，可尝试重新加载。'
+          }
+          onRetry={onRetry}
+        />
+      )}
     >
       <Suspense fallback={null}>
-        <AiAssistantDock />
+        <DockLazy />
       </Suspense>
     </ChunkErrorBoundary>
   );

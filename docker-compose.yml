@@ -1,6 +1,8 @@
 services:
   # acm 系统自有库（可写）：模型配置 / 会话 / LangGraph checkpoint（PostgresSaver 无模块依赖）
   # 游戏三库仍在 acore-mysql（只读），两者隔离
+  # 数据 bind mount 到仓库 workspace/postgres（本地持久化惯例，对齐 ai-invest/agent-sims 等项目）：
+  # docker system prune --volumes / compose down -v 均不会伤及数据（2026-11-24 命名卷被清事故）
   acm-postgres:
     image: postgres:16-alpine
     ports:
@@ -10,7 +12,7 @@ services:
       - POSTGRES_PASSWORD=${ACM_PG_PASSWORD}
       - POSTGRES_DB=acm
     volumes:
-      - acm_pgdata:/var/lib/postgresql/data
+      - ./workspace/postgres:/var/lib/postgresql/data
     restart: unless-stopped
 
   app:
@@ -32,6 +34,3 @@ services:
     depends_on:
       - acm-postgres
     restart: unless-stopped
-
-volumes:
-  acm_pgdata:

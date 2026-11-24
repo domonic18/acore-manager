@@ -1,12 +1,13 @@
 import { NextFunction, Request, Response } from 'express';
+import { env } from '@/config/env';
 import { getInitPromise, getServiceState } from '@/config/database';
-
-const GATE_WAIT_MS = 8_000;
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // /api 就绪门禁：ready 放行；starting（冷启动初始化中）有限等待而非报错；
-// degraded（预算耗尽仍未就绪）快速失败并携带结构化 code 与 Retry-After
+// degraded（预算耗尽仍未就绪）快速失败并携带结构化 code 与 Retry-After。
+// 等待上限与启动预算同源（STARTUP_DB_BUDGET_MS）：starting 蕴含“预算未耗尽”，
+// 等到预算终点仍未就绪自然落入 degraded 分支，两个上限不会漂移。
 export async function dbReadinessGate(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (req.path === '/health' || req.path.startsWith('/health/')) {
     next();
@@ -19,7 +20,7 @@ export async function dbReadinessGate(req: Request, res: Response, next: NextFun
   }
 
   if (getServiceState() === 'starting') {
-    await Promise.race([getInitPromise(), delay(GATE_WAIT_MS)]);
+    await Promise.race([getInitPromise(), delay(env.STARTUP_DB_BUDGET_MS)]);
     if (getServiceState() === 'ready') {
       next();
       return;

@@ -17,8 +17,6 @@ const PORT = env.PORT;
 
 const app = createApp();
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function shutdown(server: import('http').Server): Promise<void> {
   logger.info('Shutdown signal received, draining connections / 收到停机信号，正在排水连接');
   const forceExit = setTimeout(() => process.exit(1), 10_000);
@@ -35,7 +33,8 @@ async function shutdown(server: import('http').Server): Promise<void> {
   process.exit(0);
 }
 
-async function start() {
+async function initDependencies(): Promise<void> {
+  const startedAt = Date.now();
   try {
     await redis.connect();
     logger.info('Redis connection established / Redis 连接已建立');
@@ -43,14 +42,23 @@ async function start() {
     logger.warn(err, 'Redis unavailable at startup, running in degraded mode / Redis 启动时不可用，将以降级模式运行');
   }
 
-  // 监听前先等数据库初始化：SCF 平台会持有冷启动请求直到端口可连，常见路径的 503 竞态就此消失；
-  // 预算耗尽（DB 真不可达）仍照常监听，转 degraded，由无限重试循环等待自愈
-  const init = initializeDataSourcesWithRetry();
-  await Promise.race([init, delay(env.STARTUP_DB_BUDGET_MS)]);
+  // initializeDataSourcesWithRetry 内部无限重试不会 reject；兜底防御后台任务异常逃逸成 unhandled rejection
+  try {
+    await initializeDataSourcesWithRetry();
+    logger.info(`Startup dependencies initialized in ${Date.now() - startedAt}ms / 启动依赖初始化完成`);
+  } catch (err) {
+    logger.error(err, 'Database initialization exited unexpectedly / 数据库初始化意外退出');
+  }
+}
 
+async function start() {
+  // 端口先绑定：SCF 以“端口可连”为实例可服务信号，静态资源不依赖 DB，初始化期间即可服务；
+  // /api 由 db-readiness-gate 兜底（等待初始化完成，超预算返回 503 + Retry-After），鉴权链路不变
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`Server listening on port ${PORT} (state=${getServiceState()}) / 服务器监听端口 ${PORT}`);
   });
+
+  void initDependencies();
 
   let shuttingDown = false;
   const handleSignal = () => {

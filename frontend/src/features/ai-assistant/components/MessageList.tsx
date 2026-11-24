@@ -14,7 +14,7 @@ const SUGGESTIONS = [
 
 const NOTES = ['仅做只读查询与研判分析，不执行任何写操作', '误报信号仅供参考，不能作为封号的唯一依据'];
 
-interface MessageListProps {
+export interface MessageListProps {
   messages: ChatUiMessage[];
   loading: boolean;
   onSuggest: (text: string) => void;

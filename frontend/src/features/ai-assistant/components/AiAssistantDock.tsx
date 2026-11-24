@@ -1,13 +1,38 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, PanelLeft, X } from 'lucide-react';
 import { useChatSessions } from '../hooks/useChatSessions';
 import { useChatStream } from '../hooks/useChatStream';
 import { SessionSidebar } from './SessionSidebar';
-import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { QuestionCard } from './QuestionCard';
+import { lazyWithRetry } from '@/shared/lib/chunk-load';
+import type { MessageListProps } from './MessageList';
 import { toast } from '@/shared/utils/toast.util';
 import { AI_QUICK_ANALYZE_EVENT, buildQuickAnalyzePrompt, type QuickAnalyzePayload } from '@/shared/lib/ai-quick-analyze';
+
+// markdown 渲染栈（react-markdown/remark-gfm 共享 chunk ~157KB）仅在消息区使用：
+// 从每页关键路径拆出，首次打开抽屉或空闲预取时才加载；失败只降级消息区，FAB 与抽屉壳不受影响
+const MessageList = lazyWithRetry<MessageListProps>(
+  async () => {
+    const m = await import('./MessageList');
+    return { default: m.MessageList };
+  },
+  'AiAssistantMessageList',
+);
+
+// 每个页面生命周期只预取一次；失败静默，真正打开时的按需加载有 lazyWithRetry 兜底
+let messageListPrefetchStarted = false;
+function prefetchMessageList(): void {
+  if (messageListPrefetchStarted) return;
+  messageListPrefetchStarted = true;
+  const onIdle: (cb: () => void) => void =
+    typeof window.requestIdleCallback === 'function'
+      ? (cb) => window.requestIdleCallback(() => cb())
+      : (cb) => window.setTimeout(cb, 2000);
+  onIdle(() => {
+    void import('./MessageList').catch(() => {});
+  });
+}
 
 // 常量与 ai-invest AssistantPanel 对齐：抽屉 520~960（默认 760），持久化宽度
 const MIN_DRAWER_WIDTH = 520;
@@ -42,6 +67,10 @@ export function AiAssistantDock() {
 
   const { sessions, create, remove } = useChatSessions();
   const { messages, loadingHistory, streaming, pendingQuestion, send, stop } = useChatStream(activeId);
+
+  useEffect(() => {
+    prefetchMessageList();
+  }, []);
 
   // 详情页快速分析：打开抽屉并自动发送分析指令（复用 handleSend 的建会话/补发机制）
   const handleSendRef = useRef<(text: string) => void>(() => {});
@@ -203,7 +232,23 @@ export function AiAssistantDock() {
             </button>
           </div>
 
-          <MessageList messages={messages} loading={loadingHistory} onSuggest={handleSend} />
+          {/* 消息区含 markdown 渲染栈（懒加载 chunk）：加载期间骨架占位，输入区/问题卡不受影响 */}
+          <Suspense
+            fallback={
+              <div className="flex-1 animate-pulse px-4 py-4" aria-busy="true" aria-label="正在加载助手组件">
+                <div className="mb-3 h-9 w-36 rounded-2xl rounded-br-sm bg-muted" />
+                <div className="flex gap-3">
+                  <div className="h-7 w-7 shrink-0 rounded-full bg-muted" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-56 rounded bg-muted/70" />
+                    <div className="h-4 w-40 rounded bg-muted/70" />
+                  </div>
+                </div>
+              </div>
+            }
+          >
+            <MessageList messages={messages} loading={loadingHistory} onSuggest={handleSend} />
+          </Suspense>
           {pendingQuestion && <QuestionCard payload={pendingQuestion} onSelect={(label) => void handleSend(`我选择：${label}`)} />}
           <Composer disabled={activeId === null && create.isPending} streaming={streaming} onSend={handleSend} onStop={stop} />
         </div>

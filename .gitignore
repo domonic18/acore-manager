@@ -37,6 +37,9 @@ Thumbs.db
 # Testing
 coverage/
 
+# 本地测试数据（acm-postgres bind mount 持久化，防误提交 / local test data, never commit）
+workspace/
+
 # Claude Code 本地运行时状态
 .claude/scheduled_tasks.lock
 

@@ -5,7 +5,7 @@ import path from 'path';
 import { env } from './config/env';
 import { requestLogger } from './middleware/request-logger';
 import { responseFormatter } from './middleware/response-formatter';
-import { compressionMiddleware } from './middleware/compression';
+import { compressionMiddleware, restoreBrowserAcceptEncoding } from './middleware/compression';
 import { errorHandler } from './middleware/error-handler';
 import authRoutes from './routes/auth.routes';
 import accountRoutes from './routes/account.routes';
@@ -74,6 +74,8 @@ export function createApp(): Application {
   }));
 
   // 运行时压缩：静态资源（前端 chunk）与 API JSON 同时受益；SSE 由中间件显式排除
+  // 网关会改写 Accept-Encoding，先为浏览器请求恢复可接受编码，再进压缩协商
+  app.use(restoreBrowserAcceptEncoding);
   app.use(compressionMiddleware);
 
   app.use(express.json());

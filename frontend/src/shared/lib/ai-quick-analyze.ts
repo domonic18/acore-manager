@@ -11,6 +11,12 @@ export interface QuickAnalyzePayload {
   ban?: { date: string; reason: string; bannedBy: string };
 }
 
+/** 快速分析请求：payload + 自增 nonce（nonce 变化即视为新请求） */
+export interface QuickAnalyzeRequest {
+  payload: QuickAnalyzePayload;
+  nonce: number;
+}
+
 export function buildQuickAnalyzePrompt(payload: QuickAnalyzePayload): string {
   if (payload.subjectType === 'character') {
     return (

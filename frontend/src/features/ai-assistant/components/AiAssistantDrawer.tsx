@@ -8,10 +8,10 @@ import { QuestionCard } from './QuestionCard';
 import { lazyWithRetry } from '@/shared/lib/chunk-load';
 import type { MessageListProps } from './MessageList';
 import { toast } from '@/shared/utils/toast.util';
-import { AI_QUICK_ANALYZE_EVENT, buildQuickAnalyzePrompt, type QuickAnalyzePayload } from '@/shared/lib/ai-quick-analyze';
+import { buildQuickAnalyzePrompt, type QuickAnalyzeRequest } from '@/shared/lib/ai-quick-analyze';
 
 // markdown 渲染栈（react-markdown/remark-gfm 共享 chunk ~157KB）仅在消息区使用：
-// 从每页关键路径拆出，首次打开抽屉或空闲预取时才加载；失败只降级消息区，FAB 与抽屉壳不受影响
+// 抽屉本身按需加载，消息区再单独懒加载；失败只降级消息区，抽屉壳不受影响
 const MessageList = lazyWithRetry<MessageListProps>(
   async () => {
     const m = await import('./MessageList');
@@ -20,18 +20,10 @@ const MessageList = lazyWithRetry<MessageListProps>(
   'AiAssistantMessageList',
 );
 
-// 每个页面生命周期只预取一次；失败静默，真正打开时的按需加载有 lazyWithRetry 兜底
-let messageListPrefetchStarted = false;
-function prefetchMessageList(): void {
-  if (messageListPrefetchStarted) return;
-  messageListPrefetchStarted = true;
-  const onIdle: (cb: () => void) => void =
-    typeof window.requestIdleCallback === 'function'
-      ? (cb) => window.requestIdleCallback(() => cb())
-      : (cb) => window.setTimeout(cb, 2000);
-  onIdle(() => {
-    void import('./MessageList').catch(() => {});
-  });
+interface AiAssistantDrawerProps {
+  onClose: () => void;
+  /** 详情页「快速分析」请求；由常驻的 Launcher 接收事件后转交 */
+  quickAnalyze: QuickAnalyzeRequest | null;
 }
 
 // 常量与 ai-invest AssistantPanel 对齐：抽屉 520~960（默认 760），持久化宽度
@@ -51,12 +43,10 @@ function readStoredWidth(): number {
 }
 
 /**
- * 全局 AI 助手入口（仿 ai-invest AssistantPanel/AssistantFab）：
- * 右下角悬浮按钮 → 右侧抽屉 [会话侧栏 | 头部 + 消息流 + 输入区]。
- * 由 app/router.tsx 在 AppLayout 同级挂载并做 GM 等级门禁。
+ * AI 助手抽屉（右侧消息流 + 输入区）。
+ * 由 AiAssistantLauncher 按需挂载：助手 chunk 与 markdown 栈不进页面首屏关键路径。
  */
-export function AiAssistantDock() {
-  const [open, setOpen] = useState(false);
+export function AiAssistantDrawer({ onClose, quickAnalyze }: AiAssistantDrawerProps) {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [drawerWidth, setDrawerWidth] = useState(readStoredWidth);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -64,24 +54,15 @@ export function AiAssistantDock() {
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(drawerWidth);
   const pendingTextRef = useRef<string | null>(null);
+  // 挂载后再滑入，保留原来的 200ms 位移动画（挂载即显示会没有过渡）
+  const [entered, setEntered] = useState(false);
 
   const { sessions, create, remove } = useChatSessions();
   const { messages, loadingHistory, streaming, pendingQuestion, send, stop } = useChatStream(activeId);
 
   useEffect(() => {
-    prefetchMessageList();
-  }, []);
-
-  // 详情页快速分析：打开抽屉并自动发送分析指令（复用 handleSend 的建会话/补发机制）
-  const handleSendRef = useRef<(text: string) => void>(() => {});
-  useEffect(() => {
-    const handler = (e: Event) => {
-      setOpen(true);
-      const detail = (e as CustomEvent<QuickAnalyzePayload>).detail;
-      if (detail) handleSendRef.current(buildQuickAnalyzePrompt(detail));
-    };
-    window.addEventListener(AI_QUICK_ANALYZE_EVENT, handler);
-    return () => window.removeEventListener(AI_QUICK_ANALYZE_EVENT, handler);
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   useEffect(() => {
@@ -101,8 +82,8 @@ export function AiAssistantDock() {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
-      window.removeEventListener('mousemove', handleMouseUp);
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = '';
     };
   }, [resizing]);
@@ -148,7 +129,16 @@ export function AiAssistantDock() {
     },
     [activeId, send, handleCreate],
   );
+
+  // 详情页快速分析：nonce 变化即视为新请求（抽屉未打开时随挂载补发，已打开时再次触发）
+  const handleSendRef = useRef<(text: string) => void>(() => {});
   handleSendRef.current = handleSend;
+  const handledNonceRef = useRef(0);
+  useEffect(() => {
+    if (!quickAnalyze || quickAnalyze.nonce === handledNonceRef.current) return;
+    handledNonceRef.current = quickAnalyze.nonce;
+    handleSendRef.current(buildQuickAnalyzePrompt(quickAnalyze.payload));
+  }, [quickAnalyze]);
 
   const handleDelete = useCallback(
     (id: number) => {
@@ -164,23 +154,12 @@ export function AiAssistantDock() {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label="打开 AI 助手"
-        title="AI 助手"
-        onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6"
-      >
-        <span className="absolute inset-0 -z-10 animate-pulse rounded-full bg-primary/40" />
-        <Bot className="h-6 w-6" />
-      </button>
-
-      <div className={open ? 'fixed inset-0 z-40 bg-black/40' : 'hidden'} onClick={() => setOpen(false)} />
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
 
       <div
         role="dialog"
         aria-label="AI 助手"
-        className={`fixed bottom-0 right-0 top-0 z-50 flex bg-background shadow-2xl transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed bottom-0 right-0 top-0 z-50 flex bg-background shadow-2xl transition-transform duration-200 ${entered ? 'translate-x-0' : 'translate-x-full'}`}
         style={{ width: `min(${drawerWidth}px, 100vw)` }}
       >
         <div
@@ -227,7 +206,7 @@ export function AiAssistantDock() {
                 <div className="max-w-[240px] truncate text-xs text-muted-foreground">{activeTitle?.trim() || '新会话'}</div>
               </div>
             </div>
-            <button className="rounded p-1.5 text-muted-foreground hover:bg-accent" aria-label="关闭" onClick={() => setOpen(false)}>
+            <button className="rounded p-1.5 text-muted-foreground hover:bg-accent" aria-label="关闭" onClick={onClose}>
               <X className="h-4 w-4" />
             </button>
           </div>

@@ -133,6 +133,21 @@ class SystemConfigService {
     return readDefaultRealm();
   }
 
+  /** 通用密钥读写（跨域密钥，如 MCP API-KEY）：加密落库，不进入 getView 视图 */
+  async getSecretValue(configKey: string): Promise<string | null> {
+    const values = await loadConfigValues();
+    return values.get(configKey) ?? null;
+  }
+
+  async setSecretValue(configKey: string, value: string, operatorName: string): Promise<void> {
+    await this.upsert(configKey, encryptToken(value), true, operatorName);
+  }
+
+  async getSecretUpdatedAt(configKey: string): Promise<Date | null> {
+    const row = await this.repo.findOne({ where: { configKey } });
+    return row?.updatedAt ?? null;
+  }
+
   async getSoapConn(): Promise<SoapConnConfig> {
     const values = await loadConfigValues();
     const host = values.get(SYSTEM_CONFIG_KEYS.soapHost);

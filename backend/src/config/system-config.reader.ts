@@ -34,6 +34,7 @@ export const SYSTEM_CONFIG_KEYS = {
   patrolBgCursor: 'patrol_bg_cursor',
   patrolCarryExcludedZones: 'patrol_carry_excluded_zones',
   iconUpstreams: 'icon_upstreams',
+  mcpApiKey: 'mcp_api_key',
 } as const;
 
 export const DEFAULT_REALM_FALLBACK = 'realm3';

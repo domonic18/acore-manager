@@ -12,6 +12,48 @@ class AccountRepository extends BaseRepository<Account> {
     return this.repo.findOne({ where: { username } });
   }
 
+  // 申诉帖里的账号名大小写不定（AC 侧存大写），核实封号必须大小写不敏感
+  async findByUsernameCaseInsensitive(username: string): Promise<{
+    id: number;
+    username: string;
+    email: string | null;
+    lastIp: string | null;
+    lastLogin: Date | null;
+    joinDate: Date | null;
+    online: number;
+    gmlevel: number;
+  } | null> {
+    const rows = await authDataSource.query(
+      `SELECT
+        a.id,
+        a.username,
+        a.email,
+        a.last_ip as lastIp,
+        a.last_login as lastLogin,
+        a.joindate as joinDate,
+        a.online,
+        COALESCE(aa.gmlevel, 0) as gmlevel
+      FROM account a
+      LEFT JOIN account_access aa ON aa.id = a.id
+      WHERE UPPER(a.username) = UPPER(?)
+      LIMIT 1`,
+      [username],
+    );
+    return rows?.[0] ?? null;
+  }
+
+  // 角色名 → 所属账号 id（深度分析对象是角色名时需要反查账号以定位封禁记录）
+  async findAccountIdByCharacterName(characterName: string): Promise<number | null> {
+    const rows = await authDataSource.query(
+      `SELECT c.account as accountId
+      FROM acore_characters.characters c
+      WHERE UPPER(c.name) = UPPER(?) AND c.name != ''
+      LIMIT 1`,
+      [characterName],
+    );
+    return rows?.[0]?.accountId ?? null;
+  }
+
   async findById(id: number): Promise<Account | null> {
     return this.repo.findOne({ where: { id } });
   }

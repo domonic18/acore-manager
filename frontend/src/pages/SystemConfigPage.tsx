@@ -3,20 +3,22 @@ import { useSearchParams } from 'react-router-dom';
 import { SystemConfigForm } from '@/features/system-config/components/SystemConfigForm';
 import { ModelConfigPanel } from '@/features/model-config/components/ModelConfigPanel';
 import { FeishuBindingManager } from '@/features/feishu-binding/components/FeishuBindingManager';
+import { McpTokenPanel } from '@/features/mcp/components/McpTokenPanel';
 
-// 设置页（gm3）：系统配置 / AI 模型配置 / 飞书免登绑定 三个配置域合并为 tab；
+// 设置页（gm3）：系统配置 / AI 模型配置 / 飞书免登绑定 / MCP 接口 四个配置域合并为 tab；
 // 旧 /model-config、/feishu-bindings 路由重定向至此（?tab=model / ?tab=bindings）。
 
-type SettingsTab = 'system' | 'model' | 'bindings';
+type SettingsTab = 'system' | 'model' | 'bindings' | 'mcp';
 
 const TABS: ReadonlyArray<{ key: SettingsTab; label: string }> = [
   { key: 'system', label: '系统配置' },
   { key: 'model', label: 'AI 模型配置' },
   { key: 'bindings', label: '飞书免登绑定' },
+  { key: 'mcp', label: 'MCP 接口' },
 ];
 
 function tabFromParam(value: string | null): SettingsTab {
-  return value === 'model' || value === 'bindings' ? value : 'system';
+  return value === 'model' || value === 'bindings' || value === 'mcp' ? value : 'system';
 }
 
 export default function SystemConfigPage() {
@@ -48,6 +50,7 @@ export default function SystemConfigPage() {
 
       {tab === 'system' && <SystemConfigForm />}
       {tab === 'model' && <ModelConfigPanel />}
+      {tab === 'mcp' && <McpTokenPanel />}
       {tab === 'bindings' && (
         <div className='space-y-3'>
           <p className='text-sm text-muted-foreground'>

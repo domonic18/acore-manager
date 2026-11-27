@@ -105,7 +105,12 @@ class TargetedAnalysisService {
     return result.affected ?? 0;
   }
 
-  async list(page = 1, pageSize = 20, subjectName?: string): Promise<{ items: AiTargetedAnalysis[]; total: number }> {
+  async list(
+    page = 1,
+    pageSize = 20,
+    subjectName?: string,
+    status?: 'running' | 'ok' | 'failed',
+  ): Promise<{ items: AiTargetedAnalysis[]; total: number }> {
     await this.sweepStaleRunning().catch((err: unknown) =>
       logger.warn(`[analysis] stale sweep failed: ${(err as Error).message}`),
     );
@@ -122,6 +127,7 @@ class TargetedAnalysisService {
         'a.status',
         'a.triggeredBy',
         'a.gmRemark',
+        'a.conclusionMarkdown',
         'a.createdAt',
         'a.updatedAt',
       ])
@@ -129,6 +135,7 @@ class TargetedAnalysisService {
       .skip((page - 1) * pageSize)
       .take(pageSize);
     if (subjectName?.trim()) qb.andWhere('a.subject_name LIKE :name', { name: `%${subjectName.trim()}%` });
+    if (status) qb.andWhere('a.status = :status', { status });
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
   }

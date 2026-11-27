@@ -30,6 +30,8 @@ import aiPromptRoutes from './routes/ai-prompt.routes';
 import aiWatchlistRoutes from './routes/ai-watchlist.routes';
 import feishuBindingRoutes from './routes/feishu-binding.routes';
 import iconRoutes from './routes/icon.routes';
+import mcpRoutes from './routes/mcp.routes';
+import mcpTokenRoutes from './routes/mcp-token.routes';
 import { dbReadinessGate } from './middleware/db-readiness-gate';
 
 // Vite 构建产物文件名形如 index-CejDb8xH.js / index-BteZ8KxJ.css，8 位哈希后缀
@@ -100,6 +102,8 @@ export function createApp(): Application {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/rbac', rbacRoutes);
   app.use('/api/system-config', systemConfigRoutes);
+  app.use('/api/mcp', mcpRoutes);
+  app.use('/api/mcp-token', mcpTokenRoutes);
   app.use('/api/feishu-bindings', feishuBindingRoutes);
   app.use('/api/ai/model-configs', aiModelConfigRoutes);
   app.use('/api/ai/token-usage', aiTokenUsageRoutes);

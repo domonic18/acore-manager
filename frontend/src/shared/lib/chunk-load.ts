@@ -7,14 +7,20 @@ const CHUNK_ERROR_PATTERNS = [
   'Unable to preload CSS',
 ];
 
-const RETRY_BASE_DELAY_MS = 500;
-const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 800;
+const MAX_ATTEMPTS = 5;
 
-// 指数退避 + 抖动：避免多用户同时失败后同步重试形成请求风暴；总等待预算 ≤ ~2s
-function backoffDelayMs(attempt: number): number {
-  const exponential = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+/** 重试预算可注入（单测用小预算，避免测试跑满整个退避窗口） */
+export interface RetryOptions {
+  maxAttempts?: number;
+  baseDelayMs?: number;
+}
+
+// 指数退避 + 抖动：避免多用户同时失败后同步重试形成请求风暴
+function backoffDelayMs(attempt: number, baseDelayMs: number): number {
+  const exponential = baseDelayMs * 2 ** (attempt - 1);
   const jitter = exponential * 0.3 * (Math.random() * 2 - 1);
-  return Math.max(RETRY_BASE_DELAY_MS, Math.round(exponential + jitter));
+  return Math.max(baseDelayMs, Math.round(exponential + jitter));
 }
 
 export function isChunkLoadError(error: unknown): boolean {
@@ -37,26 +43,33 @@ function sleep(ms: number): Promise<void> {
  * 避免一个附属 chunk 加载失败把整个后台打成 "Unexpected Application Error!"。
  * 注意每次 attempt 都重新调用 factory（重新发起 import()）——React.lazy 会缓存
  * rejected promise（react#14254），复用同一个失败 promise 的“重试”是无效的。
+ *
+ * 默认重试预算（5 次 / 退避 800ms 起，总等待 ≈12s）必须覆盖生产 SCF 的冷启动耗时：
+ * 实测并发拉 chunk 触发扩容时，新实例冷启动约 4s——旧预算（3 次 / ≈1.5s）三次重试
+ * 全落在同一个冷启动窗口内，等于没重试，必然直接报“助手不可用”。
  */
 export function lazyWithRetry<P extends object = object>(
   factory: () => Promise<{ default: ComponentType<P> }>,
   label: string,
+  options: RetryOptions = {},
 ): LazyExoticComponent<ComponentType<P>> {
+  const maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
+  const baseDelayMs = options.baseDelayMs ?? RETRY_BASE_DELAY_MS;
   return lazy(async () => {
     let lastError: unknown;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         return await factory();
       } catch (error) {
         lastError = error;
-        if (attempt < MAX_ATTEMPTS) {
-          const delay = backoffDelayMs(attempt);
+        if (attempt < maxAttempts) {
+          const delay = backoffDelayMs(attempt, baseDelayMs);
           console.warn(`[chunk-load] ${label} 第 ${attempt} 次加载失败，${delay}ms 后重试`, error);
           await sleep(delay);
         }
       }
     }
-    console.error(`[chunk-load] ${label} 加载失败，已重试 ${MAX_ATTEMPTS - 1} 次`, lastError);
+    console.error(`[chunk-load] ${label} 加载失败，已重试 ${maxAttempts - 1} 次`, describeChunkError(lastError), lastError);
     throw lastError;
   });
 }

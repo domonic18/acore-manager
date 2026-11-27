@@ -25,6 +25,22 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: true,
+    rolldownOptions: {
+      output: {
+        // 注意：Vite 8 走 rolldown，Rollup 的 manualChunks 语义不适用
+        // （默认会把分组成员的依赖一起拖进本块，recharts → react-dom 会让
+        //  图表块变成入口块的静态依赖，反而每页都下载；关掉递归包含又会留下
+        //  循环 chunk 依赖）。这里只做无依赖外溢的图标合并。
+        codeSplitting: {
+          includeDependenciesRecursively: false,
+          groups: [
+            // lucide-react 全站 30 个图标合并成 1 块：原先散成 11 个 <500B 的
+            // 图标 chunk，11 个请求只换回 4.8KB。合并后每页少 ~10 个请求。
+            { name: 'vendor-icons', test: /node_modules[\\/]lucide-react[\\/]/ },
+          ],
+        },
+      },
+    },
   },
   server: {
     proxy: {

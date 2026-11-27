@@ -1,5 +1,9 @@
 import compression from 'compression';
-import { shouldCompress } from '@/middleware/compression';
+import {
+  acceptsCompression,
+  restoreBrowserAcceptEncoding,
+  shouldCompress,
+} from '@/middleware/compression';
 
 function mockRes(contentType?: string, headers: Record<string, string> = {}) {
   const all: Record<string, string | undefined> = { 'Content-Type': contentType, ...headers };
@@ -15,6 +19,56 @@ function mockReq(headers: Record<string, string> = {}, method = 'GET') {
 
 const BROWSER_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) MicroMessenger/8.0';
 const browserReq = () => mockReq({ 'user-agent': BROWSER_UA, 'accept-encoding': 'gzip, deflate, br' });
+
+function restore(headers: Record<string, string>) {
+  const req = mockReq(headers);
+  const next = jest.fn();
+  restoreBrowserAcceptEncoding(req, mockRes(), next);
+  expect(next).toHaveBeenCalled();
+  return req as unknown as { headers: Record<string, string | undefined> };
+}
+
+describe('acceptsCompression', () => {
+  it('识别可用的压缩编码', () => {
+    expect(acceptsCompression('gzip')).toBe(true);
+    expect(acceptsCompression('gzip, deflate, br')).toBe(true);
+    expect(acceptsCompression('*')).toBe(true);
+    expect(acceptsCompression('identity')).toBe(false);
+    expect(acceptsCompression('')).toBe(false);
+    expect(acceptsCompression(undefined)).toBe(false);
+  });
+
+  it('q=0 视为不可用', () => {
+    expect(acceptsCompression('gzip;q=0')).toBe(false);
+    expect(acceptsCompression('gzip;q=0.5')).toBe(true);
+  });
+});
+
+describe('restoreBrowserAcceptEncoding', () => {
+  it('网关改写为 identity 时，浏览器请求恢复 gzip', () => {
+    expect(restore({ 'user-agent': BROWSER_UA, 'accept-encoding': 'identity' }).headers['accept-encoding'])
+      .toBe('gzip');
+  });
+
+  it('网关剥掉 Accept-Encoding 时，浏览器请求恢复 gzip', () => {
+    expect(restore({ 'user-agent': BROWSER_UA }).headers['accept-encoding']).toBe('gzip');
+  });
+
+  it('客户端已声明可压缩编码时保持原样（走正常协商，可选 br）', () => {
+    expect(restore({ 'user-agent': BROWSER_UA, 'accept-encoding': 'gzip, deflate, br' }).headers['accept-encoding'])
+      .toBe('gzip, deflate, br');
+  });
+
+  it('脚本类客户端保持原样（从未声明支持压缩，避免收到乱码）', () => {
+    expect(restore({ 'user-agent': 'curl/8.7.1' }).headers['accept-encoding']).toBeUndefined();
+    expect(restore({ 'user-agent': 'curl/8.7.1', 'accept-encoding': 'identity' }).headers['accept-encoding'])
+      .toBe('identity');
+  });
+
+  it('带 Sec-Fetch-* 的客户端按浏览器处理（网关剥掉 UA 时仍可恢复）', () => {
+    expect(restore({ 'sec-fetch-mode': 'cors' }).headers['accept-encoding']).toBe('gzip');
+  });
+});
 
 describe('shouldCompress', () => {
   it('压缩前端静态资源与 API JSON', () => {
@@ -32,13 +86,8 @@ describe('shouldCompress', () => {
     expect(shouldCompress(browserReq(), mockRes(undefined))).toBe(false);
   });
 
-  it('网关剥掉 Accept-Encoding 时：浏览器请求仍放行（由 enforceEncoding 兜底 gzip）', () => {
-    const req = mockReq({ 'user-agent': BROWSER_UA });
-    expect(shouldCompress(req, mockRes('application/javascript; charset=UTF-8'))).toBe(true);
-  });
-
-  it('网关剥掉 Accept-Encoding 时：脚本类客户端不强制压缩（从未声明支持，避免收到乱码）', () => {
-    expect(shouldCompress(mockReq({ 'user-agent': 'curl/8.7.1' }), mockRes('application/javascript'))).toBe(false);
+  it('客户端未声明 Accept-Encoding 时不压缩', () => {
+    expect(shouldCompress(mockReq({ 'user-agent': BROWSER_UA }), mockRes('application/javascript'))).toBe(false);
     expect(shouldCompress(mockReq(), mockRes('application/javascript'))).toBe(false);
   });
 

@@ -5,6 +5,7 @@ import path from 'path';
 import { env } from './config/env';
 import { requestLogger } from './middleware/request-logger';
 import { responseFormatter } from './middleware/response-formatter';
+import { compressionMiddleware } from './middleware/compression';
 import { errorHandler } from './middleware/error-handler';
 import authRoutes from './routes/auth.routes';
 import accountRoutes from './routes/account.routes';
@@ -71,6 +72,9 @@ export function createApp(): Application {
     },
     credentials: true,
   }));
+
+  // 运行时压缩：静态资源（前端 chunk）与 API JSON 同时受益；SSE 由中间件显式排除
+  app.use(compressionMiddleware);
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));

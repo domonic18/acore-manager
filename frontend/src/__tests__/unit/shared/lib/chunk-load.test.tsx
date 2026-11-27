@@ -44,7 +44,7 @@ describe('lazyWithRetry', () => {
   it('gives up after all retries and surfaces the error to the boundary', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const factory = vi.fn().mockRejectedValue(CHUNK_ERROR());
-    const Chunk = lazyWithRetry(factory, 'Test');
+    const Chunk = lazyWithRetry(factory, 'Test', { maxAttempts: 3, baseDelayMs: 1 });
 
     render(
       <ChunkErrorBoundary fallback={<div>已降级</div>}>
@@ -61,6 +61,26 @@ describe('lazyWithRetry', () => {
     expect(errorSpy).toHaveBeenCalled();
   });
 
+  it('默认重试预算足以跨越生产 SCF 冷启动窗口（≈4s）', async () => {
+    // 不注入预算：断言默认 5 次尝试、总退避 ≥ 4s（生产实测冷启动约 4s，
+    // 旧预算 3 次 / ≈1.5s 会在同一冷启动窗口内耗尽 → 直接报“助手不可用”）
+    const factory = vi.fn().mockRejectedValue(CHUNK_ERROR());
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const Chunk = lazyWithRetry(factory, 'Test');
+
+    render(
+      <ChunkErrorBoundary fallback={<div>已降级</div>}>
+        <Suspense fallback={<div>加载中</div>}>
+          <Chunk />
+        </Suspense>
+      </ChunkErrorBoundary>,
+    );
+
+    await waitFor(() => expect(screen.getByText('已降级')).toBeInTheDocument(), { timeout: 20000 });
+    expect(factory).toHaveBeenCalledTimes(5);
+  }, 25000);
+
   it('recovers when the caller rebuilds the boundary with a fresh lazy instance', async () => {
     const failedFactory = vi.fn().mockRejectedValue(CHUNK_ERROR());
     const recoveredFactory = vi.fn().mockResolvedValue({ default: () => <div>重建后恢复</div> });
@@ -69,7 +89,7 @@ describe('lazyWithRetry', () => {
       <ChunkErrorBoundary key={0} fallback={<div>已降级</div>}>
         <Suspense fallback={<div>加载中</div>}>
           {(() => {
-            const Broken = lazyWithRetry(failedFactory, 'Test');
+            const Broken = lazyWithRetry(failedFactory, 'Test', { maxAttempts: 2, baseDelayMs: 1 });
             return <Broken />;
           })()}
         </Suspense>
@@ -78,12 +98,12 @@ describe('lazyWithRetry', () => {
 
     await waitFor(() => expect(screen.getByText('已降级')).toBeInTheDocument(), { timeout: 8000 });
 
-    // 模拟 AiAssistantDockGate 的重试路径：key 递增 + 全新 lazy 实例（新 factory 闭包）
+    // 模拟助手入口的重试路径：key 递增 + 全新 lazy 实例（新 factory 闭包）
     rerender(
       <ChunkErrorBoundary key={1} fallback={<div>已降级</div>}>
         <Suspense fallback={<div>加载中</div>}>
           {(() => {
-            const Recovered = lazyWithRetry(recoveredFactory, 'Test');
+            const Recovered = lazyWithRetry(recoveredFactory, 'Test', { maxAttempts: 2, baseDelayMs: 1 });
             return <Recovered />;
           })()}
         </Suspense>
@@ -97,7 +117,7 @@ describe('lazyWithRetry', () => {
 describe('ChunkErrorBoundary fallback', () => {
   it('passes the caught error to a function fallback for message discrimination', async () => {
     const factory = vi.fn().mockRejectedValue(CHUNK_ERROR());
-    const Chunk = lazyWithRetry(factory, 'Test');
+    const Chunk = lazyWithRetry(factory, 'Test', { maxAttempts: 2, baseDelayMs: 1 });
     const renderFallback = vi.fn((error: Error) => <div>文案：{error.message.includes('Failed to fetch') ? '加载失败' : '运行异常'}</div>);
 
     render(
@@ -107,7 +127,6 @@ describe('ChunkErrorBoundary fallback', () => {
         </Suspense>
       </ChunkErrorBoundary>,
     );
-
     await waitFor(() => expect(screen.getByText('文案：加载失败')).toBeInTheDocument(), { timeout: 8000 });
     expect(renderFallback).toHaveBeenCalledWith(expect.any(TypeError));
   });
